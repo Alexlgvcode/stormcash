@@ -1006,7 +1006,8 @@ All JSON. Byte fields base64url. Prefix `/v1`. Auth for demo: none on reads; res
 | `POST /v1/storm-mode/close` | `{cert_id}` | `{cert}` (cap back to 2000; refund scheduled per §7.4) | WS2 |
 | `POST /v1/sync` | `{device_pub, items: [...]}` | `{rcpt, policy, certs: [...]}` | WS2 |
 | `GET /v1/policy` | `?since=ver` | `{policy}` | WS2 |
-| `GET /v1/accounts` | | live Nessie balances for demo entities (computed from Nessie transactions, §11.4) + ledger totals | WS2 |
+| `GET /v1/accounts` | | live Nessie balances for demo entities (computed from Nessie transactions, §11.4) + ledger totals. **[v4.3]** `{accounts: [{key, label, kind, nessie_account_id, nessie_cents, nessie_error, ledger_cents}], simulated_town, ledger: {balanced, unbalanced_txns, totals}, nessie: {enabled, queued}}`; a Nessie failure shows as `nessie_error`, never as a number | WS2 |
+| `GET /v1/health` **[v4.3]** | | `{ok, time, demo_mode, nessie_enabled, api_sig_required, server_pub}` for the header and phones | WS2 |
 | `GET /v1/nessie/log` | `?limit=50` | rows of `nessie_calls` | WS2 |
 | `GET /v1/cases` / `GET /v1/cases/{id}` | | case with both tags, the cert, the rule, evidence, case file | WS2 |
 | `GET /v1/proof/{case_id}` | | everything the public verify page needs: cert (+server sig), tag A, tag B, holder_pub, rule. **[v4.3]** Each object comes with its `canonical` string so a browser can verify it with WebCrypto ECDSA P-256/SHA-256 over the UTF-8 bytes | WS2 |
@@ -1037,7 +1038,7 @@ All JSON. Byte fields base64url. Prefix `/v1`. Auth for demo: none on reads; res
 | event | data |
 |---|---|
 | `nessie_call` | row from `nessie_calls` |
-| `accounts` | balances snapshot |
+| `accounts` | balances snapshot. **[v4.3]** Sent after each executed Nessie pair as `{changed: [nessie account ids], txn_id}`; the dashboard refetches `GET /v1/accounts` |
 | `payment` | payment row incl. status, funding split, path |
 | `case_opened` | case summary |
 | `policy` | new policy version |
