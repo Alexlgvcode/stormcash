@@ -1,0 +1,50 @@
+name: Task
+description: A piece of work from the build spec
+labels: []
+body:
+  - type: dropdown
+    id: workstream
+    attributes:
+      label: Workstream
+      options:
+        - WS0 Protocol + vectors
+        - WS1 Mobile
+        - WS2 Server core
+        - WS3 Dashboard
+        - WS4 Simulator
+        - WS5 StormDesk
+        - WS6 Chalk
+        - WS7 Photon
+        - Setup / demo / submission
+    validations:
+      required: true
+  - type: input
+    id: spec
+    attributes:
+      label: Spec sections
+      placeholder: "§11.2, §12.1"
+    validations:
+      required: true
+  - type: textarea
+    id: task
+    attributes:
+      label: What to build
+    validations:
+      required: true
+  - type: textarea
+    id: done
+    attributes:
+      label: Done when
+      description: Demoable on the real hardware, not just "tests pass" (spec §0.6).
+    validations:
+      required: true
+  - type: input
+    id: depends
+    attributes:
+      label: Depends on
+      placeholder: "#3, #7"
+  - type: textarea
+    id: fallback
+    attributes:
+      label: Fallback
+      description: The switch to flip if this breaks (spec §22.4). Leave blank if none.
