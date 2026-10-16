@@ -315,6 +315,6 @@ def test_broker_delivers_events_to_subscribers():
 
 def test_nessie_writes_are_published_as_sse(app_client, deps, monkeypatch):
     seen = []
-    monkeypatch.setattr(deps.events, "publish", lambda event, data: seen.append((event, data["summary"])))
+    monkeypatch.setattr(deps.events, "publish", lambda event, data: seen.append((event, data)))
     register_maya(app_client)
-    assert [e for e, _ in seen] == ["nessie_call"] * 5
+    assert [e for e, _ in seen] == ["nessie_call"] * 5 + ["accounts"]

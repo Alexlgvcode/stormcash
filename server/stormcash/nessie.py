@@ -188,9 +188,10 @@ class NessieClient:
 class MoneyMover:
     """Executes and replays queued `nessie_moves` rows."""
 
-    def __init__(self, pool: ConnectionPool, nessie: NessieClient | None) -> None:
+    def __init__(self, pool: ConnectionPool, nessie: NessieClient | None, events: Broker | None = None) -> None:
         self._pool = pool
         self._nessie = nessie
+        self._events = events
 
     @staticmethod
     def queue(
@@ -223,6 +224,10 @@ class MoneyMover:
             if row["status"] == "executed":
                 return True
             done = self._execute_row(conn, row)
+        if done and self._events is not None:
+            # Hint for the Accounts tab to refetch balances (§12.3 `accounts`).
+            self._events.publish("accounts", {"changed": [row["from_account_id"], row["to_account_id"]],
+                                              "txn_id": str(txn_id)})
         return done
 
     def _execute_row(self, conn: psycopg.Connection, row: dict) -> bool:

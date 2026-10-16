@@ -22,7 +22,7 @@ from .db import make_pool
 from .deps import Deps
 from .nessie import MoneyMover, NessieClient
 from .regions import ensure_regions
-from .routes import cases, nessie_log, registration, sync
+from .routes import accounts, cases, nessie_log, registration, sync
 
 log = logging.getLogger(__name__)
 
@@ -38,7 +38,7 @@ def build_deps(settings: Settings, nessie_transport: httpx.BaseTransport | None 
         nessie = NessieClient(
             settings.nessie_base_url, settings.nessie_api_key, pool, events, transport=nessie_transport
         )
-    deps = Deps(settings, pool, events, nessie, MoneyMover(pool, nessie))
+    deps = Deps(settings, pool, events, nessie, MoneyMover(pool, nessie, events))
     with pool.connection() as conn:
         if conn.execute("SELECT to_regclass('nessie_moves') AS t").fetchone()["t"] is None:
             raise RuntimeError("database is missing nessie_moves: apply server/migrations/001_nessie_moves.sql")
@@ -88,6 +88,7 @@ def create_app(settings: Settings | None = None, nessie_transport: httpx.BaseTra
     app.include_router(registration.router)
     app.include_router(sync.router)
     app.include_router(cases.router)
+    app.include_router(accounts.router)
     app.include_router(nessie_log.router)
     app.include_router(sse.router)
     return app
