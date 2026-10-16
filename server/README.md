@@ -22,10 +22,14 @@ A new database gets the whole schema:
 psql "$DATABASE_URL" -f schema.sql
 ```
 
-A database created before v4.3 (the hosted demo DB) needs the one migration; it is safe to run twice:
+A database created before v4.3 (the hosted demo DB) needs the migrations; each is safe to run twice:
 
 ```bash
 psql "$DATABASE_URL" -f migrations/001_nessie_moves.sql
+```
+
+```bash
+psql "$DATABASE_URL" -f migrations/002_stormdesk_runs.sql
 ```
 
 ## Run
@@ -53,3 +57,11 @@ Nessie is faked in tests (`tests/conftest.py: FakeNessie`); nothing calls the re
 ## Dashboard on the same origin
 
 If `dashboard/dist` exists (`cd dashboard && npm run build`), the server also serves the dashboard at `/` and the public proof page at `/proof/<case_id>`. A single cloudflared tunnel to port 8000 then serves the API and the HTTPS proof link judges open from the QR code (set `PUBLIC_BASE_URL` to the tunnel URL).
+
+## StormDesk
+
+`stormcash/stormdesk/` (spec §14). The worker runs StormDesk on every new hard case and candidate. `STORMDESK_RUNNER=auto` uses Factory's Droid when `FACTORY_API_KEY` is set and the `droid` CLI is installed, and otherwise a deterministic **fake runner** that applies the rules-only baseline; its output says "Fake runner" everywhere. Run one job by hand:
+
+```bash
+curl -X POST localhost:8000/v1/stormdesk/run -H 'X-SC-Operator: alex' -H 'content-type: application/json' -d '{"case_id": 1}'
+```

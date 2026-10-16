@@ -4,6 +4,7 @@ candidates of all three soft kinds, each on a labeled subject."""
 
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 
@@ -14,6 +15,8 @@ from stormcash.app import create_app
 from stormcash.config import Settings
 from stormcash.db import all_rows, scalar
 from stormcash.protocol import crypto
+from stormcash.stormdesk.runner import Job
+from stormcash.stormdesk.service import StormDesk
 from stormcash_sim import outputs
 from stormcash_sim.engine import Params, Sim
 
@@ -62,6 +65,25 @@ def test_seed_42_plants_every_scenario(sim_deps, tmp_path):
     scenarios = {s["scenario"] for s in labels["subjects"]}
     assert scenarios == {"double_spender", "colluder", "stolen_phone", "dark_region", "trap_remote_shop",
                          "trap_victim_shop", "trap_stockup", "trap_clock_drift", "trap_quiet_region"}
+
+    # StormDesk (#27 Done-when, fake runner): every hard case and every candidate from the
+    # seeded town gets a valid output whose citations all exist.
+    desk = StormDesk(sim_deps)
+    jobs = [Job("investigate", case_id=r["case_id"]) for r in _rows(sim_deps, "SELECT case_id FROM cases")]
+    jobs += [Job("triage", candidate_id=r["candidate_id"]) for r in _rows(sim_deps, "SELECT candidate_id FROM candidates")]
+    results = [asyncio.run(desk.run(job)) for job in jobs]
+    assert all(r["runner"] == "fake" for r in results)
+    assert [r for r in results if r["status"] != "succeeded"] == []
+    knew = next(r for r, j in zip(results, jobs, strict=True)
+                if j.kind == "investigate" and r["output"]["rule"] == "MERCHANT_KNEW")
+    assert knew["output"]["verified_independently"] and len(knew["output"]["evidence_ids"]) == 3  # 2 tags + ACCEPT
+    silence = [r for r in results if r.get("flag") and r["flag"]["kind"] == "merchant_silence"]
+    assert silence and all(r["flag"]["citations_valid"] and r["flag"]["evidence_ids"] for r in silence)
+
+
+def _rows(deps, sql):
+    with deps.pool.connection() as conn:
+        return all_rows(conn, sql)
 
 
 @pytest.fixture
