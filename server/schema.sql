@@ -210,6 +210,21 @@ CREATE TABLE nessie_calls (             -- feeds the dashboard call log
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE nessie_moves (             -- [v4.3] one Nessie withdrawal + deposit pair per money movement (§11.4)
+  txn_id UUID PRIMARY KEY,              -- ledger txn_id; also in both Nessie descriptions
+  from_account_id TEXT NOT NULL,        -- Nessie account ids
+  to_account_id TEXT NOT NULL,
+  amount_cents INT NOT NULL,            -- whole dollars only
+  summary TEXT NOT NULL,
+  payout_id BIGINT REFERENCES payouts,  -- set for merchant payouts
+  withdrawal_id TEXT,
+  deposit_id TEXT,
+  status TEXT NOT NULL CHECK (status IN ('queued','executed')),
+  attempts INT NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE TABLE policy_versions (
   policy_ver INT PRIMARY KEY,
   issued_at BIGINT NOT NULL,
