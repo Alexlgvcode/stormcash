@@ -21,6 +21,8 @@ class Settings:
     server_key: ec.EllipticCurvePrivateKey
     nessie_api_key: str = ""
     nessie_base_url: str = "https://api.nessieisreal.com"
+    # The guarantee pool's Nessie account (python -m stormcash.nessie_setup creates it).
+    nessie_pool_account_id: str = ""
     # Fallback switch (§22.4): NESSIE_DISABLED=1 keeps everything ledger-only.
     nessie_enabled: bool = True
     # Fallback switch: API_SIG_REQUIRED=0 accepts unsigned writes (§12).
@@ -69,6 +71,7 @@ def load_settings(env_file: Path | None = SERVER_DIR / ".env") -> Settings:
         server_key=load_server_key(env["SERVER_SIGNING_KEY_PEM"]),
         nessie_api_key=env.get("NESSIE_API_KEY", ""),
         nessie_base_url=env.get("NESSIE_BASE_URL") or "https://api.nessieisreal.com",
+        nessie_pool_account_id=env.get("NESSIE_POOL_ACCOUNT_ID", ""),
         nessie_enabled=not _flag(env.get("NESSIE_DISABLED"), False) and bool(env.get("NESSIE_API_KEY")),
         api_sig_required=_flag(env.get("API_SIG_REQUIRED"), True),
         demo_mode=_flag(env.get("DEMO_MODE"), True),

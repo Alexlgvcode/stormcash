@@ -266,6 +266,7 @@ PHOTON_API_KEY=... (names per Photon docs)
 PUBLIC_BASE_URL=https://<cloudflared>.trycloudflare.com
 NWS_USER_AGENT=StormCash HackHarvard demo (team email)
 DEMO_MODE=1
+NESSIE_POOL_ACCOUNT_ID=...                        # [v4.3] guarantee pool; create once: python -m stormcash.nessie_setup
 NESSIE_DISABLED=0                                 # [v4.3] fallback: 1 = ledger-only, no Nessie calls
 API_SIG_REQUIRED=1                                # [v4.3] fallback: 0 = accept unsigned writes (§12)
 BACKGROUND_TASKS=1                                # [v4.3] Nessie replay (10 s) + escrow release (60 s)
@@ -904,6 +905,14 @@ For each item, in priority order:
 
 After ingest, call `detectors.run_incremental()` (§13), which may create candidates, which enqueue StormDesk jobs.
 
+**[v4.3] Ingest details (`settlement.py`).**
+- Order: priority, and within priority 3 `DLOG` → `PAY` → `RENEW`, so a merchant's `REFUSE` entry (and its contacts, for R5) is stored before its PAY. Each item is verified and stored in its own transaction; an invalid item is dropped and left out of the RCPT.
+- A verified PAY whose tag fails single-tag validity or has `cum` above the presented CERT's cap is stored with status `invalid` and not paid (a merchant skipped C5/C6). A PAY whose tag the same merchant logged as `REFUSE` is `refused_evidence` and not paid. PAYs naming an unregistered merchant are dropped.
+- `escrow_avail` is the escrow's ledger balance, which equals `max_cap − already_paid_from_escrow` until a refund on close lowers it.
+- `payments.hops = len(path) − 1`; `relay_device` is the uploader.
+- RENEW: a renewal the latest version already postdates (`issued_at ≥ RENEW.ts − 600`) gets that version back instead of a new one, so re-ingesting is idempotent.
+- The response always carries a POLICY: version 1 (empty lists) is issued the first time one is needed.
+
 ### 11.3 Ledger
 
 Every money movement writes a balanced pair (one debit, one credit) under one `txn_id`. Account names:
@@ -948,6 +957,8 @@ Invariant test: for every `txn_id`, `sum(debit) == sum(credit)`. Show "Ledger ba
 **Moving money is a matched pair.** Every movement in §11.3 (lock or top up escrow, settle from escrow, settle from pool, refund on close) is one withdrawal on the source account and one deposit on the destination account, both `completed`, both with the description `"SC <txn_id> <summary>"` so the pair links to the ledger `txn_id`. `payouts.nessie_transfer_id` stores the deposit id; both ids are in `nessie_calls`.
 
 **Balances.** `nessie_balance(account) = opening balance + Σ deposits − Σ withdrawals`, read live from Nessie (`GET /accounts/{id}`, `/deposits`, `/withdrawals`) and cached ≤ 10 s. The Accounts tab labels these "from Nessie transactions". Open escrow and merchant accounts at $0 and the pool at its full funding, so every later change is a visible Nessie record.
+
+**[v4.3] Guarantee pool account.** `python -m stormcash.nessie_setup [dollars]` creates the "StormCash Operator" customer and a "Guarantee Pool" account opened at its full funding (default $1000) and prints `NESSIE_POOL_ACCOUNT_ID=...` for `.env`. Without it, pool-funded payouts are `ledger_only`.
 
 **Whole dollars.** `cents_to_dollars(cents)` returns an `int` and raises if `cents % 100 != 0`; it never rounds. A real-merchant payout that isn't a whole dollar amount is recorded `ledger_only` with the summary "not whole dollars, ledger only". Demo payments use whole dollars ($12). Simulated money never touches Nessie, so it can use any cents.
 
