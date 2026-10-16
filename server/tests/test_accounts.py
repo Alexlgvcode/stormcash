@@ -63,3 +63,25 @@ def test_health(app_client, deps):
     h = app_client.get("/v1/health").json()
     assert h["ok"] and h["nessie_enabled"] and h["api_sig_required"]
     assert b64u_decode(h["server_pub"]) == crypto.public_key_bytes(deps.server_key)
+
+
+def test_server_serves_the_built_dashboard_and_proof_page(clean_db, fake_nessie, tmp_path):
+    from fastapi.testclient import TestClient
+
+    from stormcash.app import create_app
+
+    from .conftest import make_settings
+
+    (tmp_path / "assets").mkdir()
+    (tmp_path / "index.html").write_text("<!doctype html><div id=root></div>")
+    (tmp_path / "assets" / "app.js").write_text("console.log(1)")
+    app = create_app(make_settings(clean_db, public_base_url="https://demo.example"),
+                     nessie_transport=fake_nessie.transport(), dashboard_dist=tmp_path)
+    with TestClient(app) as client:
+        assert "id=root" in client.get("/proof/7").text  # the SPA handles /proof/:caseId
+        assert "id=root" in client.get("/").text
+        assert client.get("/assets/app.js").text == "console.log(1)"
+        assert client.get("/v1/nope").status_code == 404
+        assert client.get("/v1/health").json()["public_base_url"] == "https://demo.example"
+        assert client.get("/../server/.env").status_code in (200, 404)
+        assert "SERVER_SIGNING_KEY" not in client.get("/%2e%2e/%2e%2e/server/.env").text

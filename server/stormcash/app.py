@@ -10,11 +10,13 @@ from __future__ import annotations
 import logging
 import threading
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import httpx
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from . import registry, sse
 from .config import Settings, load_settings
@@ -59,7 +61,14 @@ def _background(deps: Deps, stop: threading.Event) -> None:
             log.exception("background task failed")
 
 
-def create_app(settings: Settings | None = None, nessie_transport: httpx.BaseTransport | None = None) -> FastAPI:
+DASHBOARD_DIST = Path(__file__).resolve().parents[2] / "dashboard" / "dist"
+
+
+def create_app(
+    settings: Settings | None = None,
+    nessie_transport: httpx.BaseTransport | None = None,
+    dashboard_dist: Path | None = DASHBOARD_DIST,
+) -> FastAPI:
     settings = settings or load_settings()
 
     @asynccontextmanager
@@ -92,4 +101,23 @@ def create_app(settings: Settings | None = None, nessie_transport: httpx.BaseTra
     app.include_router(demo.router)
     app.include_router(nessie_log.router)
     app.include_router(sse.router)
+    _serve_dashboard(app, dashboard_dist)
     return app
+
+
+def _serve_dashboard(app: FastAPI, dist: Path | None) -> None:
+    """Serve the built dashboard (npm run build) from the same origin as the API,
+    so one public URL gives judges both /proof/<case_id> and the API it calls."""
+    if dist is None or not (dist / "index.html").exists():
+        return
+    if (dist / "assets").is_dir():
+        app.mount("/assets", StaticFiles(directory=dist / "assets"), name="assets")
+
+    @app.get("/{path:path}", include_in_schema=False)
+    async def spa(path: str) -> FileResponse:
+        if path.startswith("v1/"):
+            raise HTTPException(404, "not found")
+        file = (dist / path).resolve()
+        if path and file.is_file() and file.is_relative_to(dist.resolve()):
+            return FileResponse(file)
+        return FileResponse(dist / "index.html")
