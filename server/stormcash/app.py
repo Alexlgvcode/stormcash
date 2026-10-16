@@ -7,6 +7,7 @@ Run with the app factory so settings load at startup, not at import:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import threading
 from contextlib import asynccontextmanager
@@ -24,7 +25,9 @@ from .db import make_pool
 from .deps import Deps
 from .nessie import MoneyMover, NessieClient
 from .regions import ensure_regions
-from .routes import accounts, cases, demo, nessie_log, registration, sync, town
+from .stormdesk.service import StormDesk, StormDeskError
+from .stormdesk.worker import Worker
+from .routes import accounts, cases, demo, nessie_log, registration, stormdesk, sync, town
 
 log = logging.getLogger(__name__)
 
@@ -42,8 +45,9 @@ def build_deps(settings: Settings, nessie_transport: httpx.BaseTransport | None 
         )
     deps = Deps(settings, pool, events, nessie, MoneyMover(pool, nessie, events))
     with pool.connection() as conn:
-        if conn.execute("SELECT to_regclass('nessie_moves') AS t").fetchone()["t"] is None:
-            raise RuntimeError("database is missing nessie_moves: apply server/migrations/001_nessie_moves.sql")
+        for table, migration in (("nessie_moves", "001_nessie_moves"), ("stormdesk_runs", "002_stormdesk_runs")):
+            if conn.execute("SELECT to_regclass(%s) AS t", (table,)).fetchone()["t"] is None:
+                raise RuntimeError(f"database is missing {table}: apply server/migrations/{migration}.sql")
         ensure_regions(conn)
     return deps
 
@@ -75,12 +79,18 @@ def create_app(
     async def lifespan(app: FastAPI):
         deps = build_deps(settings, nessie_transport)
         app.state.deps = deps
+        app.state.stormdesk = StormDesk(deps)
         stop = threading.Event()
+        worker = None
         if settings.background_tasks:
             threading.Thread(target=_background, args=(deps, stop), daemon=True, name="stormcash-bg").start()
+            if settings.stormdesk_auto:
+                worker = asyncio.create_task(Worker(app.state.stormdesk).run_forever())
         try:
             yield
         finally:
+            if worker is not None:
+                worker.cancel()
             stop.set()
             if deps.nessie is not None:
                 deps.nessie.close()
@@ -94,12 +104,17 @@ def create_app(
     async def registry_error(request: Request, exc: registry.RegistryError) -> JSONResponse:
         return JSONResponse({"detail": exc.message}, status_code=exc.status)
 
+    @app.exception_handler(StormDeskError)
+    async def stormdesk_error(request: Request, exc: StormDeskError) -> JSONResponse:
+        return JSONResponse({"detail": str(exc)}, status_code=exc.status)
+
     app.include_router(registration.router)
     app.include_router(sync.router)
     app.include_router(cases.router)
     app.include_router(accounts.router)
     app.include_router(demo.router)
     app.include_router(town.router)
+    app.include_router(stormdesk.router)
     app.include_router(nessie_log.router)
     app.include_router(sse.router)
     _serve_dashboard(app, dashboard_dist)

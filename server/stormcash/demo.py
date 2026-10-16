@@ -71,14 +71,21 @@ def reset_demo(deps: Deps, storm_cap_cents: int | None = None, now: int | None =
         conn.execute("DELETE FROM payouts WHERE tag_hash = ANY(%s) OR merchant_id = ANY(%s)", (tags, merchant_ids))
         conn.execute("DELETE FROM payments WHERE tag_hash = ANY(%s)", (tags,))
         conn.execute("DELETE FROM tags WHERE tag_hash = ANY(%s)", (tags,))
-        conn.execute(
-            "DELETE FROM cases WHERE cert_id = ANY(%s) OR merchant_id = ANY(%s) OR device_pub = ANY(%s)",
-            (old_certs, merchant_ids, devices),
-        )
-        conn.execute(
-            "DELETE FROM candidates WHERE subject_id = ANY(%s)",
-            ([c.hex() for c in old_certs] + [m.hex() for m in merchant_ids],),
-        )
+        doomed_cases = [r["case_id"] for r in all_rows(
+            conn, "SELECT case_id FROM cases WHERE cert_id = ANY(%s) OR merchant_id = ANY(%s) OR device_pub = ANY(%s)",
+            (old_certs, merchant_ids, devices))]
+        doomed_candidates = [r["candidate_id"] for r in all_rows(
+            conn, "SELECT candidate_id FROM candidates WHERE subject_id = ANY(%s)",
+            ([c.hex() for c in old_certs] + [m.hex() for m in merchant_ids],))]
+        doomed_flags = [r["flag_id"] for r in all_rows(
+            conn, "SELECT flag_id FROM flags WHERE candidate_id = ANY(%s)", (doomed_candidates,))]
+        conn.execute("UPDATE messages SET flag_id = NULL WHERE flag_id = ANY(%s)", (doomed_flags,))
+        conn.execute("DELETE FROM approvals WHERE flag_id = ANY(%s)", (doomed_flags,))
+        conn.execute("DELETE FROM flags WHERE flag_id = ANY(%s)", (doomed_flags,))
+        conn.execute("DELETE FROM stormdesk_runs WHERE case_id = ANY(%s) OR candidate_id = ANY(%s)",
+                     (doomed_cases, doomed_candidates))
+        conn.execute("DELETE FROM cases WHERE case_id = ANY(%s)", (doomed_cases,))
+        conn.execute("DELETE FROM candidates WHERE candidate_id = ANY(%s)", (doomed_candidates,))
         conn.execute("DELETE FROM device_log WHERE device_pub = ANY(%s)", (devices,))
         conn.execute("DELETE FROM contacts WHERE device_pub = ANY(%s) OR peer_pub = ANY(%s)", (devices, devices))
         conn.execute("DELETE FROM uploads WHERE device_pub = ANY(%s)", (devices,))

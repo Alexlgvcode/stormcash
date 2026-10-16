@@ -37,6 +37,10 @@ class Settings:
     photon_api_key: str = ""
     # Background loops (Nessie replay, escrow release). Off in tests.
     background_tasks: bool = True
+    # StormDesk (§14): droid | fake | auto (Droid only when the SDK, the CLI and FACTORY_API_KEY exist).
+    stormdesk_runner: str = "auto"
+    stormdesk_model: str = ""  # empty: Droid picks ("auto")
+    stormdesk_auto: bool = True  # run the worker on new cases and candidates
 
     @property
     def server_pub(self) -> bytes:
@@ -84,4 +88,7 @@ def load_settings(env_file: Path | None = SERVER_DIR / ".env") -> Settings:
         chalk_environment=env.get("CHALK_ENVIRONMENT", ""),
         photon_api_key=env.get("PHOTON_API_KEY", ""),
         background_tasks=_flag(env.get("BACKGROUND_TASKS"), True),
+        stormdesk_runner=(env.get("STORMDESK_RUNNER") or "auto").lower(),
+        stormdesk_model=env.get("STORMDESK_MODEL", ""),
+        stormdesk_auto=_flag(env.get("STORMDESK_AUTO"), True),
     )

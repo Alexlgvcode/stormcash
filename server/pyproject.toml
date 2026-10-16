@@ -12,6 +12,7 @@ dependencies = [
     "sse-starlette",
     "pydantic>=2",
     "python-dotenv",
+    "droid-sdk[mcp]==0.5.0",
 ]
 
 [project.optional-dependencies]

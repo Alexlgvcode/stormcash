@@ -270,6 +270,9 @@ NESSIE_POOL_ACCOUNT_ID=...                        # [v4.3] guarantee pool; creat
 NESSIE_DISABLED=0                                 # [v4.3] fallback: 1 = ledger-only, no Nessie calls
 API_SIG_REQUIRED=1                                # [v4.3] fallback: 0 = accept unsigned writes (§12)
 BACKGROUND_TASKS=1                                # [v4.3] Nessie replay (10 s) + escrow release (60 s)
+STORMDESK_RUNNER=auto                             # [v4.3] droid | fake | auto (§14.7a)
+STORMDESK_MODEL=                                  # [v4.3] empty = Droid picks
+STORMDESK_AUTO=1                                  # [v4.3] worker runs StormDesk on new cases and candidates
 ```
 
 The server's public key is compiled into the mobile app (`mobile/src/config.ts: SERVER_PUB`). Generate the server key once on Friday and do not rotate it.
@@ -794,6 +797,23 @@ CREATE TABLE flags (                    -- StormDesk output (one per candidate)
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE stormdesk_runs (           -- [v4.3] every StormDesk run, for replay and audit (§14.7, §14.8)
+  run_id BIGSERIAL PRIMARY KEY,
+  job TEXT NOT NULL CHECK (job IN ('investigate','triage','respond')),
+  case_id BIGINT REFERENCES cases,
+  candidate_id BIGINT REFERENCES candidates,
+  merchant_id BYTEA,
+  runner TEXT NOT NULL,                 -- 'droid' | 'fake' (a fake run is never shown as an agent result)
+  status TEXT NOT NULL CHECK (status IN ('running','succeeded','invalid','failed')),
+  output JSONB,                         -- the structured output (Flag / CaseFile / AppealReply)
+  citations_valid BOOLEAN,
+  transcript JSONB NOT NULL DEFAULT '{}', -- {runner, steps: [{tool, input, ok}], missing_citations, error}
+  session_id TEXT,
+  error TEXT,
+  started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  finished_at TIMESTAMPTZ
+);
+
 CREATE TABLE approvals (
   approval_id BIGSERIAL PRIMARY KEY,
   flag_id BIGINT REFERENCES flags,
@@ -1016,6 +1036,7 @@ All JSON. Byte fields base64url. Prefix `/v1`. Auth for demo: none on reads; res
 | `GET /v1/flags` / `GET /v1/flags/{id}` | | flag + candidate features + agent transcript | WS5 |
 | `POST /v1/flags/{id}/approve` / `reject` | `{note}` | executes actions (§14.6), returns approval | WS5 |
 | `POST /v1/stormdesk/run` | `{candidate_id}` or `{case_id}` | `{flag}` or `{case_file_md}` (sync; used by evals) | WS5 |
+| `GET /v1/stormdesk/runs` / `GET /v1/stormdesk/runs/{id}` **[v4.3]** | `?case_id&candidate_id` | stored runs; one run with its full transcript for replay (§14.8). `POST /v1/stormdesk/run` needs the operator header | WS5 |
 | `GET /v1/town` | | regions, merchants (x, y, simulated), live dots, recent payments, uploads, alerts | WS4/WS2 |
 | `GET /v1/relay/paths` | `?limit=20` | recent payments with `path`, hops, latency. **[v4.3]** Each hop names the device (resident or merchant, from `device_short_id`) | WS2 |
 | `GET /v1/town/quick` **[v4.3]** | `?adoption&p_link&p_uplink` | the §16.6 quick re-sim: `{baseline, current, seconds}` | WS4 |
@@ -1240,6 +1261,17 @@ Reject = flag `rejected`, nothing executes. Every approval writes an `approvals`
 - No write tools; permission handler denies everything except our MCP tools.
 - Hard rules are never routed through the agent for a decision.
 - Every run's transcript is stored for replay and audit.
+
+### 14.7a As built [v4.3]
+
+- `server/stormcash/stormdesk/`: `tools.py` (the 11 tools, plain SQL reads in a `READ ONLY` transaction, ids returned as hex so they can be cited), `runner.py`, `service.py`, `worker.py`, `schemas.py`, `prompt.py`, `citations.py`.
+- **Runners.** `STORMDESK_RUNNER=droid|fake|auto` (auto = Droid only when the SDK, the `droid` CLI and `FACTORY_API_KEY` are present). `DroidRunner` uses `droid-sdk` 0.5.0: our tools are an in-process MCP server named `stormdesk`, `SessionConfig(system_prompt, mcp_servers, disabled_tools, disable_builtin_skills=True)`, `Session.stream(prompt, output=Model)`, `ToolCall`/`ToolResult` events become steps, and a failed structured output is retried once. The permission handler allows only `McpToolAction`s from the `stormdesk` server naming one of our 11 tools and cancels everything else. The `disabled_tools` list is still **unverified** (needs `list_tools()` with Factory access). `FakeRunner` calls the same tools and applies the rules-only baseline (every candidate gets its default action; case files from `verify_tags` + `get_cert_chain`). Its summaries start with "Fake runner", its session ids with `fake-`, and every run records its runner, so a fake result is never shown as an agent's judgement (§0 rule 3).
+- **Storage.** Every run is a `stormdesk_runs` row (§11.1) with its transcript. Triage writes one `flags` row per candidate (`dismissed` for kind `none`, `invalid` on a citation miss or no output). A re-run updates it unless an operator already approved or rejected it. An investigation writes `cases.case_file_md` only when its citations hold.
+- **Citations** (§14.7) accept tag/payment hashes, device-log entry hashes, contact ids, cert ids, merchant ids (hex, optional `kind:` prefix) and weather alert ids. A flag of a real kind must cite at least one; a dismissal may cite none.
+- **Worker.** Polls every 5 s for candidates without a flag and cases without a case file (at most 2 runs each), up to 4 at a time (the same limit covers `POST /v1/stormdesk/run`). `STORMDESK_AUTO=0` turns it off.
+- **SSE `stormdesk_step`:** `{run_id, job, subject, runner, index, tool, input_summary, ok}` per tool call, then `{run_id, done, status}`. A `flag` event follows triage.
+- `query_features` is the Postgres fallback (§22.4: the detectors' frozen features) until the Chalk client (WS6) is wired.
+- Checked on the seeded town with the fake runner: all 22 hard cases and 12 candidates give valid outputs with verified citations.
 
 ### 14.8 Demo replay
 
