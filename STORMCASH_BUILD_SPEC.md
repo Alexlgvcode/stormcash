@@ -907,11 +907,19 @@ After ingest, call `detectors.run_incremental()` (§13), which may create candid
 
 **[v4.3] Ingest details (`settlement.py`).**
 - Order: priority, and within priority 3 `DLOG` → `PAY` → `RENEW`, so a merchant's `REFUSE` entry (and its contacts, for R5) is stored before its PAY. Each item is verified and stored in its own transaction; an invalid item is dropped and left out of the RCPT.
-- A verified PAY whose tag fails single-tag validity or has `cum` above the presented CERT's cap is stored with status `invalid` and not paid (a merchant skipped C5/C6). A PAY whose tag the same merchant logged as `REFUSE` is `refused_evidence` and not paid. PAYs naming an unregistered merchant are dropped.
+- A verified PAY whose tag fails single-tag validity is stored with status `invalid` and not paid (a merchant skipped C5/C6). A PAY over the cap is settled like any other, so R4 can catch it after payment. A PAY whose tag the same merchant logged as `REFUSE` is `refused_evidence` and not paid. PAYs naming an unregistered merchant are dropped.
 - `escrow_avail` is the escrow's ledger balance, which equals `max_cap − already_paid_from_escrow` until a refund on close lowers it.
 - `payments.hops = len(path) − 1`; `relay_device` is the uploader.
 - RENEW: a renewal the latest version already postdates (`issued_at ≥ RENEW.ts − 600`) gets that version back instead of a new one, so re-ingesting is idempotent.
 - The response always carries a POLICY: version 1 (empty lists) is issued the first time one is needed.
+
+**[v4.3] Cases (`cases.py`).**
+- A new tag is checked against the stored tags of its cert; the first conflict opens one case per tag pair (stored ordered as in a PROOF). A PROOF item opens its case before its tags are stored, so a pair a phone found first is `detected_where='offline'`. Re-ingesting opens nothing new.
+- R1–R4 freeze the cert and publish the next POLICY (all frozen certs + all `per_payment_limit_cents` as merchant limits), serialized by an advisory lock. R5 and R6 set `merchants.pool_eligible = false` and publish nothing, since POLICY carries neither.
+- R5 runs when a PAY is ingested, again for a merchant's payments when its log or a peer's CONTACT naming it arrives, and for every payment of a cert when an equivocation case opens on it (a conflicting TAG can arrive after the PAY). Money already paid stays paid; the case records it.
+- A `denied_knowing` payment gets no pool money. Escrow still pays it only if it is first on the honest chain: its counter is lower than every tag it conflicts with.
+- A merchant without pool eligibility gets the escrow share only; a payment that needed pool money is `held`.
+- Exposure: R1–R3 the later tag's amount, R4 `cum − max cap`, R5 the payment's amount.
 
 ### 11.3 Ledger
 
@@ -1001,7 +1009,7 @@ All JSON. Byte fields base64url. Prefix `/v1`. Auth for demo: none on reads; res
 | `GET /v1/accounts` | | live Nessie balances for demo entities (computed from Nessie transactions, §11.4) + ledger totals | WS2 |
 | `GET /v1/nessie/log` | `?limit=50` | rows of `nessie_calls` | WS2 |
 | `GET /v1/cases` / `GET /v1/cases/{id}` | | case with both tags, the cert, the rule, evidence, case file | WS2 |
-| `GET /v1/proof/{case_id}` | | everything the public verify page needs: cert (+server sig), tag A, tag B, holder_pub, rule | WS2 |
+| `GET /v1/proof/{case_id}` | | everything the public verify page needs: cert (+server sig), tag A, tag B, holder_pub, rule. **[v4.3]** Each object comes with its `canonical` string so a browser can verify it with WebCrypto ECDSA P-256/SHA-256 over the UTF-8 bytes | WS2 |
 | `GET /v1/flags` / `GET /v1/flags/{id}` | | flag + candidate features + agent transcript | WS5 |
 | `POST /v1/flags/{id}/approve` / `reject` | `{note}` | executes actions (§14.6), returns approval | WS5 |
 | `POST /v1/stormdesk/run` | `{candidate_id}` or `{case_id}` | `{flag}` or `{case_file_md}` (sync; used by evals) | WS5 |

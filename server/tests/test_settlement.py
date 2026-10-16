@@ -106,8 +106,8 @@ def test_invalid_items_are_dropped(world, deps):
     assert counts(deps)["payments"] == 0 and counts(deps)["tags"] == 0
 
 
-def test_over_cap_payment_is_stored_but_not_paid(world, deps):
-    pay = world.pay("pharmacy", 2100)  # cap is $20: a merchant must have skipped C5
+def test_structurally_invalid_tag_is_stored_but_not_paid(world, deps):
+    pay = world.pay("pharmacy", 1200, prev=b"\x02" * 32)  # counter 1 must start at GENESIS
     out = world.sync(PHARMACY, [pay])
     assert Rcpt.from_json(out["rcpt"]).item_ids == (pay.tag.tag_hash,)
     with deps.pool.connection() as conn:
