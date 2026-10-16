@@ -24,7 +24,7 @@ from .db import make_pool
 from .deps import Deps
 from .nessie import MoneyMover, NessieClient
 from .regions import ensure_regions
-from .routes import accounts, cases, demo, nessie_log, registration, sync
+from .routes import accounts, cases, demo, nessie_log, registration, sync, town
 
 log = logging.getLogger(__name__)
 
@@ -99,6 +99,7 @@ def create_app(
     app.include_router(cases.router)
     app.include_router(accounts.router)
     app.include_router(demo.router)
+    app.include_router(town.router)
     app.include_router(nessie_log.router)
     app.include_router(sse.router)
     _serve_dashboard(app, dashboard_dist)

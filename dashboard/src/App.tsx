@@ -6,6 +6,7 @@ import { EventsProvider } from "./events";
 import { ProofPage } from "./proof/ProofPage";
 import { AccountsTab } from "./tabs/Accounts";
 import { CasesTab } from "./tabs/Cases";
+import { TownTab } from "./tabs/Town";
 
 const TABS = [
   { id: "accounts", label: "Accounts" },
@@ -66,7 +67,7 @@ function Dashboard() {
         <main>
           {tab === "accounts" && <AccountsTab />}
           {tab === "cases" && <CasesTab />}
-          {tab === "town" && <NotBuilt name="Town" />}
+          {tab === "town" && <TownTab />}
           {tab === "evals" && <NotBuilt name="Evals" />}
         </main>
       </div>
