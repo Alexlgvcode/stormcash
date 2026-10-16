@@ -18,7 +18,9 @@ export const Big = ({ children, color }: { children: ReactNode; color?: string }
 export const Body = ({ children, color }: { children: ReactNode; color?: string }) => (
   <Text style={[s.body, color ? { color } : null]}>{children}</Text>
 );
-export const Muted = ({ children }: { children: ReactNode }) => <Text style={s.muted}>{children}</Text>;
+export const Muted = ({ children, selectable }: { children: ReactNode; selectable?: boolean }) => (
+  <Text style={s.muted} selectable={selectable}>{children}</Text>
+);
 
 export function Button({
   title, onPress, kind = 'primary', disabled,

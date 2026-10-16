@@ -6,6 +6,8 @@ import { NavContext, type Nav, type Route } from './src/nav';
 import { getRole } from './src/settings';
 import { getDb } from './src/store/db';
 import { ChargeScreen } from './src/screens/ChargeScreen';
+import { DemoMenuScreen } from './src/screens/DemoMenuScreen';
+import { JudgeModeScreen } from './src/screens/JudgeModeScreen';
 import { MerchantHomeScreen } from './src/screens/MerchantHomeScreen';
 import { PayScreen } from './src/screens/PayScreen';
 import { ResultScreen } from './src/screens/ResultScreen';
@@ -36,6 +38,10 @@ export default function App() {
         return <PayScreen />;
       case 'charge':
         return <ChargeScreen />;
+      case 'demo':
+        return <DemoMenuScreen />;
+      case 'judge':
+        return <JudgeModeScreen />;
       case 'result':
         return <ResultScreen result={route.result} pay={route.pay} capCents={route.capCents} />;
       default:
