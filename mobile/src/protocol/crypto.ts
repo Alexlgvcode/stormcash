@@ -13,12 +13,29 @@ export function newPrivateKey(): Hex {
   return bytesToHex(p256.utils.randomSecretKey());
 }
 
+/** SEC1 uncompressed (65 bytes) → compressed (33 bytes). */
+export function compressPublicKey(pub: Hex): Hex {
+  return p256.Point.fromHex(pub).toHex(true);
+}
+
 export function publicKeyOf(priv: Hex): Hex {
   return bytesToHex(p256.getPublicKey(hexToBytes(priv), true));
 }
 
+// Hardware keys (Secure Enclave, §19.6) never expose a private scalar. Such a key is referenced by
+// a "priv" string starting with EXTERNAL_KEY_PREFIX and signed through the registered signer.
+export const EXTERNAL_KEY_PREFIX = 'ext:';
+let externalSigner: ((keyRef: string, digest: Hex) => Hex) | null = null;
+export function setExternalSigner(f: (keyRef: string, digest: Hex) => Hex): void {
+  externalSigner = f;
+}
+
 /** Signs a 32-byte digest (already SHA-256 of the canonical string). Returns raw low-S r||s. */
 export function signDigest(digest: Hex, priv: Hex): Hex {
+  if (priv.startsWith(EXTERNAL_KEY_PREFIX)) {
+    if (!externalSigner) throw new Error('no external signer registered');
+    return normalizeLowS(externalSigner(priv, digest));
+  }
   const sig = p256.sign(hexToBytes(digest), hexToBytes(priv), { prehash: false, lowS: true });
   return bytesToHex(sig);
 }
