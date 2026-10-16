@@ -72,6 +72,11 @@ class FakeNessie:
         self.calls: list[tuple[str, str]] = []
         self.fail: set[str] = set()  # e.g. {"deposits"} makes deposits answer 500
         self.down = False
+        # The guarantee pool exists before the server starts (stormcash.nessie_setup).
+        self.pool_id = next(self.ids)
+        self.accounts[self.pool_id] = {"_id": self.pool_id, "type": "Checking", "nickname": "Guarantee Pool",
+                                       "rewards": 0, "balance": 1000}
+        self.records[self.pool_id] = []
 
     def transport(self) -> httpx.MockTransport:
         return httpx.MockTransport(self.handle)
@@ -146,7 +151,8 @@ def fake_nessie() -> FakeNessie:
 
 @pytest.fixture
 def app_client(clean_db: str, fake_nessie: FakeNessie):
-    app = create_app(make_settings(clean_db), nessie_transport=fake_nessie.transport())
+    settings = make_settings(clean_db, nessie_pool_account_id=fake_nessie.pool_id)
+    app = create_app(settings, nessie_transport=fake_nessie.transport())
     with TestClient(app) as client:
         yield client
 
