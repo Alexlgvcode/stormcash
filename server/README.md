@@ -6,6 +6,8 @@ FastAPI server: settlement, ledger, Nessie, policy, detectors, SSE, plus StormDe
 - **Spec:** §6.3 env, §11 schema/settlement/ledger/Nessie, §12 API, §13 detectors, §14 StormDesk, §17 Photon
 - **Rule:** WS2 owns `stormcash/db.py`, `schema.sql` and `app.py`; other workstreams add routers in their own module.
 
+## Setup
+
 ```bash
 cd server && python3.11 -m venv .venv && source .venv/bin/activate && pip install -e ".[dev]"
 ```
@@ -14,6 +16,36 @@ cd server && python3.11 -m venv .venv && source .venv/bin/activate && pip instal
 cp .env.example .env
 ```
 
+A new database gets the whole schema:
+
 ```bash
 psql "$DATABASE_URL" -f schema.sql
 ```
+
+A database created before v4.3 (the hosted demo DB) needs the one migration; it is safe to run twice:
+
+```bash
+psql "$DATABASE_URL" -f migrations/001_nessie_moves.sql
+```
+
+## Run
+
+```bash
+uvicorn --factory stormcash.app:create_app --host 0.0.0.0 --port 8000
+```
+
+Fallback switches in `.env` (spec §22.4): `NESSIE_DISABLED=1` keeps money ledger-only, `API_SIG_REQUIRED=0` accepts unsigned phone writes.
+
+## Tests
+
+Protocol tests need nothing. DB tests create their own `stormcash_test` database on the Postgres at `TEST_DATABASE_URL` (default `postgresql://postgres:postgres@localhost:5432/postgres`, the CI service) and never touch `DATABASE_URL`. Without a reachable Postgres they are skipped locally (and fail in CI). Without Docker, `pip install pgserver` gives a local Postgres:
+
+```bash
+export TEST_DATABASE_URL=$(python -c "import pgserver; print(pgserver.get_server('/tmp/sc-pg', cleanup_mode=None).get_uri())")
+```
+
+```bash
+pytest
+```
+
+Nessie is faked in tests (`tests/conftest.py: FakeNessie`); nothing calls the real API.

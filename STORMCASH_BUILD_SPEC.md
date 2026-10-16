@@ -4,6 +4,7 @@
 > **Status:** source of truth. If code and this doc disagree, the doc wins until the doc is changed. Change the doc in the same commit as the code, and say so in the commit message.
 > **v4.1 (Oct 16):** work split rebalanced: Person A also reviews the TypeScript half of WS0, owns WS7 Photon, and records the backup video (§4, §22). Marked **[v4.1]**.
 > **v4.2 (Oct 16):** Nessie integration rewritten after the hour-1 VERIFY (§11.4): money moves as withdrawal + deposit pairs, balances are computed from Nessie transactions, Nessie amounts are whole dollars, base URL is HTTPS. Marked **[v4.2]**.
+> **v4.3 (Oct 16):** WS2 server core (#13): every Nessie money movement is a `nessie_moves` row executed after commit and replayed until both halves exist; signed API writes spelled out; fallback switches `NESSIE_DISABLED` and `API_SIG_REQUIRED` (§6.3, §11.1, §11.4, §12, §22.4). Marked **[v4.3]**.
 > **Builds on:** "StormCash: The 10/10 Build" v3 (Oct 16, Alexandre Lugovoi, on Brian Maina's Oct 11 draft). Everything new since v3 is marked **[v4]**.
 
 ---
@@ -265,6 +266,9 @@ PHOTON_API_KEY=... (names per Photon docs)
 PUBLIC_BASE_URL=https://<cloudflared>.trycloudflare.com
 NWS_USER_AGENT=StormCash HackHarvard demo (team email)
 DEMO_MODE=1
+NESSIE_DISABLED=0                                 # [v4.3] fallback: 1 = ledger-only, no Nessie calls
+API_SIG_REQUIRED=1                                # [v4.3] fallback: 0 = accept unsigned writes (§12)
+BACKGROUND_TASKS=1                                # [v4.3] Nessie replay (10 s) + escrow release (60 s)
 ```
 
 The server's public key is compiled into the mobile app (`mobile/src/config.ts: SERVER_PUB`). Generate the server key once on Friday and do not rotate it.
@@ -836,6 +840,21 @@ CREATE TABLE nessie_calls (             -- feeds the dashboard call log
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE nessie_moves (             -- [v4.3] one Nessie withdrawal + deposit pair per money movement (§11.4)
+  txn_id UUID PRIMARY KEY,              -- ledger txn_id; also in both Nessie descriptions
+  from_account_id TEXT NOT NULL,        -- Nessie account ids
+  to_account_id TEXT NOT NULL,
+  amount_cents INT NOT NULL,            -- whole dollars only
+  summary TEXT NOT NULL,
+  payout_id BIGINT REFERENCES payouts,  -- set for merchant payouts
+  withdrawal_id TEXT,
+  deposit_id TEXT,
+  status TEXT NOT NULL CHECK (status IN ('queued','executed')),
+  attempts INT NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE TABLE policy_versions (
   policy_ver INT PRIMARY KEY,
   issued_at BIGINT NOT NULL,
@@ -945,35 +964,18 @@ Rules:
 - **Only real demo entities touch Nessie.** Simulated residents and merchants (`simulated=true`) are **ledger-only** (`payouts.status='ledger_only'`), or the 40-shop town would hit rate limits.
 - Every call is logged to `nessie_calls` with a human summary for the dashboard.
 - **Fallback:** if either half of a pair errors or times out (3 s), queue the payout (`status='queued'`) and keep the ledger moving. A background task replays queued payouts every 10 s, creating only the missing half (check by the `txn_id` in the description). The Accounts tab shows "Nessie queued: n".
+- **[v4.3] How the queue works.** Each movement is written as a `nessie_moves` row (`queued`) in the same DB transaction as its ledger pair, and executed right after commit. The row keeps the withdrawal and deposit ids as they are created; on a retry the server first looks for a record whose description starts with `SC <txn_id>` before creating a half, so a half that succeeded without a response is never repeated. When both ids exist the row is `executed`, and a linked payout (`payout_id`) becomes `executed` with `nessie_transfer_id` = the deposit id. Escrow locks, top-ups and refunds use the same queue.
+- **[v4.3] Account creation** (register) is not queued: if Nessie is down the request answers 503. `NESSIE_DISABLED=1` switches every entity to ledger-only (`escrow_ref = "ledger-only"`).
+- **[v4.3] Reads** (`GET`) are logged too; `GET /v1/nessie/log` hides them unless `?reads=1`, and only writes are published as `nessie_call` SSE events.
 - A payout is `executed` only when both Nessie records exist. Never fake "executed".
-
----|---|
-| Create customer | `POST /customers?key=` |
-| Create account | `POST /customers/{id}/accounts?key=` `{type: "Checking", nickname, rewards: 0, balance}` |
-| Get account | `GET /accounts/{id}?key=` |
-| Transfer | `POST /accounts/{from}/transfers?key=` `{medium: "balance", payee_id: to, amount: dollars, transaction_date, description}` |
-| Transfer status | `GET /transfers/{id}?key=` → `pending` / `executed` / `cancelled` |
-
-Account mapping:
-
-| Nessie account | Owner |
-|---|---|
-| Checking | each real resident (Maya) |
-| StormCash escrow | each real resident (one escrow account per resident, used by their cert) |
-| Guarantee pool | a "StormCash Operator" customer |
-| Merchant account | each real merchant (Pharmacy, Gas Station). Corner Store is simulated (§16.3) and ledger-only. |
-
-Rules:
-- **Only real demo entities touch Nessie.** Simulated residents and merchants (`simulated=true`) are **ledger-only** (`payouts.status='ledger_only'`), or the 40-shop town would hit rate limits.
-- Every call is logged to `nessie_calls` with a human summary for the dashboard.
-- **Fallback:** if Nessie errors or times out (3 s), queue the payout (`status='queued'`) and keep the ledger moving. A background task replays queued payouts every 10 s. The Accounts tab shows "Nessie queued: n".
-- If transfers stay `pending` in the sandbox, the dashboard shows `pending` honestly. Never fake "executed".
 
 ---
 
 ## 12. Server API
 
 All JSON. Byte fields base64url. Prefix `/v1`. Auth for demo: none on reads; resident/merchant writes carry a holder/merchant signature over `canonical(API, path, body_sha256_hex, ts)` in header `X-SC-Sig` with `X-SC-Pub` and `X-SC-Ts`. Operator actions require header `X-SC-Operator: <name>` (demo only).
+
+**[v4.3] Signed writes, exactly.** `X-SC-Pub` = base64url compressed key; `X-SC-Ts` = Unix seconds, within ±600 s of the server; `X-SC-Sig` = base64url raw r‖s over SHA-256 of `canonical(API, path, body_sha256, ts)` with §7.2 rendering: `path` is the URL path as a string (`/v1/storm-mode`), `body_sha256` is SHA-256 of the exact body bytes as bytes32 (lowercase hex), `ts` an integer. Register requests must be signed by the key being registered; Storm Mode requests by the cert's holder. Errors: 401 bad or missing signature, 403 wrong key. `API_SIG_REQUIRED=0` accepts unsigned writes (fallback). Python helper: `stormcash.auth.sign_request`.
 
 ### 12.1 Endpoints
 
@@ -1661,6 +1663,8 @@ If judging slots are < 3 min, drop the Town beat from the core and show StormDes
 | Multipeer unreliable | QR sync | Records → Sync by QR |
 | Hosted Postgres unreachable | Local Postgres on Mac 2; Chalk reads features via Postgres views exposed through the API tunnel or StormDesk uses `postgres_fallback` | `DATABASE_URL` |
 | Nessie down/slow | queued payouts + replay | automatic |
+| Nessie unusable for the whole demo **[v4.3]** | ledger-only money, Accounts tab shows ledger | `NESSIE_DISABLED=1` |
+| Phone can't sign API writes yet **[v4.3]** | accept unsigned writes | `API_SIG_REQUIRED=0` |
 | Droid slow or failing | replay stored transcripts | dashboard toggle |
 | Chalk eval task can't reach tunnel | run agent locally, upload outputs, score in Chalk | `chalk/evals/run_local.py` |
 | Photon webhook issues | outbound notice only; show the thread from the DB | config |

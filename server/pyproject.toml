@@ -11,6 +11,7 @@ dependencies = [
     "httpx",
     "sse-starlette",
     "pydantic>=2",
+    "python-dotenv",
 ]
 
 [project.optional-dependencies]
