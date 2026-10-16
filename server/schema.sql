@@ -188,7 +188,7 @@ CREATE TABLE payouts (
   merchant_id BYTEA NOT NULL,
   amount_cents INT NOT NULL,
   source TEXT NOT NULL CHECK (source IN ('escrow','pool')),
-  nessie_transfer_id TEXT,
+  nessie_transfer_id TEXT,              -- [v4.2] deposit id of the Nessie withdrawal + deposit pair
   status TEXT NOT NULL CHECK (status IN ('queued','pending','executed','failed','ledger_only')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -206,7 +206,7 @@ CREATE TABLE ledger_entries (
 CREATE TABLE nessie_calls (             -- feeds the dashboard call log
   call_id BIGSERIAL PRIMARY KEY,
   method TEXT, path TEXT, request JSONB, status INT, response JSONB,
-  summary TEXT,                         -- "POST transfer escrow → Pharmacy, $12.00"
+  summary TEXT,                         -- "Escrow → Pharmacy, $12 (withdrawal + deposit)"
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

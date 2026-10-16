@@ -3,6 +3,7 @@
 > **Audience:** the two humans on the team and every Claude session working on this repo.
 > **Status:** source of truth. If code and this doc disagree, the doc wins until the doc is changed. Change the doc in the same commit as the code, and say so in the commit message.
 > **v4.1 (Oct 16):** work split rebalanced: Person A also reviews the TypeScript half of WS0, owns WS7 Photon, and records the backup video (§4, §22). Marked **[v4.1]**.
+> **v4.2 (Oct 16):** Nessie integration rewritten after the hour-1 VERIFY (§11.4): money moves as withdrawal + deposit pairs, balances are computed from Nessie transactions, Nessie amounts are whole dollars, base URL is HTTPS. Marked **[v4.2]**.
 > **Builds on:** "StormCash: The 10/10 Build" v3 (Oct 16, Alexandre Lugovoi, on Brian Maina's Oct 11 draft). Everything new since v3 is marked **[v4]**.
 
 ---
@@ -50,7 +51,7 @@
 4. **Prefer boring code.** Plain SQL with psycopg, plain FastAPI, plain React. No ORMs, no Redis, no Kubernetes, no microservices.
 5. **Everything has a fallback** (§22.4). If you build a risky thing, build its fallback switch at the same time.
 6. **Done means demoable.** A workstream is done when the "Done when" line in its section is true on the real demo hardware, not when unit tests pass.
-7. **Money is integer cents everywhere** (`*_cents`), except at the Nessie boundary, which takes dollars as a float with 2 decimals. Convert in exactly one helper (`server/nessie.py: cents_to_dollars`).
+7. **Money is integer cents everywhere** (`*_cents`), except at the Nessie boundary, which takes **whole dollars as an integer** **[v4.2]**. Convert in exactly one helper (`server/nessie.py: cents_to_dollars`), which refuses non-whole-dollar amounts instead of rounding (§11.4).
 8. **Time is integer Unix seconds (UTC)** everywhere in the protocol. Display local time only in UIs.
 9. When something in this doc is marked **VERIFY**, check it against the real docs or API in the first hour and fix the doc if it is wrong.
 
@@ -256,7 +257,7 @@ Multipeer service type: **`stormcash`** (1–15 chars, lowercase letters, digits
 ```
 DATABASE_URL=postgresql://...
 NESSIE_API_KEY=...
-NESSIE_BASE_URL=http://api.nessieisreal.com      # VERIFY
+NESSIE_BASE_URL=https://api.nessieisreal.com     # [v4.2] verified; HTTP is refused
 SERVER_SIGNING_KEY_PEM=...                        # P-256 private key, generated once
 FACTORY_API_KEY=...
 CHALK_CLIENT_ID=... / CHALK_CLIENT_SECRET=... / CHALK_ENVIRONMENT=...
@@ -793,7 +794,7 @@ CREATE TABLE payouts (
   merchant_id BYTEA NOT NULL,
   amount_cents INT NOT NULL,
   source TEXT NOT NULL CHECK (source IN ('escrow','pool')),
-  nessie_transfer_id TEXT,
+  nessie_transfer_id TEXT,              -- [v4.2] deposit id of the Nessie withdrawal + deposit pair
   status TEXT NOT NULL CHECK (status IN ('queued','pending','executed','failed','ledger_only')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -811,7 +812,7 @@ CREATE TABLE ledger_entries (
 CREATE TABLE nessie_calls (             -- feeds the dashboard call log
   call_id BIGSERIAL PRIMARY KEY,
   method TEXT, path TEXT, request JSONB, status INT, response JSONB,
-  summary TEXT,                         -- "POST transfer escrow → Pharmacy, $12.00"
+  summary TEXT,                         -- "Escrow → Pharmacy, $12 (withdrawal + deposit)"
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -854,7 +855,7 @@ For each item, in priority order:
 3. **PAY:** insert into `payments` with status `pending`, then decide:
    - R5 MERCHANT_KNEW true → `denied_knowing`, no pool funding.
    - Merchant has an **approved** `hold_pool_payout` action → `held`.
-   - Otherwise **pay**: `escrow_avail = max_cap − already_paid_from_escrow(cert)`; `from_escrow = min(amount, escrow_avail)`; `from_pool = amount − from_escrow`. Execute Nessie transfers (§11.4); set `settled`.
+   - Otherwise **pay**: `escrow_avail = max_cap − already_paid_from_escrow(cert)`; `from_escrow = min(amount, escrow_avail)`; `from_pool = amount − from_escrow`. Record each payout in Nessie as a withdrawal + deposit pair (§11.4); set `settled`.
    - R4 OVER_CAP check after payment.
 4. **PROOF:** store both tags (step 2 handles the case).
 5. **DLOG:** verify the chain against stored entries for that device (R6). Insert. For CONTACT entries, upsert `contacts` and mark `paired` when both sides exist. After inserting, re-run R5 for that device's accepted payments whose certs have cases.
@@ -889,10 +890,44 @@ Invariant test: for every `txn_id`, `sum(debit) == sum(credit)`. Show "Ledger ba
 
 ### 11.4 Nessie integration (`nessie.py`)
 
-**VERIFY all paths and payloads against the Nessie docs in hour 1.** Expected shape:
+**[v4.2] Verified on Oct 16 against the live API and `https://nessieisreal.com/nessie-openapi-spec.yaml`.** The current Nessie differs from what v3 assumed:
+
+- An account's `balance` is set when the account is created and **never changes**. Transfers, withdrawals and deposits are records attached to an account; they don't move the balance. `PUT /accounts/{id}` only accepts `nickname`.
+- Transfers have **no payee** (`medium` and `payee_id` are rejected) and stay `pending`. Don't use `/transfers`.
+- Amounts are **integer dollars**. `12.34` is silently stored as `12`.
+- Base URL is `https://api.nessieisreal.com`. HTTP (port 80) is refused. Auth is `?key=` on every call.
 
 | Purpose | Call |
 |---|---|
+| Create customer | `POST /customers?key=` `{first_name, last_name, address: {street_number, street_name, city, state, zip}}` (all strings) → `objectCreated._id` |
+| Create account | `POST /customers/{id}/accounts?key=` `{type: "Checking", nickname, rewards: 0, balance: <int dollars>}` → `objectCreated._id` |
+| Get account | `GET /accounts/{id}?key=` → `balance` is the opening balance |
+| Money out | `POST /accounts/{id}/withdrawals?key=` `{medium: "balance", transaction_date: "YYYY-MM-DD", status: "completed", amount: <int dollars>, description}` |
+| Money in | `POST /accounts/{id}/deposits?key=` (same body) |
+| List | `GET /accounts/{id}/withdrawals?key=`, `GET /accounts/{id}/deposits?key=` |
+
+**Moving money is a matched pair.** Every movement in §11.3 (lock or top up escrow, settle from escrow, settle from pool, refund on close) is one withdrawal on the source account and one deposit on the destination account, both `completed`, both with the description `"SC <txn_id> <summary>"` so the pair links to the ledger `txn_id`. `payouts.nessie_transfer_id` stores the deposit id; both ids are in `nessie_calls`.
+
+**Balances.** `nessie_balance(account) = opening balance + Σ deposits − Σ withdrawals`, read live from Nessie (`GET /accounts/{id}`, `/deposits`, `/withdrawals`) and cached ≤ 10 s. The Accounts tab labels these "from Nessie transactions". Open escrow and merchant accounts at $0 and the pool at its full funding, so every later change is a visible Nessie record.
+
+**Whole dollars.** `cents_to_dollars(cents)` returns an `int` and raises if `cents % 100 != 0`; it never rounds. A real-merchant payout that isn't a whole dollar amount is recorded `ledger_only` with the summary "not whole dollars, ledger only". Demo payments use whole dollars ($12). Simulated money never touches Nessie, so it can use any cents.
+
+Account mapping:
+
+| Nessie account | Owner |
+|---|---|
+| Checking | each real resident (Maya) |
+| StormCash escrow | each real resident (one escrow account per resident, used by their cert) |
+| Guarantee pool | a "StormCash Operator" customer |
+| Merchant account | each real merchant (Pharmacy, Gas Station). Corner Store is simulated (§16.3) and ledger-only. |
+
+Rules:
+- **Only real demo entities touch Nessie.** Simulated residents and merchants (`simulated=true`) are **ledger-only** (`payouts.status='ledger_only'`), or the 40-shop town would hit rate limits.
+- Every call is logged to `nessie_calls` with a human summary for the dashboard.
+- **Fallback:** if either half of a pair errors or times out (3 s), queue the payout (`status='queued'`) and keep the ledger moving. A background task replays queued payouts every 10 s, creating only the missing half (check by the `txn_id` in the description). The Accounts tab shows "Nessie queued: n".
+- A payout is `executed` only when both Nessie records exist. Never fake "executed".
+
+---|---|
 | Create customer | `POST /customers?key=` |
 | Create account | `POST /customers/{id}/accounts?key=` `{type: "Checking", nickname, rewards: 0, balance}` |
 | Get account | `GET /accounts/{id}?key=` |
@@ -924,13 +959,13 @@ All JSON. Byte fields base64url. Prefix `/v1`. Auth for demo: none on reads; res
 
 | Method + path | Body / query | Returns | Owner |
 |---|---|---|---|
-| `POST /v1/residents/register` | `{display_name, holder_pub, region_id}` | `{resident_id, cert}` — creates Nessie customer, checking (seeded $500), escrow; locks $20; issues cert v1 cap 2000 | WS2 |
+| `POST /v1/residents/register` | `{display_name, holder_pub, region_id}` | `{resident_id, cert}` — creates Nessie customer, checking (seeded $500), escrow (opened at $0); locks $20 as a withdrawal + deposit pair (§11.4); issues cert v1 cap 2000 | WS2 |
 | `POST /v1/merchants/register` | `{display_name, merchant_pub, region_id, x, y, contact?: {channel, handle}}` | `{merchant_id, mcert}` | WS2 |
 | `POST /v1/storm-mode` | `{cert_id, cap_cents}` | `{cert}` — tops escrow up in Nessie, issues new version | WS2 |
 | `POST /v1/storm-mode/close` | `{cert_id}` | `{cert}` (cap back to 2000; refund scheduled per §7.4) | WS2 |
 | `POST /v1/sync` | `{device_pub, items: [...]}` | `{rcpt, policy, certs: [...]}` | WS2 |
 | `GET /v1/policy` | `?since=ver` | `{policy}` | WS2 |
-| `GET /v1/accounts` | | live Nessie balances for demo entities + ledger totals | WS2 |
+| `GET /v1/accounts` | | live Nessie balances for demo entities (computed from Nessie transactions, §11.4) + ledger totals | WS2 |
 | `GET /v1/nessie/log` | `?limit=50` | rows of `nessie_calls` | WS2 |
 | `GET /v1/cases` / `GET /v1/cases/{id}` | | case with both tags, the cert, the rule, evidence, case file | WS2 |
 | `GET /v1/proof/{case_id}` | | everything the public verify page needs: cert (+server sig), tag A, tag B, holder_pub, rule | WS2 |
@@ -1360,8 +1395,8 @@ Title, "Demo mode", connection dot, **Reset demo** button (calls `/v1/demo/reset
 
 ### 18.2 Accounts tab (Capital One add-on)
 
-- Cards: Maya Checking, Maya Escrow, Pharmacy, Gas Station, Guarantee Pool (Nessie), plus a "Simulated town (ledger only)" totals card. Live Nessie balances; animate on change.
-- Nessie call log (scrolling): `POST transfer escrow → Pharmacy, $12.00 · executed`.
+- Cards: Maya Checking, Maya Escrow, Pharmacy, Gas Station, Guarantee Pool (Nessie), plus a "Simulated town (ledger only)" totals card. Live Nessie balances, labeled "from Nessie transactions" (§11.4); animate on change.
+- Nessie call log (scrolling): `POST withdrawal Maya Escrow, $12 · completed` / `POST deposit Pharmacy, $12 · completed`.
 - Ledger panel: "Ledger balanced ✓", totals per account type.
 - Queued Nessie payouts counter (fallback visible).
 
@@ -1405,7 +1440,7 @@ Same app for everyone. First launch: choose **Resident** or **Merchant** (hidden
 |---|---|---|
 | Wallet | Resident | Big remaining balance ("$38 of $50 left"), cert status, Storm Mode toggle (online only), "Carrying N records", offline/online badge |
 | Pay | Resident | Camera scans REQ QR → "Pay Pharmacy $12.00" → Face ID → shows PAY QR |
-| Charge | Merchant | Keypad → shows REQ QR (2-min countdown) → "Scan customer's code" |
+| Charge | Merchant | Keypad (whole dollars for the real demo merchants, §11.4 **[v4.2]**) → shows REQ QR (2-min countdown) → "Scan customer's code" |
 | Scan payment | Merchant | Camera scans PAY QR → runs C1–C6 |
 | Result | Merchant | **Green:** "Verified. Backed by Capital One, $12 of $50 used." **Red:** names the failed check and rule, e.g. "Refused: these funds were already spent nearby (Rule: same counter). Certificate flagged." |
 | Records | Both | Carrying N items by kind, nearby peers, last sync, "Sync by QR" button, last upload + hops |
@@ -1531,7 +1566,7 @@ Pre-staged before each judging slot: `/v1/demo/reset`, Maya cert at Storm Mode $
 
 | Judge | Show | Say |
 |---|---|---|
-| **Capital One** | Accounts tab: escrow, pool, merchant accounts, refund on close, call log, ledger balanced | "Every dollar moves through Nessie: escrow on Storm Mode, settlement to merchants, the guarantee pool above the escrow, and the refund on close. Here's every call." |
+| **Capital One** | Accounts tab: escrow, pool, merchant accounts, refund on close, call log, ledger balanced | "Every dollar is recorded in Nessie: escrow on Storm Mode, settlement to merchants, the guarantee pool above the escrow, and the refund on close. Here's every call." |
 | **Factory** | Cases → StormDesk: live step stream on a hard case, the Flag schema, the permission handler denying writes, README "Where Droid runs" | "Droid runs on every case and every suspicion in production. It re-verifies the proof itself, pulls the logs, and writes a structured proposal. It has no write tools; a person approves." |
 | **Chalk** | Evals tab: rules-only vs. StormDesk; a trap case it dismissed; `query_features` calls in the step stream | "The agent reads live features from Chalk: Nessie, phone logs, weather alerts. We evaluated it on labeled simulated towns with deliberate traps: here's what rules alone flag, and what the agent gets right." |
 | **Photon** | Approve the Corner Store flag → Mac 1 Telegram buzzes → type a reply → agent answers with evidence | "The merchant can argue back by text. The agent checks their claim against their own signed log, live." |
@@ -1563,7 +1598,7 @@ If judging slots are < 3 min, drop the Town beat from the core and show StormDes
 **Person B (Mac 2):**
 - [ ] Repo created with this layout; this spec + CLAUDE.md committed
 - [ ] Hosted Postgres (Neon/Supabase) up; `schema.sql` applied
-- [ ] Nessie key works; two accounts; one transfer reaches `executed`
+- [ ] Nessie key works; two accounts; a withdrawal + deposit pair recorded **[v4.2]**
 - [ ] `droid` CLI logged in; `run(..., output=Model)` returns structured output; built-in tool ids listed
 - [ ] Chalk account (chalk.ai/hackharvard); evaluations quick start runs
 - [ ] Server signing key generated; public key pasted into `mobile/src/config.ts`
@@ -1575,7 +1610,7 @@ If judging slots are < 3 min, drop the Town beat from the core and show StormDes
 | Block | Person A (mobile) | Person B (server/dash) | Claude sessions |
 |---|---|---|---|
 | **Fri 5–8 PM** | App shell, key, Face ID, QR show/scan, register flow | DB, `/register`, `/storm-mode` on Nessie, SSE skeleton | WS0 vectors (both languages) → WS2 settlement core |
-| **Fri 8 PM–1 AM** | Offline checks C1–C6, wallet + items + device_log stores, judge mode v1 | `/sync` + settlement + ledger + Nessie transfers; Accounts tab | WS2 cases + policy + R5/R6; WS4 simulator v1; WS3 dashboard skeleton |
+| **Fri 8 PM–1 AM** | Offline checks C1–C6, wallet + items + device_log stores, judge mode v1 | `/sync` + settlement + ledger + Nessie payouts; Accounts tab | WS2 cases + policy + R5/R6; WS4 simulator v1; WS3 dashboard skeleton |
 | **Sat 9 AM–1 PM** | Full offline pay flow on 3 phones; sync session over Multipeer | Cases tab + proof page; sponsor fair 10–12 (show Capital One, Factory, Chalk, Photon) | WS4 scenarios + seed-town; WS5 StormDesk worker + tools; WS6 Chalk features |
 | **Sat 1 PM** | **Decision:** Multipeer reliable in the hall? If not, QR sync now | | |
 | **Sat 1–6 PM** | Store-and-forward relay, demo topology, path metadata, upload | StormDesk panel + approvals; Town tab | WS6 eval dataset + first Chalk run; WS7 Photon notices + appeals |
