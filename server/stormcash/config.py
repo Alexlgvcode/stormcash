@@ -75,7 +75,8 @@ def load_settings(env_file: Path | None = SERVER_DIR / ".env") -> Settings:
         nessie_enabled=not _flag(env.get("NESSIE_DISABLED"), False) and bool(env.get("NESSIE_API_KEY")),
         api_sig_required=_flag(env.get("API_SIG_REQUIRED"), True),
         demo_mode=_flag(env.get("DEMO_MODE"), True),
-        public_base_url=env.get("PUBLIC_BASE_URL", ""),
+        # The .env.example placeholder ("https://<cloudflared>…") counts as unset.
+        public_base_url="" if "<" in env.get("PUBLIC_BASE_URL", "") else env.get("PUBLIC_BASE_URL", ""),
         nws_user_agent=env.get("NWS_USER_AGENT") or "StormCash HackHarvard demo",
         factory_api_key=env.get("FACTORY_API_KEY", ""),
         chalk_client_id=env.get("CHALK_CLIENT_ID", ""),

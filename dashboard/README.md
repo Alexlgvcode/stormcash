@@ -25,3 +25,25 @@ VITE_API_BASE=https://<cloudflared>.trycloudflare.com npm run build
 ## How it stays live
 
 One `EventSource` on `GET /v1/stream` (§12.3). The Accounts tab refetches `GET /v1/accounts` (debounced) on `nessie_call`, `accounts`, `payment` and `upload` events, and prepends `nessie_call` rows to the call log.
+
+## Cases tab and the public proof page (#24)
+
+- **Cases tab:** every hard case, live over SSE. Each case shows both tags side by side with the conflicting field in red, a **Verify it yourself** button, the **Proof QR**, the merchant's own ACCEPT entry for "merchant knew" cases, and StormDesk's case file.
+- **`/proof/<case_id>`:** the mobile page a judge opens from the QR code. No login.
+- **Verify it yourself** runs entirely in the browser (`src/verify.ts`). It rebuilds every signed string from the fields shown, checks the signatures with WebCrypto ECDSA P-256 / SHA-256, and re-checks the rule.
+- **Tests:** `npm test` checks the same code against `spec/vectors.json`.
+
+**For the demo:**
+
+- WebCrypto only works over **HTTPS** (or localhost). Build the dashboard and let the server serve it, so one tunnel URL serves both the API and `/proof/…`:
+
+  ```bash
+  npm run build
+  ```
+
+- Set `PUBLIC_BASE_URL` in `server/.env` to the tunnel URL; the Proof QR uses it.
+- Optionally bake the server key into the page. The value is the base64url of `SERVER_PUB_HEX`; without it, the page uses the key the server reports and says so:
+
+  ```bash
+  VITE_SERVER_PUB=<base64url> npm run build
+  ```

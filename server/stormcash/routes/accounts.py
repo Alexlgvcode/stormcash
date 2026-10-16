@@ -107,4 +107,5 @@ def health(request: Request) -> dict:
         "nessie_enabled": deps.nessie is not None,
         "api_sig_required": s.api_sig_required,
         "server_pub": b64u_encode(s.server_pub),
+        "public_base_url": s.public_base_url,
     }

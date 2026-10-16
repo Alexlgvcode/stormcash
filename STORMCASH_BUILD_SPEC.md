@@ -1488,6 +1488,8 @@ Title, "Demo mode", connection dot, **Reset demo** button (calls `/v1/demo/reset
 
 Mobile-friendly, no login. Shows the two tags, the rule, and a **Verify** button that runs WebCrypto ECDSA verification in the judge's browser against the holder key and the server-signed certificate. Explains in two sentences why this proves cheating.
 
+**[v4.3] As built.** `dashboard/src/verify.ts` rebuilds each signed string from the displayed fields with the §7.2 rules (TAG, CERT, DLOG), so the server can't show one thing and sign another; checks the CERT against the server key, both TAGs against the cert's `holder_pub`, re-checks the rule from the fields, and for MERCHANT_KNEW checks the merchant's own ACCEPT entry and that its `held_ids` list payment A. Compressed keys are decompressed in JS (WebCrypto imports raw keys uncompressed). `npm test` runs the same code against `spec/vectors.json`. WebCrypto needs a secure context, so the proof link must be HTTPS: the server serves the built dashboard (`dashboard/dist`) from the same origin as the API, the Proof QR points at `PUBLIC_BASE_URL/proof/<case_id>` (the cloudflared tunnel), and a build can bake the server key in with `VITE_SERVER_PUB` (base64url) so the page doesn't take the key from the server it is checking.
+
 **Done when:** the full core demo runs with only dashboard clicks + phones, and every tab survives a page reload.
 
 ---

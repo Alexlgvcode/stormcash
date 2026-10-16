@@ -3,7 +3,9 @@
 import { useEffect, useState } from "react";
 import { Header } from "./components/Header";
 import { EventsProvider } from "./events";
+import { ProofPage } from "./proof/ProofPage";
 import { AccountsTab } from "./tabs/Accounts";
+import { CasesTab } from "./tabs/Cases";
 
 const TABS = [
   { id: "accounts", label: "Accounts" },
@@ -23,6 +25,19 @@ function NotBuilt({ name }: { name: string }) {
 }
 
 export default function App() {
+  const proof = location.pathname.match(/^\/proof\/(\d+)\/?$/);
+  if (proof) {
+    // The public page a judge opens from the Proof QR: no header, no tabs, no live stream.
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100">
+        <ProofPage caseId={Number(proof[1])} />
+      </div>
+    );
+  }
+  return <Dashboard />;
+}
+
+function Dashboard() {
   const [tab, setTab] = useState<TabId>(tabFromHash);
 
   useEffect(() => {
@@ -50,7 +65,7 @@ export default function App() {
         </nav>
         <main>
           {tab === "accounts" && <AccountsTab />}
-          {tab === "cases" && <NotBuilt name="Cases" />}
+          {tab === "cases" && <CasesTab />}
           {tab === "town" && <NotBuilt name="Town" />}
           {tab === "evals" && <NotBuilt name="Evals" />}
         </main>

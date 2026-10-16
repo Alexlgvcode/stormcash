@@ -61,4 +61,4 @@ jobs:
           node-version: 22
       - if: steps.check.outputs.exists == 'true'
         working-directory: dashboard
-        run: npm ci && npm run build
+        run: npm ci && npm test --if-present && npm run build

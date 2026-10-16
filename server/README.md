@@ -49,3 +49,7 @@ pytest
 ```
 
 Nessie is faked in tests (`tests/conftest.py: FakeNessie`); nothing calls the real API.
+
+## Dashboard on the same origin
+
+If `dashboard/dist` exists (`cd dashboard && npm run build`), the server also serves the dashboard at `/` and the public proof page at `/proof/<case_id>`. A single cloudflared tunnel to port 8000 then serves the API and the HTTPS proof link judges open from the QR code (set `PUBLIC_BASE_URL` to the tunnel URL).
