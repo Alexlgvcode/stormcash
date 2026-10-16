@@ -1,13 +1,15 @@
-// Camera QR scanner. Calls onScan once per mount with the first StormCash code it sees.
+// Camera QR scanner. Calls onScan once per mount with the first StormCash code it sees,
+// or, with `continuous`, once for every distinct code (multi-frame QR sync).
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { QR_PREFIX } from '../protocol';
 import { Body, Button } from './ui';
 
-export function Scanner({ onScan }: { onScan: (data: string) => void }) {
+export function Scanner({ onScan, continuous }: { onScan: (data: string) => void; continuous?: boolean }) {
   const [permission, requestPermission] = useCameraPermissions();
   const done = useRef(false);
+  const seen = useRef(new Set<string>());
 
   if (!permission) return null;
   if (!permission.granted) {
@@ -26,7 +28,12 @@ export function Scanner({ onScan }: { onScan: (data: string) => void }) {
         barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
         onBarcodeScanned={({ data }) => {
           if (done.current || !data.startsWith(QR_PREFIX)) return;
-          done.current = true;
+          if (continuous) {
+            if (seen.current.has(data)) return;
+            seen.current.add(data);
+          } else {
+            done.current = true;
+          }
           onScan(data);
         }}
       />

@@ -9,6 +9,7 @@ export type Route =
   | { name: 'charge' }
   | { name: 'result'; result: CheckResult; pay: Pay | null; capCents: number }
   | { name: 'records' }
+  | { name: 'qrsync' }
   | { name: 'demo' }
   | { name: 'judge' };
 
