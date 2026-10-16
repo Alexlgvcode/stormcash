@@ -277,7 +277,7 @@ The server's public key is compiled into the mobile app (`mobile/src/config.ts: 
 
 - **Curve:** ECDSA P-256 (secp256r1). The only curve the iPhone Secure Enclave supports.
 - **Hash:** SHA-256.
-- **Signature input:** sign the 32-byte SHA-256 digest of the canonical string (prehashed). Python: `ec.ECDSA(utils.Prehashed(hashes.SHA256()))`. noble: `p256.sign(digest, priv)` with the digest as the message hash (no extra hashing). **VERIFY** the noble version's API for prehash vs. message.
+- **Signature input:** sign the 32-byte SHA-256 digest of the canonical string (prehashed). Python: `ec.ECDSA(utils.Prehashed(hashes.SHA256()))`. noble: `p256.sign(digest, priv)` with the digest as the message hash (no extra hashing). **VERIFY** the noble version's API for prehash vs. message. Software signers sign deterministically (RFC 6979: Python `ec.ECDSA(..., deterministic_signing=True)`, noble's default), so the same key and digest always give the same low-S signature; the Secure Enclave signs randomly, which is fine because verifiers never compare signatures.
 - **Signature format:** raw 64 bytes `r || s`, big-endian, each 32 bytes. **Signers must normalize to low-S.** Verifiers must accept both low-S and high-S (noble: `{ lowS: false }` on verify). Python `cryptography` emits DER; convert with `decode_dss_signature` and normalize S in `crypto.py`. Secure Enclave also returns DER; same helper on mobile.
 - **Public keys:** SEC1 compressed, 33 bytes.
 - **Random:** 16-byte nonces and ids from a CSPRNG.
@@ -293,18 +293,20 @@ Field rendering rules (no exceptions):
 
 | Kind | Rendering |
 |---|---|
-| integer | base-10 ASCII, no sign, no leading zeros, `0` for zero. Negative values are invalid. |
+| integer | base-10 ASCII, no sign, no leading zeros, `0` for zero. Negative values are invalid. Max `2^53 − 1` (JavaScript's safe-integer limit). |
 | bytes (keys, hashes, ids, nonces, sigs) | **lowercase hex** |
-| string | UTF-8, must not contain `\|`, `,`, `\n`; max 48 chars; NFC-normalized |
+| string | UTF-8, NFC-normalized before rendering; must not contain `\|`, `,`, `\n`; max 48 Unicode code points after NFC (code points, not UTF-16 units) |
 | list of bytes | sorted ascending by hex, joined with `,`; empty list = empty string |
-| enum | uppercase ASCII token, e.g. `ACCEPT` |
+| list of strings | each rendered as a string, sorted ascending by UTF-8 bytes, joined with `,`; empty list = empty string |
+| enum | uppercase ASCII token matching `[A-Z][A-Z0-9_]*`, e.g. `ACCEPT`, `C6` |
 
-`TYPE` is a domain-separation tag so no signature for one object type can be replayed as another.
+`TYPE` is a domain-separation tag so no signature for one object type can be replayed as another. Besides the objects in §7.4, these derived hashes use the same encoding: `GEN` (§7.4), `DGEN` and `CONTACT` (§9.2), `PRF` (§10.2).
 
 ### 7.3 Transport encoding (JSON over QR, Multipeer and HTTP)
 
 - JSON objects with the short keys listed below.
-- **All byte fields are base64url without padding** in JSON. Converting base64url ↔ hex happens only in the codec (`objects.py` / `objects.ts`).
+- **All byte fields are base64url without padding** in JSON. Converting base64url ↔ hex happens only in the codec (`objects.py` / `objects.ts`). Decoders reject padding, non-canonical base64url, and missing or unknown keys.
+- The signature travels as `sig` next to the fields; it is never part of the canonical string.
 - QR payload: the string `SC1:` + JSON. Error correction level L. If scanning is slow, see §23.
 
 ### 7.4 Objects
@@ -401,25 +403,25 @@ Field order below **is** the canonical order. JSON short key in brackets.
 
 | # | Field | Type |
 |---|---|---|
-| 1 | cert_id | bytes16 |
-| 2 | chain_head | bytes32 (latest tag_hash or GENESIS) |
-| 3 | counter | int (latest counter, 0 if none) |
-| 4 | ts | int |
+| 1 | cert_id [`ci`] | bytes16 |
+| 2 | chain_head [`ch`] | bytes32 (latest tag_hash or GENESIS) |
+| 3 | counter [`k`] | int (latest counter, 0 if none) |
+| 4 | ts [`ts`] | int |
 
-`TYPE = RENEW`. The server answers with a new CERT version (expiry +72 h) unless the cert is frozen.
+`TYPE = RENEW`. Holder signature `[sig]`. The server answers with a new CERT version (expiry +72 h) unless the cert is frozen.
 
 #### RCPT — server receipt
 
 | # | Field | Type |
 |---|---|---|
-| 1 | ts | int |
-| 2 | item_ids | list of bytes32 (full item ids, §10.2) |
+| 1 | ts [`ts`] | int |
+| 2 | item_ids [`ids`] | list of bytes32 (full item ids, §10.2) |
 
-`TYPE = RCPT`. Server signature. Phones delete carried items whose ids appear in a verified receipt.
+`TYPE = RCPT`. Server signature `[sig]`. Phones delete carried items whose ids appear in a verified receipt.
 
 #### PROOF — equivocation proof
 
-`{a: TAG, b: TAG, rule: "SAME_COUNTER"|"BROKEN_LINK"|"TOTAL_BACKWARDS"}`. Self-proving: anyone with the cert's `holder_pub` can check it. No extra signature.
+`{a: TAG, b: TAG, rule: "SAME_COUNTER"|"BROKEN_LINK"|"TOTAL_BACKWARDS"}`. Self-proving: anyone with the cert's `holder_pub` can check it. No extra signature. Builders order the tags so `a.counter ≤ b.counter` (ties by tag_hash) and name the lowest-numbered rule that fires. A PROOF is valid when both tags verify under `holder_pub`, share a `cert_id`, and break the named rule, in either order.
 
 ---
 
@@ -438,10 +440,21 @@ Field order below **is** the canonical order. JSON short key in brackets.
 |---|---|---|
 | C1 | CERT server signature valid | "Certificate not issued by StormCash" |
 | C2 | CERT not expired (10-min clock tolerance) and `cert_id` not in policy `frozen_certs` | "Certificate expired" / "Certificate frozen" |
-| C3 | TAG signature matches CERT `holder_pub` | "Signature doesn't match" |
+| C3 | TAG `cert_id` is the CERT's and the TAG signature matches CERT `holder_pub` | "Signature doesn't match" |
 | C4 | `details_hash` matches DET; DET names **this** merchant's key and the **open** request's nonce; TAG amount = REQ amount; REQ not expired | "Payment is for a different request" |
 | C5 | `amount > 0`, `cum ≥ amount`, `cum ≤ cap`; amount ≤ merchant limit from policy (if any) | "Over certificate cap" / "Over this shop's limit" |
 | C6 | Against every stored tag for this cert: no equivocation (§8.3), and `counter >` the highest counter seen | "These funds were already spent nearby (rule: …). Certificate flagged." |
+
+Within a check, conditions run in this order and the first failure wins. Each failure has a machine reason token (used in logs, vectors and both protocol libraries; the UI shows the copy above):
+
+| Check | Reason tokens, in evaluation order |
+|---|---|
+| C1 | `BAD_CERT_SIG` |
+| C2 | `EXPIRED` (`now > expires_at + 600`), `FROZEN` (`cert_id` in the highest verified policy's `frozen_certs`) |
+| C3 | `WRONG_CERT` (TAG `cert_id` ≠ CERT `cert_id`), `BAD_TAG_SIG` |
+| C4 | `DETAILS_MISMATCH` (`details_hash` ≠ SHA-256 of canonical DET), `WRONG_MERCHANT`, `WRONG_NONCE`, `WRONG_AMOUNT`, `REQ_EXPIRED` (`now > req_expires_at`, merchant's own clock, no tolerance) |
+| C5 | `BAD_AMOUNT` (`amount ≤ 0` or `cum < amount`), `OVER_CAP`, `OVER_LIMIT` |
+| C6 | `INVALID_TAG` (single-tag validity, §8.3); then `SAME_COUNTER` / `BROKEN_LINK` / `TOTAL_BACKWARDS` against stored tags of this cert, taken in (counter, tag_hash) order, first conflict wins; then `COUNTER_NOT_NEW` (`counter ≤` the highest stored counter, e.g. a replayed payment) |
 
 All six pass: green screen "Verified. Backed by Capital One, $<cum> of $<cap> used." Then the merchant stores the PAY, appends a DLOG `ACCEPT` (§9), and queues the TAG for gossip.
 
@@ -457,13 +470,15 @@ For two tags A and B with the same `cert_id`, ordered so that `A.counter ≤ B.c
 | **R2 BROKEN_LINK** | `B.counter == A.counter + 1` and `B.prev_hash != tag_hash(A)` |
 | **R3 TOTAL_BACKWARDS** | `B.counter > A.counter` and `B.cum − B.amount < A.cum` |
 
-Plus single-tag validity: counter 1 must have `prev_hash == GENESIS(cert_id)` and `cum == amount`.
+Tags with different `cert_id`s never equivocate. If a pair breaks more than one rule (R2 and R3 can both hold), report the lowest-numbered one.
+
+Plus single-tag validity: `counter ≥ 1`, `amount > 0`, `cum ≥ amount`, and counter 1 must have `prev_hash == GENESIS(cert_id)` and `cum == amount`.
 
 Server-only hard rules:
 
 | Rule | Condition |
 |---|---|
-| **R4 OVER_CAP** | the settled `cum` for a cert exceeds the highest `cap_cents` of any issued version |
+| **R4 OVER_CAP** | the highest `cum` among a cert's settled tags exceeds the highest `cap_cents` of any issued version |
 | **R5 MERCHANT_KNEW** [v4] | §9.4 |
 | **R6 LOG_TAMPER** [v4] | a device's DLOG chain has a fork (two entries with the same seq) or a broken prev_hash link |
 
@@ -500,12 +515,13 @@ The device key is the holder key for residents and the merchant key for merchant
 
 | Kind | Body fields |
 |---|---|
-| `ACCEPT` | tag_hash (bytes32), cert_id (bytes16), held_ids (list of bytes32: every tag_hash **for this cert_id** the device held at acceptance) |
-| `REFUSE` | tag_hash (bytes32), cert_id (bytes16), check (enum: `C1`…`C6`) |
-| `CONTACT` | contact_id (bytes32), peer_pub (bytes33), sent_ids (list of bytes8), recv_ids (list of bytes8), sent_overflow (int), recv_overflow (int) |
+| `ACCEPT` | tag_hash [`th`] (bytes32), cert_id [`ci`] (bytes16), held_ids [`hi`] (list of bytes32: every tag_hash **for this cert_id** the device held at acceptance) |
+| `REFUSE` | tag_hash [`th`] (bytes32), cert_id [`ci`] (bytes16), check [`ck`] (enum: `C1`…`C6`) |
+| `CONTACT` | contact_id [`cid`] (bytes32), peer_pub [`pp`] (bytes33), sent_ids [`si`] (list of bytes8), recv_ids [`ri`] (list of bytes8), sent_overflow [`so`] (int), recv_overflow [`ro`] (int) |
 
+- Body keys sit in the same flat JSON object as the header (as in §12.2), with the signature in `sig`. Body fields of other kinds are absent.
 - `sent_ids` / `recv_ids` are the first 8 bytes of the item ids (§10.2) of **TAG and PROOF items only**, capped at 200 each. Anything beyond the cap is counted in `*_overflow`.
-- `contact_id = SHA-256(canonical(CONTACT, pub_low, pub_high, nonce_low, nonce_high))`. The pubs are sorted; each side's HELLO nonce is ordered by its pub. Both sides compute the same id, so the server can pair the two logs of one meeting.
+- `contact_id = SHA-256(canonical(CONTACT, pub_low, pub_high, nonce_low, nonce_high))`. The pubs are sorted bytewise; each side's HELLO nonce is ordered by its pub. Both sides compute the same id, so the server can pair the two logs of one meeting. The two pubs must differ.
 
 ### 9.3 Both sides log every contact
 
@@ -520,11 +536,15 @@ For a payment P (tag `z`, cert `C`) accepted by merchant M at time `t_accept`, i
 
 then M knowingly accepted a double spend: P is marked `denied_knowing`, it is **not** paid from the guarantee pool (escrow still pays if the payment is first on the honest chain), and a case `MERCHANT_KNEW` opens with M's own signatures as evidence.
 
+Precisely: `id8(x)` is the first 8 bytes of `tag_hash(x)`. A contact is **paired** when M logged a CONTACT with that `contact_id` naming the peer as `peer_pub`, and the peer logged one with the same `contact_id` naming M. It is dated by M's own CONTACT entry, so `ts` and `t_accept` (M's ACCEPT entry for `z`) both come from M's clock. A contact only one side logged never fires R5, even if it is M's own entry. Clause (a) is checked before (b); conflicting tags are taken in (counter, tag_hash) order.
+
 (a) catches an app that was modified to skip C6 but still logs honestly. (b) catches an app that also lies in its own log, using the peer's log and M's own contact entry.
 
 ### 9.5 R6 LOG_TAMPER (hard)
 
 On ingest, the server verifies each device's chain. Two entries with the same `seq` and different hashes, or a broken `prev_hash`, open a `LOG_TAMPER` case. For a merchant, pool payouts are suspended pending review.
+
+Entries arrive out of order by gossip, so a missing `seq` is not tampering: a link is checked only where the previous entry is known (seq 1 against `DGEN`). Scan by ascending `seq`; at each `seq`, a fork is reported before a broken link.
 
 ### 9.6 Storage
 
@@ -553,7 +573,7 @@ Every syncable thing is an **item**: `{kind, body, path}`.
 | `RENEW` | RENEW | canonical RENEW | 3 |
 | `TAG` | TAG | tag_hash | 4 |
 
-Note: `PAY` and `TAG` for one payment share an id on purpose: once a PAY is held, the TAG is redundant.
+Note: `PAY` and `TAG` for one payment share an id on purpose: once a PAY is held, the TAG is redundant. "canonical X" means the object's digest without its signature. `id8` is the first 8 bytes of an item id.
 
 `path` is **unsigned metadata**: an array of `[device_short_id, ts]` appended by each carrier. `device_short_id` = first 4 bytes of the device pub as hex. It is only for the dashboard's hop display, never for security.
 
@@ -1530,6 +1550,8 @@ Required vectors:
 10. A DER signature from Python converted to raw.
 
 Tests: `server/tests/test_vectors.py` and `mobile/src/protocol/__tests__/vectors.test.ts` both load `spec/vectors.json` and must reproduce every canonical string and digest byte for byte, verify every valid signature, reject every invalid vector, and agree on every rule outcome.
+
+**File layout.** Object vectors (`objects`) use the shape above, plus `json` (the transport form, which the codec must produce exactly) and `item_kind` / `item_id` / `id8` for item types. Scenario sections carry objects as `{type, fields, sig}` with hex bytes, and an `expect` block: `encoding`, `pays`, `signatures`, `der`, `contact_ids`, `single_tag`, `equivocation`, `proofs`, `merchant_checks` (C1–C6 with reason tokens, §8.2), `over_cap` (R4), `log_tamper` (R6), `merchant_knew` (R5). `spec/README.md` lists what each section checks. Signing is RFC 6979 deterministic, so regenerating gives the same file byte for byte, and `test_vectors.py` fails if the committed file is stale.
 
 **This is the first thing built (WS0).** Nothing else merges until both test files pass.
 
