@@ -76,6 +76,20 @@ def _run(deps, body: SeedTownIn) -> None:
         _job.pop("sim", None)
 
 
+class ResetIn(BaseModel):
+    storm_cap_cents: int | None = None  # pre-stage Maya at Storm Mode (§21.1), e.g. 5000
+
+
+@router.post("/v1/demo/reset")
+def demo_reset(request: Request, body: ResetIn | None = None, x_sc_operator: str | None = Header(None)) -> dict:
+    """Clean table for the next judge (§12.1): real-device data cleared, fresh Nessie
+    accounts, Maya's cert reissued; the simulated town stays."""
+    require_operator(x_sc_operator)
+    from ..demo import reset_demo
+
+    return reset_demo(request.app.state.deps, storm_cap_cents=body.storm_cap_cents if body else None)
+
+
 @router.post("/v1/demo/seed-town", status_code=202)
 def seed_town(body: SeedTownIn, request: Request, x_sc_operator: str | None = Header(None)) -> dict:
     require_operator(x_sc_operator)
