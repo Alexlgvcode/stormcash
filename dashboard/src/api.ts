@@ -111,3 +111,73 @@ export interface Proof {
   holder_pub: string;
   log_entries: SignedObj[];
 }
+
+export interface Region {
+  region_id: string;
+  display_name: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export interface TownMerchant {
+  merchant_id: string;
+  display_name: string;
+  region_id: string | null;
+  x: number;
+  y: number;
+  simulated: boolean;
+  pool_eligible: boolean;
+}
+
+export interface Alert {
+  alert_id: string;
+  region_id: string | null;
+  event: string;
+  severity: string | null;
+  source: "live" | "replayed";
+}
+
+export interface TownStats {
+  seed: number;
+  double_spends: { attempts: number; share_refused_offline: number | null; share_caught_at_settlement: number | null };
+  mean_loss_per_cheater_cents: number | null;
+  median_hours_to_settlement: number | null;
+}
+
+export interface Town {
+  grid: { w: number; h: number };
+  regions: Region[];
+  merchants: TownMerchant[];
+  alerts: Alert[];
+  dark_regions: string[];
+  town_stats: TownStats | null;
+}
+
+export interface RelayPath {
+  tag_hash: string;
+  merchant: string;
+  simulated: boolean;
+  amount_cents: number;
+  status: string;
+  hops: number;
+  path: { device: string; at: number; name: string; kind: string; simulated?: boolean }[];
+  uploaded_by: string | null;
+  latency_s: number;
+}
+
+export interface QuickResult {
+  share_refused_offline: number | null;
+  share_caught_at_settlement: number | null;
+  mean_loss_per_cheater_cents: number | null;
+  median_hours_to_settlement: number | null;
+  double_spend_attempts: number;
+  residents: number;
+}
+
+export interface Quick {
+  baseline: QuickResult;
+  current: QuickResult;
+  seconds: number;
+}

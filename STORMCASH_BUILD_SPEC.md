@@ -1017,7 +1017,8 @@ All JSON. Byte fields base64url. Prefix `/v1`. Auth for demo: none on reads; res
 | `POST /v1/flags/{id}/approve` / `reject` | `{note}` | executes actions (§14.6), returns approval | WS5 |
 | `POST /v1/stormdesk/run` | `{candidate_id}` or `{case_id}` | `{flag}` or `{case_file_md}` (sync; used by evals) | WS5 |
 | `GET /v1/town` | | regions, merchants (x, y, simulated), live dots, recent payments, uploads, alerts | WS4/WS2 |
-| `GET /v1/relay/paths` | `?limit=20` | recent payments with `path`, hops, latency | WS2 |
+| `GET /v1/relay/paths` | `?limit=20` | recent payments with `path`, hops, latency. **[v4.3]** Each hop names the device (resident or merchant, from `device_short_id`) | WS2 |
+| `GET /v1/town/quick` **[v4.3]** | `?adoption&p_link&p_uplink` | the §16.6 quick re-sim: `{baseline, current, seconds}` | WS4 |
 | `POST /v1/photon/inbound` | Photon webhook payload | 200 | WS7 |
 | `POST /v1/demo/reset` | | clears real-device demo data, reissues Maya's cert, keeps the simulated town | WS2 |
 | `POST /v1/demo/seed-town` | `{seed}` | runs the simulator into the DB (§16) | WS4 |
@@ -1406,6 +1407,8 @@ One simulator feeds four things: the Town tab backdrop, StormDesk's data, the Ch
 
 Adoption, foot traffic (`p_link`), relay density (`p_uplink`). Moving a slider runs a quick re-sim (seeded, ≤ 3 s, in-memory, not written to DB) and replots: share refused offline, caught at settlement, loss per cheater, median hours to settlement.
 
+**[v4.3] As built.** `sim/stormcash_sim/quick.py` uses the same town, trips, gossip and relay rules as the full simulator, but payments are plain ids (no signatures, no DB). It pools 5 seeded runs with 8% of adopters double spending, so each answer covers about 160 attempts. A shop's stored tags (for C6) are kept apart from what it carries to relay, which is dropped an hour after the server has it. `GET /v1/town/quick?adoption&p_link&p_uplink` returns `{baseline, current}` (answers are cached). The Town tab shows each metric as default town vs your settings, labelled simulated. Measured end to end: a slider move replots in about 2 s.
+
 **Done when:** `seed-town 42` produces the planted cases plus candidates for all three soft kinds, and stats.json has all metrics.
 
 ---
@@ -1477,6 +1480,7 @@ Title, "Demo mode", connection dot, **Reset demo** button (calls `/v1/demo/reset
 - SVG grid map: regions (shaded), merchants (dots; real ones larger and labeled; simulated ones labeled "simulated" in a legend), live payment pulses, relay uploads, region alert badges (labeled live/replayed), dark regions hatched.
 - Relay path panel: recent payments with hop paths.
 - Sliders (§16.6) + charts: share refused offline, caught at settlement, loss per cheater, time to settlement.
+- **[v4.3]** `GET /v1/town` also returns `dark_regions` (a `region_dark` candidate in the last 6 h), active alerts with their source, and the latest simulator `stats.json` for a one-line summary. Payment pulses come from `payment` SSE events; merchants without pool eligibility are drawn amber.
 
 ### 18.5 Evals tab (Chalk add-on)
 
