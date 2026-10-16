@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from psycopg_pool import ConnectionPool
 
 from .config import Settings
+from .detectors import DetectorState
 from .nessie import MoneyMover, NessieClient
 from .sse import Broker
 
@@ -18,6 +19,7 @@ class Deps:
     events: Broker
     nessie: NessieClient | None  # None when Nessie is switched off (ledger-only)
     mover: MoneyMover
+    detector_state: DetectorState = field(default_factory=DetectorState)
 
     @property
     def server_key(self):

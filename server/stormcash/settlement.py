@@ -9,6 +9,7 @@ events run after the transactions commit.
 
 from __future__ import annotations
 
+import logging
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -16,13 +17,15 @@ from dataclasses import dataclass, field
 import psycopg
 from psycopg.types.json import Jsonb
 
-from . import cases, ledger, registry
+from . import cases, detectors, ledger, registry
 from .db import all_rows, one, scalar
 from .deps import Deps
 from .nessie import MoneyMover, is_whole_dollars
 from .protocol import rules
 from .protocol.encoding import EncodingError
 from .protocol.objects import Cert, Dlog, Item, Pay, Policy, Proof, Rcpt, Renew, Tag, b64u_encode
+
+log = logging.getLogger(__name__)
 
 # Priority order (§10.2); within priority 3, DLOG before PAY so a merchant's
 # REFUSE entry is known before its PAY, then RENEW.
@@ -220,10 +223,12 @@ def handle_pay(ctx: _Ctx, conn: psycopg.Connection, item: Item) -> None:
     hops = max(0, len(item.path) - 1)
     inserted = scalar(
         conn,
-        """INSERT INTO payments (tag_hash, cert_id, merchant_id, nonce, device_ts, relay_device, hops, path, status)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'pending') ON CONFLICT (tag_hash) DO NOTHING RETURNING tag_hash""",
+        """INSERT INTO payments (tag_hash, cert_id, merchant_id, nonce, device_ts, relay_device, hops, path, status,
+                                 received_at)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'pending', to_timestamp(%s))
+           ON CONFLICT (tag_hash) DO NOTHING RETURNING tag_hash""",
         (tag.tag_hash, cert.cert_id, merchant["merchant_id"], det.nonce, det.ts, ctx.device_pub, hops,
-         Jsonb([list(p) for p in item.path])),
+         Jsonb([list(p) for p in item.path]), ctx.now),
     )
     if inserted is None:
         return  # already ingested
@@ -382,11 +387,12 @@ def ingest_items(
         policy = current_policy(conn, deps.server_key, now)
         upload = one(
             conn,
-            """INSERT INTO uploads (device_pub, region_id, item_count, simulated)
+            """INSERT INTO uploads (device_pub, region_id, item_count, simulated, received_at)
                VALUES (%s, (SELECT region_id FROM residents WHERE holder_pub = %s
-                            UNION ALL SELECT region_id FROM merchants WHERE merchant_pub = %s LIMIT 1), %s, %s)
+                            UNION ALL SELECT region_id FROM merchants WHERE merchant_pub = %s LIMIT 1), %s, %s,
+                       to_timestamp(%s))
                RETURNING *""",
-            (device_pub, device_pub, device_pub, len(items), simulated),
+            (device_pub, device_pub, device_pub, len(items), simulated, now),
         )
     # Receipt ids are unique and sorted by the canonical encoding anyway.
     rcpt = Rcpt(now, tuple(dict.fromkeys(accepted))).signed(deps.server_key)
@@ -397,4 +403,8 @@ def ingest_items(
         deps.events.publish(event, data)
     hops = max((len(it.path) - 1 for it in items if it.kind == "PAY"), default=0)
     deps.events.publish("upload", {**upload, "accepted": len(accepted), "dropped": dropped, "hops": max(0, hops)})
+    try:
+        detectors.run_incremental(deps, now)  # §11.2: may create candidates for StormDesk
+    except Exception:  # a detector bug must never fail a phone's sync
+        log.exception("detectors failed after ingest")
     return SyncResult(rcpt, policy, ctx.certs, accepted, dropped, unreceipted)

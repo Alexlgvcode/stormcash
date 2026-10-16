@@ -1097,6 +1097,13 @@ Features: `active_certs`, `expiring_12h_share`, `hours_since_last_upload`, `acti
 
 Default action: `dispatch_relay`.
 
+### 13.3a As built [v4.3]
+
+- `detectors.run_incremental(deps, now)` runs after every ingest, in protocol time (`payments.received_at` and `uploads.received_at` are the ingest's `now`, so the simulator's virtual clock works). `cap_drain` looks at the 15 minutes ending at each newly received payment; `merchant_silence` (6 h window) and `region_dark` run once per hour boundary passed, catching up on missed hours. A detector error never fails a sync.
+- One candidate per stretch: a new candidate is skipped if one for the same kind and subject overlaps its window. `region_dark`'s window is the dark stretch itself (from the last upload, or the region's first cert if there was none). A candidate with no flag is a queued StormDesk job.
+- `contacts_per_hour` counts distinct `contact_id`s the merchant is in, from either side's log. Neighbors are merchants within 3 grid cells (Euclidean). `pool_funded_share` = pool-funded payments ÷ accepted payments. `near_cap_share` compares `cum` with the cert's highest cap. `owner_freeze_request` is `false` until Photon FREEZE (WS7) exists.
+- Accepted payments are those `settled`, `held` or `denied_knowing`.
+
 ### 13.4 Why the agent adds value over the detectors
 
 The detectors are designed to fire on **traps** too (§16.4). A rules-only system flags all of them. The agent's job is to keep recall on real fraud while dismissing traps using the full context (pool share, repeat patterns, regions, alerts). The Evals tab compares the two.
