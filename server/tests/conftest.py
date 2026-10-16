@@ -99,7 +99,7 @@ class FakeNessie:
             assert method == "POST" and m.group(1) in self.customers
             assert isinstance(body["balance"], int)
             aid = next(self.ids)
-            self.accounts[aid] = {"_id": aid, **body}
+            self.accounts[aid] = {"_id": aid, "customer_id": m.group(1), **body}
             self.records[aid] = []
             return self._created(aid)
         if m := re.fullmatch(r"/accounts/(\w+)", path):

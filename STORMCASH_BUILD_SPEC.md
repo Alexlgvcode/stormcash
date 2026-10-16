@@ -1021,6 +1021,7 @@ All JSON. Byte fields base64url. Prefix `/v1`. Auth for demo: none on reads; res
 | `GET /v1/town/quick` **[v4.3]** | `?adoption&p_link&p_uplink` | the §16.6 quick re-sim: `{baseline, current, seconds}` | WS4 |
 | `POST /v1/photon/inbound` | Photon webhook payload | 200 | WS7 |
 | `POST /v1/demo/reset` | | clears real-device demo data, reissues Maya's cert, keeps the simulated town | WS2 |
+|  |  | **[v4.3]** Operator header. Deletes what touches a real resident or shop (payments, tags, cases, candidates, logs, contacts, uploads, payouts, whole ledger transactions, queued moves), opens fresh Nessie accounts under the same customers (checking $500, escrow $0, shops $0; Nessie balances can't be edited), reissues each real resident a new cert (new `cert_id`, $20 locked), restores the shops' pool eligibility and publishes a POLICY without the old certs. The phone gets its new cert by registering again. Optional `{storm_cap_cents: 5000}` pre-stages Storm Mode. Measured live: under 1 s. |  |
 | `POST /v1/demo/seed-town` | `{seed}` | runs the simulator into the DB (§16) | WS4 |
 | `GET /v1/stream` | | SSE | WS2 |
 
