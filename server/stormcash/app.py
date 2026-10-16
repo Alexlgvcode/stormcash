@@ -22,7 +22,7 @@ from .db import make_pool
 from .deps import Deps
 from .nessie import MoneyMover, NessieClient
 from .regions import ensure_regions
-from .routes import nessie_log, registration, sync
+from .routes import cases, nessie_log, registration, sync
 
 log = logging.getLogger(__name__)
 
@@ -87,6 +87,7 @@ def create_app(settings: Settings | None = None, nessie_transport: httpx.BaseTra
 
     app.include_router(registration.router)
     app.include_router(sync.router)
+    app.include_router(cases.router)
     app.include_router(nessie_log.router)
     app.include_router(sse.router)
     return app

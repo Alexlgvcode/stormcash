@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 import psycopg
 from psycopg.types.json import Jsonb
 
-from . import ledger, registry
+from . import cases, ledger, registry
 from .db import one, scalar
 from .deps import Deps
 from .nessie import MoneyMover, is_whole_dollars
@@ -131,7 +131,8 @@ def _server_signed(ctx: _Ctx, conn, obj) -> None:
 
 def handle_tag(ctx: _Ctx, conn: psycopg.Connection, item: Item) -> None:
     _verify_tag(conn, item.body)
-    store_tag(conn, item.body)
+    if store_tag(conn, item.body):
+        cases.check_new_tag(ctx, conn, item.body)
 
 
 def handle_proof(ctx: _Ctx, conn: psycopg.Connection, item: Item) -> None:
@@ -139,8 +140,11 @@ def handle_proof(ctx: _Ctx, conn: psycopg.Connection, item: Item) -> None:
     pub = holder_pub(conn, proof.a.cert_id)
     if pub is None or not rules.verify_proof(proof, pub):
         raise InvalidItem("invalid PROOF")
-    store_tag(conn, proof.a)
-    store_tag(conn, proof.b)
+    # A phone found it first: the case is `offline` unless the server already had it.
+    cases.open_equivocation_case(ctx, conn, proof.a, proof.b, offline=True)
+    for tag in (proof.a, proof.b):
+        if store_tag(conn, tag):
+            cases.check_new_tag(ctx, conn, tag)
 
 
 def handle_dlog(ctx: _Ctx, conn: psycopg.Connection, item: Item) -> None:
@@ -154,12 +158,21 @@ def handle_dlog(ctx: _Ctx, conn: psycopg.Connection, item: Item) -> None:
         (entry.device_pub, entry.seq, entry.entry_hash, entry.prev_hash, entry.ts, entry.kind,
          Jsonb(entry.to_json()), entry.sig),
     )
-    if new is not None and entry.kind == "CONTACT":
+    if new is None:
+        return
+    if entry.kind == "CONTACT":
         conn.execute(
             """INSERT INTO contacts (contact_id, device_pub, peer_pub, ts, sent_ids, recv_ids)
                VALUES (%s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING""",
             (entry.contact_id, entry.device_pub, entry.peer_pub, entry.ts, list(entry.sent_ids), list(entry.recv_ids)),
         )
+        cases.pair_contact(conn, entry)
+    cases.check_log(ctx, conn, entry.device_pub)
+    # New log evidence may show a merchant knew (§11.2 step 5): the device itself,
+    # or the merchant a peer's CONTACT entry names.
+    cases.recheck_merchant_payments(ctx, conn, entry.device_pub)
+    if entry.kind == "CONTACT":
+        cases.recheck_merchant_payments(ctx, conn, entry.peer_pub)
 
 
 def handle_renew(ctx: _Ctx, conn: psycopg.Connection, item: Item) -> None:
@@ -197,7 +210,8 @@ def handle_pay(ctx: _Ctx, conn: psycopg.Connection, item: Item) -> None:
     merchant = one(conn, "SELECT * FROM merchants WHERE merchant_pub = %s", (det.merchant_pub,))
     if merchant is None:
         raise InvalidItem("PAY names an unknown merchant")
-    store_tag(conn, tag)
+    if store_tag(conn, tag):
+        cases.check_new_tag(ctx, conn, tag)
 
     status_row = one(conn, "SELECT * FROM cert_status WHERE cert_id = %s FOR UPDATE", (cert.cert_id,))
     if status_row is None:
@@ -213,27 +227,32 @@ def handle_pay(ctx: _Ctx, conn: psycopg.Connection, item: Item) -> None:
     if inserted is None:
         return  # already ingested
 
-    status = decide_payment(conn, pay, merchant)
+    status = decide_payment(ctx, conn, pay, merchant)
     funded_escrow = funded_pool = 0
     if status == "settled":
-        funded_escrow, funded_pool = fund_payment(ctx, conn, pay, merchant)
+        funded_escrow, funded_pool, held = fund_payment(ctx, conn, pay, merchant, allow_pool=merchant["pool_eligible"])
+        status = "held" if held else status
+    elif status == "denied_knowing" and _first_on_honest_chain(conn, tag):
+        funded_escrow, _, _ = fund_payment(ctx, conn, pay, merchant, allow_pool=False)
     row = one(
         conn,
         """UPDATE payments SET status = %s, funded_escrow_cents = %s, funded_pool_cents = %s
            WHERE tag_hash = %s RETURNING *""",
         (status, funded_escrow, funded_pool, tag.tag_hash),
     )
+    if status in ("settled", "held"):
+        cases.check_over_cap(ctx, conn, cert.cert_id)  # R4, after payment (§11.2 step 3)
     ctx.events.append(
         ("payment", {**row, "merchant_name": merchant["display_name"], "amount_cents": tag.amount_cents,
                      "cum_cents": tag.cum_cents})
     )
 
 
-def decide_payment(conn: psycopg.Connection, pay: Pay, merchant: dict) -> str:
+def decide_payment(ctx: _Ctx, conn: psycopg.Connection, pay: Pay, merchant: dict) -> str:
     """Status for a newly ingested, verified PAY (§11.2 step 3)."""
     tag = pay.tag
-    if not rules.tag_valid(tag) or tag.cum_cents > pay.cert.cap_cents:
-        return "invalid"  # a check a merchant must have skipped (C5/C6)
+    if not rules.tag_valid(tag):
+        return "invalid"  # fails single-tag validity: a merchant skipped C5/C6
     refused = scalar(
         conn,
         """SELECT 1 FROM device_log WHERE device_pub = %s AND kind = 'REFUSE'
@@ -242,11 +261,23 @@ def decide_payment(conn: psycopg.Connection, pay: Pay, merchant: dict) -> str:
     )
     if refused:
         return "refused_evidence"  # the merchant refused it offline and kept it as evidence
+    if cases.check_merchant_knew(ctx, conn, tag, merchant, pay.det.ts):
+        return "denied_knowing"
     return "settled"
 
 
-def fund_payment(ctx: _Ctx, conn: psycopg.Connection, pay: Pay, merchant: dict) -> tuple[int, int]:
+def _first_on_honest_chain(conn: psycopg.Connection, z: Tag) -> bool:
+    """z comes before every tag it conflicts with, so escrow still pays it (§9.4)."""
+    conflicts = [x for x in cases.cert_tags(conn, z.cert_id) if x.tag_hash != z.tag_hash and rules.equivocation(x, z)]
+    return all(z.counter < x.counter for x in conflicts)
+
+
+def fund_payment(
+    ctx: _Ctx, conn: psycopg.Connection, pay: Pay, merchant: dict, *, allow_pool: bool = True
+) -> tuple[int, int, bool]:
     """Pay from escrow first, the rest from the guarantee pool (§11.2, §11.3).
+    Returns (from_escrow, from_pool, held): held when a pool share was owed but
+    the merchant has lost pool eligibility (R5, R6).
 
     escrow_avail is the escrow's ledger balance, which equals max_cap − already
     paid from escrow until a refund on close lowers it.
@@ -256,6 +287,9 @@ def fund_payment(ctx: _Ctx, conn: psycopg.Connection, pay: Pay, merchant: dict) 
     escrow_avail = max(0, ledger.balance(conn, ledger.escrow(cert_id)))
     from_escrow = min(amount, escrow_avail)
     from_pool = amount - from_escrow
+    held = from_pool > 0 and not allow_pool
+    if held:
+        from_pool = 0
     resident = resident_for_cert(conn, cert_id)
     settings = ctx.deps.settings
     merchant_real = ctx.deps.nessie is not None and not merchant["simulated"] and merchant["nessie_account_id"]
@@ -287,7 +321,7 @@ def fund_payment(ctx: _Ctx, conn: psycopg.Connection, pay: Pay, merchant: dict) 
                 payout_id=payout_id,
             )
             ctx.moves.append(txn_id)
-    return from_escrow, from_pool
+    return from_escrow, from_pool, held
 
 
 def handle_server_object(ctx: _Ctx, conn: psycopg.Connection, item: Item) -> None:
