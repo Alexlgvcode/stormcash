@@ -1,0 +1,41 @@
+{
+  "expo": {
+    "name": "StormCash",
+    "slug": "stormcash",
+    "scheme": "stormcash",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "edu.bu.stormcash.bm",
+      "infoPlist": {
+        "NSLocalNetworkUsageDescription": "StormCash talks to nearby phones to share payment records when there is no internet.",
+        "NSBonjourServices": ["_stormcash._tcp", "_stormcash._udp"],
+        "NSBluetoothAlwaysUsageDescription": "StormCash uses Bluetooth to reach nearby phones when there is no internet.",
+        "NSCameraUsageDescription": "Scan payment QR codes.",
+        "NSFaceIDUsageDescription": "Confirm payments with Face ID."
+      }
+    },
+    "plugins": [
+      "expo-dev-client",
+      "expo-sqlite",
+      "expo-secure-store",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Scan payment QR codes.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Confirm payments with Face ID."
+        }
+      ]
+    ]
+  }
+}
