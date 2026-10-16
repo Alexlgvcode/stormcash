@@ -1,0 +1,1687 @@
+# StormCash — Build Spec v4 (HackHarvard 2026)
+
+> **Audience:** the two humans on the team and every Claude session working on this repo.
+> **Status:** source of truth. If code and this doc disagree, the doc wins until the doc is changed. Change the doc in the same commit as the code, and say so in the commit message.
+> **v4.1 (Oct 16):** work split rebalanced: Person A also reviews the TypeScript half of WS0, owns WS7 Photon, and records the backup video (§4, §22). Marked **[v4.1]**.
+> **Builds on:** "StormCash: The 10/10 Build" v3 (Oct 16, Alexandre Lugovoi, on Brian Maina's Oct 11 draft). Everything new since v3 is marked **[v4]**.
+
+---
+
+## Table of contents
+
+0. How to use this doc (read first, Claude)
+1. Product in one page
+2. Prize map and what each judge must see
+3. Event facts and hard constraints
+4. Team, machines, ownership
+5. Repo layout
+6. Tech stack, versions, environment setup
+7. Protocol: crypto, encoding, objects
+8. Offline checks and fraud rules
+9. Device logs, contacts and the "merchant knew" rule **[v4]**
+10. Gossip and store-and-forward relay over Multipeer **[v4]**
+11. Server: schema, settlement, ledger, Nessie
+12. Server API
+13. Soft signals (deterministic detectors) **[v4]**
+14. StormDesk agent (Factory Droid SDK) **[v4]**
+15. Chalk: features, query tool, evaluations **[v4]**
+16. Town simulator (40 shops) **[v4]**
+17. Photon messaging agent **[v4]**
+18. Dashboard
+19. Mobile app
+20. Test vectors
+21. Demo: table, scripts, sponsor add-ons
+22. Build plan, cut order, checklists
+23. Pitfalls
+24. Judge Q&A
+25. Glossary
+
+---
+
+## 0. How to use this doc (read first, Claude)
+
+**You are one of several parallel workers.** Each Claude session owns exactly one workstream (§4.3) and one folder. Do not edit files outside your folder except `spec/` (shared protocol) when the task says so, and never without updating this doc.
+
+**Rules of engagement**
+
+1. **The protocol (§7–§10) is frozen once test vectors exist (§20).** Any change to field order, encoding, or rules requires: updating §7–§10, regenerating `spec/vectors.json`, and passing both the Python and TypeScript vector tests. Tell the humans in your final message.
+2. **Never put AI in the money path.** The agent (StormDesk) reads data and returns a structured proposal. Only deterministic code freezes certificates, and only a human click moves money on a soft flag.
+3. **Be honest in UI copy.** Simulated shops say "simulated". Replayed weather says "replayed". Numbers on the Evals tab come only from an actual run. No invented statistics anywhere (README, Devpost, slides, dashboard).
+4. **Prefer boring code.** Plain SQL with psycopg, plain FastAPI, plain React. No ORMs, no Redis, no Kubernetes, no microservices.
+5. **Everything has a fallback** (§22.4). If you build a risky thing, build its fallback switch at the same time.
+6. **Done means demoable.** A workstream is done when the "Done when" line in its section is true on the real demo hardware, not when unit tests pass.
+7. **Money is integer cents everywhere** (`*_cents`), except at the Nessie boundary, which takes dollars as a float with 2 decimals. Convert in exactly one helper (`server/nessie.py: cents_to_dollars`).
+8. **Time is integer Unix seconds (UTC)** everywhere in the protocol. Display local time only in UIs.
+9. When something in this doc is marked **VERIFY**, check it against the real docs or API in the first hour and fix the doc if it is wrong.
+
+---
+
+## 1. Product in one page
+
+**One line:** When a disaster takes out towers and card readers, StormCash keeps phones paying local shops, and stops cheaters with no internet.
+
+**The problem.** After Hurricane Helene (2024), card readers in western North Carolina couldn't connect, most ATMs were down or empty, and some shops stayed cash-only for a month. After Hurricane Maria (2017), it was almost impossible to find a place in San Juan that took cards. People had money in the bank and phones with battery, and still couldn't pay, because every payment app needs a server to approve each payment.
+
+**What StormCash does.**
+
+- Before or without a storm warning, a resident's bank (Capital One, via Nessie) locks a small amount in an escrow account and the StormCash server signs a **certificate** saying "this phone may spend up to $X". Always-on cap $20; Storm Mode raises it to $50.
+- Offline, the resident pays a shop by QR. The shop's phone checks the bank-backed certificate and the resident's signature with no network, and shows "Backed by Capital One, $12 of $50 used".
+- Every payment produces a signed **spend tag**. Phones gossip tags over Bluetooth/peer Wi-Fi (Apple Multipeer). Customers carry tags from shop to shop. A rolled-back wallet trying to spend the same money is **refused offline** by the next shop that has seen the tag, and the two conflicting signatures are **self-proving evidence**.
+- Payments, tags and logs travel **phone to phone** (store-and-forward) until any phone gets a signal and uploads them. The server pays merchants in Nessie, freezes cheaters, and sends signed receipts, freeze lists and renewed certificates back the same way.
+- **[v4]** Every phone keeps a signed, hash-chained **device log** of payments and contacts. A shop that accepted a payment while holding the conflicting tag is caught by its own signature ("merchant knew"). A shop that goes quiet while taking guarantee-pool money is flagged.
+- **[v4]** **StormDesk**, a back-office agent built on the Factory Droid SDK with data and evals on Chalk, investigates fraud cases and triages suspicious patterns. It proposes; a human approves. Merchants get notices and can appeal by text through a **Photon** agent.
+
+**The line judges should repeat:** "I tried to cheat it with no internet, and it refused me."
+
+**The closing line:** "Math flags. The agent investigates. A person decides."
+
+**Honest limits (say them before judges do):**
+- Offline double spending is bounded, not impossible. A shop no tag has reached can be fooled once, up to the cap; settlement proves it and the guarantee pool pays the shop.
+- The wallet counter lives in app storage, not a secure chip.
+- iPhones only exchange data while the app is open.
+- Phones share pseudonymous certificate ids, amounts and running totals, never names or which shop was paid.
+
+---
+
+## 2. Prize map and what each judge must see
+
+Confirmed by organizers: a team may enter **one track plus any number of sponsor challenges**; sponsor judges (incl. Chalk and Factory) judge **at our table**. No new challenges announced as of Friday.
+
+| Prize | Award | What wins it for us | Must exist in the build |
+|---|---|---|---|
+| **Digital Trust** track (Fintech & Cybersecurity) | Brick per member | Judge personally fails to cheat with no internet; signed proof; "merchant knew" rule | Judge mode, refusal screen, Verify-it-yourself page, device logs |
+| **Best Use of Nessie** (Capital One) | $300 gift card per member | Nessie moves the money live: escrow, settlement, guarantee pool, refund | Accounts tab with live balances + Nessie call log |
+| **Factory Droid SDK** | $2,000 team + $200 credits each | Droid does real work in the running product: investigates cases and triages flags | StormDesk worker, live tool-call stream, README section "Where Droid runs" |
+| **Chalk** data-driven agent | $1,500+ Apple credits, interviews | Agent runs on real-world data (Nessie, NWS alerts, logs) and is evaluated rigorously | Chalk features used by the agent at runtime + Evals tab from a real Chalk Evaluation run |
+| **Photon** messaging agent | $400 + $300 credits + interview fast-track (runner-up $200) | An agent on a real number that argues with evidence | Merchant hold notice + appeal conversation on Telegram/iMessage |
+
+Not targeting: Regeneron, ASUS, Hardware for Good, Daytona, SpaceXAI. Use Claude as the model where we choose a model, in case an Anthropic prize appears.
+
+---
+
+## 3. Event facts and hard constraints
+
+- HackHarvard 2026, Oct 16–18, Harvard. Hacking starts after the 3–4 PM Friday opening ceremony.
+- **Devpost submission due Sunday 8:00 AM.** Judging in person, Canopy Hall, 9:00–10:30 and 10:30–12:00. Closing ceremony 3 PM.
+- **Venue closes overnight.** Late blocks happen wherever we sleep. Confirm Saturday opening time.
+- Sponsor fair Saturday 10 AM–12 PM, 3rd Floor Atrium: show Capital One, Factory, Chalk, Photon our flow and ask what they reward.
+- Photon workshop Friday 4–5 PM. Go if possible.
+- **Hardware: 3 iPhones, 2 Macs. No Android, no 4th phone.**
+- **No paid Apple Developer account.** Free Personal Team signing via Xcode, local builds only, 7-day expiry. No EAS device builds, no TestFlight.
+- Team: 2 humans + Claude (Max). Claude writes code; humans install on phones, test in the hall, integrate, demo.
+
+---
+
+## 4. Team, machines, ownership
+
+### 4.1 People
+
+- **Person A — Mobile.** Owns `mobile/`. Only person who installs on iPhones. Mac 1. **[v4.1]** Also reviews the TypeScript half of WS0 (`mobile/src/protocol/`), owns WS7 Photon (the demo Telegram already runs on Mac 1), and records the backup video.
+- **Person B — Server, dashboard, integration.** Owns `server/`, `dashboard/`, merges Claude workstreams except WS7 and the TypeScript half of WS0. Mac 2.
+
+(Brian and Alexandre: write your names next to A and B in the repo README.)
+
+### 4.2 Machines
+
+| Machine | Runs |
+|---|---|
+| **Mac 1** | Xcode, Expo dev builds to all 3 iPhones, Claude session for mobile help |
+| **Mac 2** | Postgres client, FastAPI server, dashboard dev server, `droid` CLI, cloudflared tunnel, Claude sessions for server-side workstreams; during demo: dashboard on screen |
+| **Laptop for Photon** | During demo, Mac 1 (or whichever is free) shows the Corner Store owner's Telegram/Messages. |
+
+### 4.3 Workstreams (one Claude session each, one folder each)
+
+| ID | Workstream | Folder | Owner reviewing | Depends on |
+|---|---|---|---|---|
+| WS0 | Protocol spec + test vectors + shared libs | `spec/`, `server/stormcash/protocol/`, `mobile/src/protocol/` | B (Python), A (TypeScript) **[v4.1]** | — |
+| WS1 | Mobile app | `mobile/` | A | WS0 |
+| WS2 | Server core: settlement, ledger, Nessie, API, SSE | `server/` | B | WS0 |
+| WS3 | Dashboard | `dashboard/` | B | WS2 API |
+| WS4 | Town simulator | `sim/` | B | WS0, WS2 ingest function |
+| WS5 | StormDesk agent | `server/stormcash/stormdesk/` | B | WS2, WS6 |
+| WS6 | Chalk features + evals | `chalk/` | B | WS2 DB, WS4 |
+| WS7 | Photon agent | `server/stormcash/photon/` | A **[v4.1]** | WS2, WS5 |
+
+**Integration rule:** WS2 owns `server/stormcash/db.py`, `schema.sql`, and `app.py`. Other server workstreams add routers in their own module and B wires them in.
+
+---
+
+## 5. Repo layout
+
+```
+stormcash/
+  README.md                  # pitch, setup, "Where Droid runs", "How we use Chalk", honest limits
+  CLAUDE.md                  # points every session at this spec
+  STORMCASH_BUILD_SPEC.md    # this file
+  spec/
+    vectors.json             # generated test vectors (§20)
+    gen_vectors.py           # generates vectors.json from fixed keys
+    README.md
+  server/
+    pyproject.toml
+    schema.sql
+    stormcash/
+      app.py                 # FastAPI app, router wiring
+      config.py              # env vars
+      db.py                  # psycopg pool, helpers
+      protocol/              # canonical encoding, hashing, signing, verify, rules (Python twin of mobile/src/protocol)
+        encoding.py
+        crypto.py
+        objects.py
+        rules.py             # offline checks + equivocation + merchant-knew
+      settlement.py          # ingest items, cases, payouts
+      ledger.py
+      nessie.py
+      policy.py              # signed policy list (frozen certs + merchant limits)
+      detectors.py           # soft-signal candidate detectors (§13)
+      sse.py
+      routes/                # one module per API area
+      stormdesk/             # WS5
+      photon/                # WS7
+    tests/
+  mobile/
+    app.json
+    src/
+      protocol/              # TS twin: encoding.ts, crypto.ts, objects.ts, rules.ts
+      store/                 # SQLite: wallet, items, devicelog, peers
+      transport/             # Multipeer wrapper + QR sync fallback
+      screens/
+      demo/                  # judge mode, demo topology, reset
+    modules/sc-multipeer/    # fallback native Expo module (Swift) if the community lib fails
+  dashboard/
+    src/tabs/{Accounts,Cases,Town,Evals}.tsx
+    src/proof/               # public "Verify it yourself" page
+  sim/
+    stormcash_sim/
+    scenarios/
+  chalk/
+    features.py
+    resolvers/
+    evals/
+  fixtures/
+    nws_helene_buncombe.json # replayed alerts, labeled
+```
+
+---
+
+## 6. Tech stack, versions, environment setup
+
+### 6.1 Stack
+
+| Layer | Choice | Notes |
+|---|---|---|
+| Mobile | React Native + Expo SDK (latest stable), **development build** (`expo-dev-client`), New Architecture on | Expo Go cannot load native modules |
+| Mobile crypto | `@noble/curves` (p256), `@noble/hashes` (sha256), `react-native-get-random-values` | Pin exact versions in `package.json` |
+| Mobile storage | `expo-sqlite`, `expo-secure-store` (private key) | |
+| Mobile biometrics | `expo-local-authentication` | Face ID usage string in app.json |
+| Mobile QR | `react-native-qrcode-svg` (show), `expo-camera` (scan) | |
+| Mobile peer link | `expo-nearby-connections` (Multipeer on iOS) **VERIFY iOS support in hour 1**; fallback: our own Expo module `modules/sc-multipeer` wrapping `MCSession`/`MCNearbyServiceAdvertiser`/`MCNearbyServiceBrowser` | |
+| Mobile network detect | `expo-network` | uplink = internet reachable |
+| Server | Python 3.11, FastAPI, uvicorn, psycopg 3 (pool), `cryptography`, `httpx`, `sse-starlette`, `pydantic` v2 | |
+| Database | **Hosted Postgres (Neon or Supabase free tier)** | Chalk resolvers run in Chalk's cloud and must reach the DB. Local Postgres only as fallback (§22.4) |
+| Public URL | `cloudflared tunnel --url http://localhost:8000` (quick tunnel, no account) | Needed for Photon webhooks and Chalk eval tasks |
+| Dashboard | React + Vite + TypeScript, Tailwind, Recharts, SSE (`EventSource`) | |
+| Agent | Factory Droid SDK for Python (`pip install "droid-sdk[mcp]"`), `droid` CLI on PATH, `FACTORY_API_KEY` | |
+| Data/evals | Chalk (`chalk` client, `chalkcompute` for evaluations) | Sign up at chalk.ai/hackharvard |
+| Messaging | Photon 2.0 (Telegram channel primary; iMessage optional) | Follow Photon docs linked from hhuh.io |
+| Bank | Capital One Nessie REST API | |
+| Weather | NWS API `https://api.weather.gov/alerts/active?area=NC` (needs `User-Agent` header) + replayed fixture | |
+
+### 6.2 iPhone setup (free signing) — do Friday
+
+1. On each iPhone: **Settings → Privacy & Security → Developer Mode → On**, restart, enter passcode.
+2. Mac 1: Xcode → Settings → Accounts → add an Apple ID → a "Personal Team" appears.
+3. `cd mobile && npx expo prebuild` then `npx expo run:ios --device --configuration Release`. In Xcode → target → Signing & Capabilities → Team = Personal Team, unique bundle id (e.g. `edu.bu.stormcash.<initials>`).
+4. On the phone after first install: **Settings → General → VPN & Device Management → trust** the developer certificate.
+5. Repeat for each phone. If Xcode refuses a device (free-team limits), sign that phone with its owner's Apple ID (different bundle id is fine; Multipeer matches by service type, not bundle id).
+6. After first USB install, enable **Connect via network** in Xcode → Devices so rebuilds go over Wi-Fi.
+7. Builds expire after 7 days. Irrelevant for this weekend.
+
+**Info.plist (via app.json `ios.infoPlist`):**
+
+```json
+{
+  "NSLocalNetworkUsageDescription": "StormCash talks to nearby phones to share payment records when there is no internet.",
+  "NSBonjourServices": ["_stormcash._tcp", "_stormcash._udp"],
+  "NSBluetoothAlwaysUsageDescription": "StormCash uses Bluetooth to reach nearby phones when there is no internet.",
+  "NSCameraUsageDescription": "Scan payment QR codes.",
+  "NSFaceIDUsageDescription": "Confirm payments with Face ID."
+}
+```
+
+Multipeer service type: **`stormcash`** (1–15 chars, lowercase letters, digits, hyphen).
+
+### 6.3 Environment variables (server, `.env`, never committed)
+
+```
+DATABASE_URL=postgresql://...
+NESSIE_API_KEY=...
+NESSIE_BASE_URL=http://api.nessieisreal.com      # VERIFY
+SERVER_SIGNING_KEY_PEM=...                        # P-256 private key, generated once
+FACTORY_API_KEY=...
+CHALK_CLIENT_ID=... / CHALK_CLIENT_SECRET=... / CHALK_ENVIRONMENT=...
+PHOTON_API_KEY=... (names per Photon docs)
+PUBLIC_BASE_URL=https://<cloudflared>.trycloudflare.com
+NWS_USER_AGENT=StormCash HackHarvard demo (team email)
+DEMO_MODE=1
+```
+
+The server's public key is compiled into the mobile app (`mobile/src/config.ts: SERVER_PUB`). Generate the server key once on Friday and do not rotate it.
+
+---
+
+## 7. Protocol: crypto, encoding, objects
+
+### 7.1 Primitives
+
+- **Curve:** ECDSA P-256 (secp256r1). The only curve the iPhone Secure Enclave supports.
+- **Hash:** SHA-256.
+- **Signature input:** sign the 32-byte SHA-256 digest of the canonical string (prehashed). Python: `ec.ECDSA(utils.Prehashed(hashes.SHA256()))`. noble: `p256.sign(digest, priv)` with the digest as the message hash (no extra hashing). **VERIFY** the noble version's API for prehash vs. message.
+- **Signature format:** raw 64 bytes `r || s`, big-endian, each 32 bytes. **Signers must normalize to low-S.** Verifiers must accept both low-S and high-S (noble: `{ lowS: false }` on verify). Python `cryptography` emits DER; convert with `decode_dss_signature` and normalize S in `crypto.py`. Secure Enclave also returns DER; same helper on mobile.
+- **Public keys:** SEC1 compressed, 33 bytes.
+- **Random:** 16-byte nonces and ids from a CSPRNG.
+
+### 7.2 Canonical encoding (what gets hashed and signed)
+
+```
+canonical(TYPE, f1, f2, ..., fn) = "SC1|" + TYPE + "|" + f1 + "|" + f2 + ... + "|" + fn
+digest = SHA-256(UTF-8(canonical))
+```
+
+Field rendering rules (no exceptions):
+
+| Kind | Rendering |
+|---|---|
+| integer | base-10 ASCII, no sign, no leading zeros, `0` for zero. Negative values are invalid. |
+| bytes (keys, hashes, ids, nonces, sigs) | **lowercase hex** |
+| string | UTF-8, must not contain `\|`, `,`, `\n`; max 48 chars; NFC-normalized |
+| list of bytes | sorted ascending by hex, joined with `,`; empty list = empty string |
+| enum | uppercase ASCII token, e.g. `ACCEPT` |
+
+`TYPE` is a domain-separation tag so no signature for one object type can be replayed as another.
+
+### 7.3 Transport encoding (JSON over QR, Multipeer and HTTP)
+
+- JSON objects with the short keys listed below.
+- **All byte fields are base64url without padding** in JSON. Converting base64url ↔ hex happens only in the codec (`objects.py` / `objects.ts`).
+- QR payload: the string `SC1:` + JSON. Error correction level L. If scanning is slow, see §23.
+
+### 7.4 Objects
+
+Field order below **is** the canonical order. JSON short key in brackets.
+
+#### CERT — resident certificate (signed by server)
+
+| # | Field | Type | Notes |
+|---|---|---|---|
+| 1 | cert_id [`ci`] | bytes16 | stable for the wallet's life |
+| 2 | cert_ver [`cv`] | int | starts 1; +1 on Storm Mode raise, renewal, close |
+| 3 | holder_pub [`hp`] | bytes33 | resident device key |
+| 4 | cap_cents [`cap`] | int | 2000 always-on, 5000 Storm Mode |
+| 5 | issued_at [`ia`] | int | |
+| 6 | expires_at [`ea`] | int | issued_at + 72 h |
+| 7 | escrow_ref [`er`] | string | Nessie escrow account id |
+
+`TYPE = CERT`. Server signature `[sig]`.
+
+**[v4] Versions share one chain.** Storm Mode, renewal and close all issue a new **version** of the same `cert_id`. The running total continues across versions, so a holder can never spend more than the highest cap ever issued, which the escrow covers. A merchant checks `cum ≤ cap` against whichever valid version is presented.
+
+**Escrow release on close:** the server keeps escrow = the highest cap ever issued until every version with that cap has expired, plus a 24 h grace window. Then it refunds `escrow − settled spend` to checking.
+
+#### MCERT — merchant certificate (signed by server)
+
+| # | Field | Type |
+|---|---|---|
+| 1 | merchant_id [`mi`] | bytes16 |
+| 2 | merchant_ver [`mv`] | int |
+| 3 | merchant_pub [`mp`] | bytes33 |
+| 4 | display_name [`dn`] | string |
+| 5 | region_id [`rg`] | string |
+| 6 | expires_at [`ea`] | int (issued + 30 days) |
+
+`TYPE = MCERT`. Server signature `[sig]`.
+
+#### REQ — payment request (signed by merchant, shown as QR)
+
+| # | Field | Type |
+|---|---|---|
+| 1 | merchant_id [`mi`] | bytes16 |
+| 2 | amount_cents [`amt`] | int |
+| 3 | nonce [`n`] | bytes16 |
+| 4 | req_expires_at [`rx`] | int (now + 120 s) |
+
+`TYPE = REQ`. Merchant signature `[sig]`. The QR carries `{mc: MCERT, rq: REQ}` so the payer can verify the merchant offline.
+
+#### DET — payment details (not gossiped; hashed into the tag)
+
+| # | Field | Type |
+|---|---|---|
+| 1 | merchant_pub [`mp`] | bytes33 |
+| 2 | nonce [`n`] | bytes16 |
+| 3 | ts [`ts`] | int (payer device time) |
+
+`details_hash = SHA-256(canonical(DET, ...))`.
+
+#### TAG — spend tag (the only resident signature)
+
+| # | Field | Type | Notes |
+|---|---|---|---|
+| 1 | cert_id [`ci`] | bytes16 | |
+| 2 | counter [`k`] | int | 1, 2, 3, … |
+| 3 | prev_hash [`ph`] | bytes32 | previous tag_hash; for counter 1: `GENESIS(cert_id)` |
+| 4 | amount_cents [`amt`] | int | > 0 |
+| 5 | cum_cents [`cum`] | int | running total including this payment |
+| 6 | details_hash [`dh`] | bytes32 | |
+
+`TYPE = TAG`. Holder signature `[sig]`. `tag_hash = SHA-256(canonical(TAG, ...))`. It is the payment id.
+
+**[v4] Genesis:** `GENESIS(cert_id) = SHA-256(canonical(GEN, cert_id))`. It replaces v3's "certificate hash for counter 1", because certificate versions change the cert hash, but the chain must not break.
+
+#### PAY — payment (QR from payer to merchant; relayed to server)
+
+`{c: CERT(with sig), t: TAG(with sig), d: DET}`. A merchant stores the full PAY. Gossip carries only the TAG.
+
+#### DLOG — device log entry [v4] (§9)
+
+#### BUNDLE items [v4] (§10)
+
+#### POLICY — signed policy list (replaces v3 "frozen list")
+
+| # | Field | Type |
+|---|---|---|
+| 1 | policy_ver [`pv`] | int, strictly increasing |
+| 2 | issued_at [`ia`] | int |
+| 3 | frozen_certs [`fc`] | list of bytes16 |
+| 4 | merchant_limits [`ml`] | list of strings `"<merchant_id_hex>:<cents>"`, sorted |
+
+`TYPE = POLICY`. Server signature `[sig]`. A phone keeps the highest `policy_ver` it has verified.
+
+#### RENEW — renewal request (signed by holder)
+
+| # | Field | Type |
+|---|---|---|
+| 1 | cert_id | bytes16 |
+| 2 | chain_head | bytes32 (latest tag_hash or GENESIS) |
+| 3 | counter | int (latest counter, 0 if none) |
+| 4 | ts | int |
+
+`TYPE = RENEW`. The server answers with a new CERT version (expiry +72 h) unless the cert is frozen.
+
+#### RCPT — server receipt
+
+| # | Field | Type |
+|---|---|---|
+| 1 | ts | int |
+| 2 | item_ids | list of bytes32 (full item ids, §10.2) |
+
+`TYPE = RCPT`. Server signature. Phones delete carried items whose ids appear in a verified receipt.
+
+#### PROOF — equivocation proof
+
+`{a: TAG, b: TAG, rule: "SAME_COUNTER"|"BROKEN_LINK"|"TOTAL_BACKWARDS"}`. Self-proving: anyone with the cert's `holder_pub` can check it. No extra signature.
+
+---
+
+## 8. Offline checks and fraud rules
+
+### 8.1 Payer-side checks (resident phone, before signing)
+
+1. MCERT has a valid server signature and is not expired.
+2. REQ signature matches `merchant_pub`; `req_expires_at > now - 600`.
+3. `amount_cents ≤ cap − cum_so_far` (else show "Over your limit").
+4. Show "Pay <display_name> $X.XX", require Face ID, then build DET, TAG and PAY, increment counter, persist the wallet **before** showing the payment QR.
+
+### 8.2 Merchant offline checks, in order (v3 checks, numbered for UI copy)
+
+| # | Check | Failure copy on the red screen |
+|---|---|---|
+| C1 | CERT server signature valid | "Certificate not issued by StormCash" |
+| C2 | CERT not expired (10-min clock tolerance) and `cert_id` not in policy `frozen_certs` | "Certificate expired" / "Certificate frozen" |
+| C3 | TAG signature matches CERT `holder_pub` | "Signature doesn't match" |
+| C4 | `details_hash` matches DET; DET names **this** merchant's key and the **open** request's nonce; TAG amount = REQ amount; REQ not expired | "Payment is for a different request" |
+| C5 | `amount > 0`, `cum ≥ amount`, `cum ≤ cap`; amount ≤ merchant limit from policy (if any) | "Over certificate cap" / "Over this shop's limit" |
+| C6 | Against every stored tag for this cert: no equivocation (§8.3), and `counter >` the highest counter seen | "These funds were already spent nearby (rule: …). Certificate flagged." |
+
+All six pass: green screen "Verified. Backed by Capital One, $<cum> of $<cap> used." Then the merchant stores the PAY, appends a DLOG `ACCEPT` (§9), and queues the TAG for gossip.
+
+Any check fails: red screen naming the check; if C6 fails, store the attempted PAY as evidence, append DLOG `REFUSE`, build a PROOF and gossip it at top priority.
+
+### 8.3 Equivocation rules (hard, self-proving)
+
+For two tags A and B with the same `cert_id`, ordered so that `A.counter ≤ B.counter`:
+
+| Rule | Condition |
+|---|---|
+| **R1 SAME_COUNTER** | `A.counter == B.counter` and `tag_hash(A) != tag_hash(B)` |
+| **R2 BROKEN_LINK** | `B.counter == A.counter + 1` and `B.prev_hash != tag_hash(A)` |
+| **R3 TOTAL_BACKWARDS** | `B.counter > A.counter` and `B.cum − B.amount < A.cum` |
+
+Plus single-tag validity: counter 1 must have `prev_hash == GENESIS(cert_id)` and `cum == amount`.
+
+Server-only hard rules:
+
+| Rule | Condition |
+|---|---|
+| **R4 OVER_CAP** | the settled `cum` for a cert exceeds the highest `cap_cents` of any issued version |
+| **R5 MERCHANT_KNEW** [v4] | §9.4 |
+| **R6 LOG_TAMPER** [v4] | a device's DLOG chain has a fork (two entries with the same seq) or a broken prev_hash link |
+
+Any hard rule opens a **case**, freezes the certificate (R1–R4) or the merchant's pool eligibility (R5, R6), and publishes a new POLICY version. **No AI is involved.**
+
+### 8.4 Loss bound (say it out loud)
+
+A cheater can take at most the cap once from each shop no tag has reached, before the freeze spreads. With a $50 cap and five unreached shops, the worst case is $250 per cheater, with their signatures as evidence. The always-on cap is $20, and merchants can set a lower per-payment limit.
+
+---
+
+## 9. Device logs, contacts and the "merchant knew" rule [v4]
+
+### 9.1 Why
+
+The guarantee pool pays merchants for accepted payments, including double spends they couldn't have known about. A colluding merchant can keep their phone deliberately "unreached" (Bluetooth off), accept rolled-back payments, and get paid from the pool. Device logs make "what did you know, and when" provable.
+
+### 9.2 DLOG entry (every device keeps one; signed by the device key)
+
+The device key is the holder key for residents and the merchant key for merchants.
+
+| # | Field | Type |
+|---|---|---|
+| 1 | device_pub [`dp`] | bytes33 |
+| 2 | seq [`q`] | int, starts 1, +1 per entry |
+| 3 | prev_hash [`ph`] | bytes32: previous entry hash; for seq 1: `SHA-256(canonical(DGEN, device_pub))` |
+| 4 | ts [`ts`] | int |
+| 5 | kind [`kd`] | `ACCEPT` \| `REFUSE` \| `CONTACT` |
+| 6..n | body | per kind, below |
+
+`TYPE = DLOG`. Device signature. `entry_hash = SHA-256(canonical(DLOG, ...))`.
+
+**Body per kind (fields 6..n):**
+
+| Kind | Body fields |
+|---|---|
+| `ACCEPT` | tag_hash (bytes32), cert_id (bytes16), held_ids (list of bytes32: every tag_hash **for this cert_id** the device held at acceptance) |
+| `REFUSE` | tag_hash (bytes32), cert_id (bytes16), check (enum: `C1`…`C6`) |
+| `CONTACT` | contact_id (bytes32), peer_pub (bytes33), sent_ids (list of bytes8), recv_ids (list of bytes8), sent_overflow (int), recv_overflow (int) |
+
+- `sent_ids` / `recv_ids` are the first 8 bytes of the item ids (§10.2) of **TAG and PROOF items only**, capped at 200 each. Anything beyond the cap is counted in `*_overflow`.
+- `contact_id = SHA-256(canonical(CONTACT, pub_low, pub_high, nonce_low, nonce_high))`. The pubs are sorted; each side's HELLO nonce is ordered by its pub. Both sides compute the same id, so the server can pair the two logs of one meeting.
+
+### 9.3 Both sides log every contact
+
+Each side of a sync session (§10) writes one CONTACT entry when the session ends. A merchant cannot hide a contact, because the peer's signed log shows it. But a dishonest peer could also *claim* a contact that never happened, since its log is only its own testimony. So the server treats a **one-sided** contact as **weak evidence** (a soft-signal input only) and a **paired** contact (both sides logged the same `contact_id`) as **strong evidence**, usable by hard rule R5.
+
+### 9.4 R5 MERCHANT_KNEW (hard)
+
+For a payment P (tag `z`, cert `C`) accepted by merchant M at time `t_accept`, if there exists a tag `x` of cert `C` such that `x` and `z` violate R1–R3, and **either**:
+
+- (a) M's own `ACCEPT` entry for `z` lists `x` in `held_ids`, **or**
+- (b) a **paired** CONTACT (both sides logged it) between M and any peer, with `ts < t_accept`, where the peer's `sent_ids` or M's `recv_ids` contains `id8(x)`,
+
+then M knowingly accepted a double spend: P is marked `denied_knowing`, it is **not** paid from the guarantee pool (escrow still pays if the payment is first on the honest chain), and a case `MERCHANT_KNEW` opens with M's own signatures as evidence.
+
+(a) catches an app that was modified to skip C6 but still logs honestly. (b) catches an app that also lies in its own log, using the peer's log and M's own contact entry.
+
+### 9.5 R6 LOG_TAMPER (hard)
+
+On ingest, the server verifies each device's chain. Two entries with the same `seq` and different hashes, or a broken `prev_hash`, open a `LOG_TAMPER` case. For a merchant, pool payouts are suspended pending review.
+
+### 9.6 Storage
+
+DLOG entries are ~300 bytes. They are synced like any other item (§10) and deleted after a receipt.
+
+---
+
+## 10. Gossip and store-and-forward relay over Multipeer [v4]
+
+### 10.1 Model
+
+Delay-tolerant networking with epidemic routing: every phone carries everything it has not seen a receipt for, and hands it to every phone it meets. Any phone that gets internet uploads what it carries. The same mechanism moves items **up** (payments, tags, proofs, logs, renewal requests) and **down** (receipts, policy, renewed certs).
+
+### 10.2 Items
+
+Every syncable thing is an **item**: `{kind, body, path}`.
+
+| kind | body | item_id = SHA-256 of | Priority |
+|---|---|---|---|
+| `PROOF` | PROOF | `canonical(PRF, tag_hash(a), tag_hash(b))` with the two tag hashes sorted | 1 |
+| `POLICY` | POLICY | canonical POLICY | 2 |
+| `RCPT` | RCPT | canonical RCPT | 2 |
+| `CERT` | CERT version (renewal response) | canonical CERT | 2 |
+| `PAY` | PAY | tag_hash | 3 |
+| `DLOG` | DLOG entry | entry_hash | 3 |
+| `RENEW` | RENEW | canonical RENEW | 3 |
+| `TAG` | TAG | tag_hash | 4 |
+
+Note: `PAY` and `TAG` for one payment share an id on purpose: once a PAY is held, the TAG is redundant.
+
+`path` is **unsigned metadata**: an array of `[device_short_id, ts]` appended by each carrier. `device_short_id` = first 4 bytes of the device pub as hex. It is only for the dashboard's hop display, never for security.
+
+### 10.3 Sync session (runs on every Multipeer connection; also over QR sync)
+
+```
+1. HELLO      → {v:1, dp: device_pub, role, n: nonce16, pv: policy_ver, inv: [id8...] }
+2. HELLO      ← same from the peer
+3. WANT       → [id8 the peer has and I don't]  (both directions)
+4. ITEMS      → items for the requested ids, highest priority first, ≤ 64 KB per message, chunked
+5. DONE       → {}   both sides
+6. Each side appends one DLOG CONTACT entry (§9.2) and updates `path` on items it received.
+```
+
+- `inv` lists id8 of every item the device holds (cap 5,000; send priority 1–3 first if over).
+- Policy: if the peer's `pv` is higher, request it explicitly.
+- Every received item is **verified before it is stored** (signatures, cert chain). Invalid items are dropped and the peer is not trusted for the rest of the session.
+- The session times out after 15 s.
+
+### 10.4 Retention
+
+- Keep each item until a verified RCPT covers it, or for 7 days.
+- Storage cap 5,000 items; evict the lowest priority, oldest first. Never evict PROOF or POLICY.
+- Tags for a cert are deleted 72 h after the cert's last known version expires.
+
+### 10.5 Upload (any phone with internet)
+
+When `expo-network` reports internet: `POST /v1/sync` with every item that has no receipt. The response contains RCPT, the latest POLICY, CERT versions for any RENEW the phone carried, and nothing else. Store them as items so they gossip back down.
+
+### 10.6 Demo topology (demo mode only)
+
+All 3 phones on a table are in range of each other. In demo mode, each phone only accepts sessions from peers on its allowlist:
+
+```
+Pharmacy ↔ Maya ↔ Gas Station          (Pharmacy and Gas Station never link directly)
+```
+
+So the pharmacy's records reach the gas station only through Maya's phone, and the gas station's upload carries the pharmacy's payment 2 hops. The dashboard draws the path from `path` metadata: "Pharmacy → Maya → Gas Station → server · 2 hops · 4 min".
+
+The allowlist lives in `mobile/src/demo/topology.ts`, keyed by device label, toggled in the hidden demo menu.
+
+### 10.7 QR sync fallback
+
+If Multipeer is unreliable, the same session runs over QR: each side shows HELLO+inventory as a QR sequence, then the items needed for the demo (only a few tags, a proof, a policy) as QR frames. It is slow but fully offline, and still writes CONTACT entries. Build a "Sync by QR" button on the Records screen.
+
+---
+
+## 11. Server: schema, settlement, ledger, Nessie
+
+### 11.1 Schema (`server/schema.sql`)
+
+```sql
+-- Entities
+CREATE TABLE regions (
+  region_id TEXT PRIMARY KEY,           -- e.g. 'asheville-downtown'
+  display_name TEXT NOT NULL,
+  county TEXT NOT NULL,                 -- 'Buncombe'
+  x INT NOT NULL, y INT NOT NULL, w INT NOT NULL, h INT NOT NULL  -- map rectangle on town grid
+);
+
+CREATE TABLE residents (
+  resident_id UUID PRIMARY KEY,
+  display_name TEXT NOT NULL,
+  holder_pub BYTEA UNIQUE NOT NULL,
+  region_id TEXT REFERENCES regions,
+  nessie_customer_id TEXT,
+  checking_account_id TEXT,
+  escrow_account_id TEXT,
+  simulated BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE merchants (
+  merchant_id BYTEA PRIMARY KEY,        -- 16 bytes
+  display_name TEXT NOT NULL,
+  merchant_pub BYTEA UNIQUE NOT NULL,
+  region_id TEXT REFERENCES regions,
+  x INT, y INT,                         -- position on town map
+  nessie_account_id TEXT,
+  per_payment_limit_cents INT,          -- NULL = none
+  pool_eligible BOOLEAN NOT NULL DEFAULT TRUE,
+  simulated BOOLEAN NOT NULL DEFAULT FALSE
+);
+
+CREATE TABLE merchant_contacts (        -- Photon mapping
+  merchant_id BYTEA REFERENCES merchants,
+  channel TEXT NOT NULL,                -- 'telegram' | 'imessage' | 'sms'
+  handle TEXT NOT NULL,
+  PRIMARY KEY (channel, handle)
+);
+
+CREATE TABLE certificates (
+  cert_id BYTEA NOT NULL,
+  cert_ver INT NOT NULL,
+  resident_id UUID REFERENCES residents,
+  holder_pub BYTEA NOT NULL,
+  cap_cents INT NOT NULL,
+  issued_at BIGINT NOT NULL,
+  expires_at BIGINT NOT NULL,
+  escrow_ref TEXT NOT NULL,
+  server_sig BYTEA NOT NULL,
+  PRIMARY KEY (cert_id, cert_ver)
+);
+CREATE TABLE cert_status (
+  cert_id BYTEA PRIMARY KEY,
+  status TEXT NOT NULL CHECK (status IN ('active','frozen','closing','closed')),
+  max_cap_cents INT NOT NULL,
+  frozen_at BIGINT,
+  storm_mode BOOLEAN NOT NULL DEFAULT FALSE,
+  storm_mode_at BIGINT
+);
+
+-- Protocol data
+CREATE TABLE tags (                     -- every tag the server has seen (from PAY or gossip)
+  tag_hash BYTEA PRIMARY KEY,
+  cert_id BYTEA NOT NULL,
+  counter INT NOT NULL,
+  prev_hash BYTEA NOT NULL,
+  amount_cents INT NOT NULL,
+  cum_cents INT NOT NULL,
+  details_hash BYTEA NOT NULL,
+  sig BYTEA NOT NULL,
+  first_seen_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX ON tags (cert_id, counter);
+
+CREATE TABLE payments (
+  tag_hash BYTEA PRIMARY KEY REFERENCES tags,
+  cert_id BYTEA NOT NULL,
+  merchant_id BYTEA NOT NULL REFERENCES merchants,
+  nonce BYTEA NOT NULL,
+  device_ts BIGINT NOT NULL,
+  received_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  relay_device BYTEA,                   -- pub of the uploader
+  hops INT,
+  path JSONB,
+  status TEXT NOT NULL CHECK (status IN
+    ('pending','settled','held','denied_knowing','refused_evidence','invalid')),
+  funded_escrow_cents INT NOT NULL DEFAULT 0,
+  funded_pool_cents INT NOT NULL DEFAULT 0
+);
+CREATE INDEX ON payments (merchant_id, device_ts);
+CREATE INDEX ON payments (cert_id);
+
+CREATE TABLE device_log (
+  device_pub BYTEA NOT NULL,
+  seq INT NOT NULL,
+  entry_hash BYTEA NOT NULL,
+  prev_hash BYTEA NOT NULL,
+  ts BIGINT NOT NULL,
+  kind TEXT NOT NULL,
+  body JSONB NOT NULL,
+  sig BYTEA NOT NULL,
+  PRIMARY KEY (device_pub, seq, entry_hash)   -- allows storing forks as evidence
+);
+CREATE INDEX ON device_log (device_pub, ts);
+
+CREATE TABLE contacts (                 -- derived from CONTACT entries
+  contact_id BYTEA NOT NULL,
+  device_pub BYTEA NOT NULL,
+  peer_pub BYTEA NOT NULL,
+  ts BIGINT NOT NULL,
+  sent_ids BYTEA[] NOT NULL,
+  recv_ids BYTEA[] NOT NULL,
+  paired BOOLEAN NOT NULL DEFAULT FALSE,
+  PRIMARY KEY (contact_id, device_pub)
+);
+CREATE INDEX ON contacts (device_pub, ts);
+
+-- Hard cases (deterministic)
+CREATE TABLE cases (
+  case_id BIGSERIAL PRIMARY KEY,
+  rule TEXT NOT NULL CHECK (rule IN
+    ('SAME_COUNTER','BROKEN_LINK','TOTAL_BACKWARDS','OVER_CAP','MERCHANT_KNEW','LOG_TAMPER')),
+  cert_id BYTEA,
+  merchant_id BYTEA,
+  device_pub BYTEA,
+  tag_a BYTEA, tag_b BYTEA,
+  evidence JSONB NOT NULL,              -- ids of everything that proves it
+  detected_where TEXT NOT NULL CHECK (detected_where IN ('offline','server')),
+  exposure_cents INT NOT NULL DEFAULT 0,
+  case_file_md TEXT,                    -- written by StormDesk
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Soft flags (detector candidates + agent verdicts)
+CREATE TABLE candidates (
+  candidate_id BIGSERIAL PRIMARY KEY,
+  kind TEXT NOT NULL CHECK (kind IN ('merchant_silence','cap_drain','region_dark')),
+  subject_id TEXT NOT NULL,             -- merchant_id hex | cert_id hex | region_id
+  window_start BIGINT NOT NULL, window_end BIGINT NOT NULL,
+  features JSONB NOT NULL,              -- detector inputs, frozen at creation
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (kind, subject_id, window_start)
+);
+
+CREATE TABLE flags (                    -- StormDesk output (one per candidate)
+  flag_id BIGSERIAL PRIMARY KEY,
+  candidate_id BIGINT REFERENCES candidates,
+  kind TEXT NOT NULL,                   -- may be 'none' (agent dismissed)
+  severity TEXT NOT NULL,
+  subject_id TEXT NOT NULL,
+  evidence_ids TEXT[] NOT NULL,
+  exposure_cents INT NOT NULL,
+  summary TEXT NOT NULL,
+  proposed_action TEXT NOT NULL,
+  citations_valid BOOLEAN NOT NULL,
+  agent_session_id TEXT,
+  agent_transcript JSONB,               -- tool calls for replay on dashboard
+  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','approved','rejected','dismissed','invalid')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE approvals (
+  approval_id BIGSERIAL PRIMARY KEY,
+  flag_id BIGINT REFERENCES flags,
+  decision TEXT NOT NULL CHECK (decision IN ('approve','reject')),
+  operator TEXT NOT NULL,
+  note TEXT,
+  executed_actions JSONB,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE messages (                 -- Photon conversations
+  message_id BIGSERIAL PRIMARY KEY,
+  merchant_id BYTEA REFERENCES merchants,
+  flag_id BIGINT REFERENCES flags,
+  direction TEXT NOT NULL CHECK (direction IN ('out','in')),
+  channel TEXT NOT NULL,
+  body TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Money
+CREATE TABLE payouts (
+  payout_id BIGSERIAL PRIMARY KEY,
+  tag_hash BYTEA REFERENCES payments,
+  merchant_id BYTEA NOT NULL,
+  amount_cents INT NOT NULL,
+  source TEXT NOT NULL CHECK (source IN ('escrow','pool')),
+  nessie_transfer_id TEXT,
+  status TEXT NOT NULL CHECK (status IN ('queued','pending','executed','failed','ledger_only')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE ledger_entries (
+  entry_id BIGSERIAL PRIMARY KEY,
+  txn_id UUID NOT NULL,
+  account TEXT NOT NULL,
+  debit_cents INT NOT NULL DEFAULT 0,
+  credit_cents INT NOT NULL DEFAULT 0,
+  ref TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE nessie_calls (             -- feeds the dashboard call log
+  call_id BIGSERIAL PRIMARY KEY,
+  method TEXT, path TEXT, request JSONB, status INT, response JSONB,
+  summary TEXT,                         -- "POST transfer escrow → Pharmacy, $12.00"
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE policy_versions (
+  policy_ver INT PRIMARY KEY,
+  issued_at BIGINT NOT NULL,
+  frozen_certs BYTEA[] NOT NULL,
+  merchant_limits TEXT[] NOT NULL,
+  server_sig BYTEA NOT NULL
+);
+
+CREATE TABLE uploads (                  -- one row per /v1/sync call
+  upload_id BIGSERIAL PRIMARY KEY,
+  device_pub BYTEA NOT NULL,
+  region_id TEXT,
+  item_count INT NOT NULL,
+  received_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  simulated BOOLEAN NOT NULL DEFAULT FALSE
+);
+
+CREATE TABLE weather_alerts (
+  alert_id TEXT PRIMARY KEY,
+  region_id TEXT REFERENCES regions,
+  event TEXT NOT NULL,                  -- 'Hurricane Warning', 'Flash Flood Warning'
+  severity TEXT,
+  onset BIGINT, expires BIGINT,
+  source TEXT NOT NULL CHECK (source IN ('live','replayed')),
+  raw JSONB
+);
+```
+
+### 11.2 Settlement (`settlement.py: ingest_items(device_pub, items) -> SyncResponse`)
+
+One function, used by `/v1/sync`, the simulator, and tests. Idempotent: re-ingesting the same items changes nothing.
+
+For each item, in priority order:
+
+1. **Verify.** Signatures, cert chain (server sig), merchant cert. Invalid → drop, count it.
+2. **TAG / PAY:** upsert into `tags` (dedupe by tag_hash). Run R1–R3 against every stored tag of that cert. Any hit → open a case (`detected_where='server'` unless the matching PROOF item was already received from a phone, then `'offline'`), set `cert_status='frozen'`, publish a new POLICY.
+3. **PAY:** insert into `payments` with status `pending`, then decide:
+   - R5 MERCHANT_KNEW true → `denied_knowing`, no pool funding.
+   - Merchant has an **approved** `hold_pool_payout` action → `held`.
+   - Otherwise **pay**: `escrow_avail = max_cap − already_paid_from_escrow(cert)`; `from_escrow = min(amount, escrow_avail)`; `from_pool = amount − from_escrow`. Execute Nessie transfers (§11.4); set `settled`.
+   - R4 OVER_CAP check after payment.
+4. **PROOF:** store both tags (step 2 handles the case).
+5. **DLOG:** verify the chain against stored entries for that device (R6). Insert. For CONTACT entries, upsert `contacts` and mark `paired` when both sides exist. After inserting, re-run R5 for that device's accepted payments whose certs have cases.
+6. **RENEW:** if the cert isn't frozen, issue CERT version `+1`, expiry now + 72 h, same cap as the current max version.
+7. Collect every accepted item id into an RCPT; return `{rcpt, policy, certs}`.
+8. Emit SSE events (§12.3) for everything that changed.
+
+After ingest, call `detectors.run_incremental()` (§13), which may create candidates, which enqueue StormDesk jobs.
+
+### 11.3 Ledger
+
+Every money movement writes a balanced pair (one debit, one credit) under one `txn_id`. Account names:
+
+| Account | Meaning |
+|---|---|
+| `checking:<resident>` | resident's Nessie checking (mirror) |
+| `escrow:<cert_id>` | locked funds for a certificate |
+| `merchant:<merchant_id>` | merchant's Nessie account (mirror) |
+| `pool` | guarantee pool |
+| `fraud_receivable:<cert_id>` | what a cheater owes the pool |
+| `pool_recoveries` | offset for receivables |
+
+| Event | Debit | Credit |
+|---|---|---|
+| Lock escrow / top up | `escrow:<cert>` | `checking:<res>` |
+| Settle from escrow | `merchant:<m>` | `escrow:<cert>` |
+| Settle from pool | `merchant:<m>` | `pool` |
+| …and book the receivable | `fraud_receivable:<cert>` | `pool_recoveries` |
+| Refund on close | `checking:<res>` | `escrow:<cert>` |
+
+Invariant test: for every `txn_id`, `sum(debit) == sum(credit)`. Show "Ledger balanced ✓" on the Accounts tab.
+
+### 11.4 Nessie integration (`nessie.py`)
+
+**VERIFY all paths and payloads against the Nessie docs in hour 1.** Expected shape:
+
+| Purpose | Call |
+|---|---|
+| Create customer | `POST /customers?key=` |
+| Create account | `POST /customers/{id}/accounts?key=` `{type: "Checking", nickname, rewards: 0, balance}` |
+| Get account | `GET /accounts/{id}?key=` |
+| Transfer | `POST /accounts/{from}/transfers?key=` `{medium: "balance", payee_id: to, amount: dollars, transaction_date, description}` |
+| Transfer status | `GET /transfers/{id}?key=` → `pending` / `executed` / `cancelled` |
+
+Account mapping:
+
+| Nessie account | Owner |
+|---|---|
+| Checking | each real resident (Maya) |
+| StormCash escrow | each real resident (one escrow account per resident, used by their cert) |
+| Guarantee pool | a "StormCash Operator" customer |
+| Merchant account | each real merchant (Pharmacy, Gas Station). Corner Store is simulated (§16.3) and ledger-only. |
+
+Rules:
+- **Only real demo entities touch Nessie.** Simulated residents and merchants (`simulated=true`) are **ledger-only** (`payouts.status='ledger_only'`), or the 40-shop town would hit rate limits.
+- Every call is logged to `nessie_calls` with a human summary for the dashboard.
+- **Fallback:** if Nessie errors or times out (3 s), queue the payout (`status='queued'`) and keep the ledger moving. A background task replays queued payouts every 10 s. The Accounts tab shows "Nessie queued: n".
+- If transfers stay `pending` in the sandbox, the dashboard shows `pending` honestly. Never fake "executed".
+
+---
+
+## 12. Server API
+
+All JSON. Byte fields base64url. Prefix `/v1`. Auth for demo: none on reads; resident/merchant writes carry a holder/merchant signature over `canonical(API, path, body_sha256_hex, ts)` in header `X-SC-Sig` with `X-SC-Pub` and `X-SC-Ts`. Operator actions require header `X-SC-Operator: <name>` (demo only).
+
+### 12.1 Endpoints
+
+| Method + path | Body / query | Returns | Owner |
+|---|---|---|---|
+| `POST /v1/residents/register` | `{display_name, holder_pub, region_id}` | `{resident_id, cert}` — creates Nessie customer, checking (seeded $500), escrow; locks $20; issues cert v1 cap 2000 | WS2 |
+| `POST /v1/merchants/register` | `{display_name, merchant_pub, region_id, x, y, contact?: {channel, handle}}` | `{merchant_id, mcert}` | WS2 |
+| `POST /v1/storm-mode` | `{cert_id, cap_cents}` | `{cert}` — tops escrow up in Nessie, issues new version | WS2 |
+| `POST /v1/storm-mode/close` | `{cert_id}` | `{cert}` (cap back to 2000; refund scheduled per §7.4) | WS2 |
+| `POST /v1/sync` | `{device_pub, items: [...]}` | `{rcpt, policy, certs: [...]}` | WS2 |
+| `GET /v1/policy` | `?since=ver` | `{policy}` | WS2 |
+| `GET /v1/accounts` | | live Nessie balances for demo entities + ledger totals | WS2 |
+| `GET /v1/nessie/log` | `?limit=50` | rows of `nessie_calls` | WS2 |
+| `GET /v1/cases` / `GET /v1/cases/{id}` | | case with both tags, the cert, the rule, evidence, case file | WS2 |
+| `GET /v1/proof/{case_id}` | | everything the public verify page needs: cert (+server sig), tag A, tag B, holder_pub, rule | WS2 |
+| `GET /v1/flags` / `GET /v1/flags/{id}` | | flag + candidate features + agent transcript | WS5 |
+| `POST /v1/flags/{id}/approve` / `reject` | `{note}` | executes actions (§14.6), returns approval | WS5 |
+| `POST /v1/stormdesk/run` | `{candidate_id}` or `{case_id}` | `{flag}` or `{case_file_md}` (sync; used by evals) | WS5 |
+| `GET /v1/town` | | regions, merchants (x, y, simulated), live dots, recent payments, uploads, alerts | WS4/WS2 |
+| `GET /v1/relay/paths` | `?limit=20` | recent payments with `path`, hops, latency | WS2 |
+| `POST /v1/photon/inbound` | Photon webhook payload | 200 | WS7 |
+| `POST /v1/demo/reset` | | clears real-device demo data, reissues Maya's cert, keeps the simulated town | WS2 |
+| `POST /v1/demo/seed-town` | `{seed}` | runs the simulator into the DB (§16) | WS4 |
+| `GET /v1/stream` | | SSE | WS2 |
+
+### 12.2 `POST /v1/sync` example
+
+```json
+{
+  "device_pub": "A8x...",
+  "items": [
+    {"kind": "PAY", "body": {"c": {...}, "t": {...}, "d": {...}}, "path": [["9f1c2a3b", 1760000000], ["44aa01de", 1760000240]]},
+    {"kind": "DLOG", "body": {"dp": "...", "q": 7, "ph": "...", "ts": 1760000100, "kd": "CONTACT", "...": "..."}, "path": []}
+  ]
+}
+```
+
+### 12.3 SSE events (`GET /v1/stream`)
+
+| event | data |
+|---|---|
+| `nessie_call` | row from `nessie_calls` |
+| `accounts` | balances snapshot |
+| `payment` | payment row incl. status, funding split, path |
+| `case_opened` | case summary |
+| `policy` | new policy version |
+| `candidate` | candidate summary |
+| `stormdesk_step` | `{flag_or_case, tool, input_summary, ok}` (live tool calls) |
+| `flag` | flag row |
+| `approval` | approval + executed actions |
+| `message` | Photon message in/out |
+| `upload` | device, items, hops |
+
+---
+
+## 13. Soft signals (deterministic detectors) [v4]
+
+Detectors are deterministic SQL/Python in `server/stormcash/detectors.py`. They produce **candidates** with frozen feature snapshots. **They never act.** StormDesk judges each candidate.
+
+Rules-only baseline (for evals): "flag every candidate with its default action".
+
+### 13.1 `merchant_silence`
+
+Window: rolling 6 h (simulated time), evaluated per merchant.
+
+Features:
+- `contacts_per_hour` (from `contacts`, this merchant)
+- `neighbor_median_contacts_per_hour` (merchants within radius R=3 grid cells, same window)
+- `silence_ratio = contacts_per_hour / max(neighbor_median, 0.1)`
+- `pool_funded_count`, `pool_funded_cents`, `accepted_count`, `pool_funded_share`
+- `distinct_cheater_certs` (certs with hard cases among this merchant's accepted payments)
+- `near_cap_share` (accepted payments with `cum ≥ 0.8 × cap`)
+- `paired_contact_share`, `one_sided_contacts`
+- `prior_windows_flagged`
+
+**Fires when:** `silence_ratio < 0.2` **and** `pool_funded_count ≥ 1` in the window.
+
+Default action: `hold_pool_payout`.
+
+### 13.2 `cap_drain`
+
+Per cert, any 15-minute window.
+
+Features: `distinct_merchants_15m`, `spent_15m_cents`, `cap_cents`, `drain_share`, `minutes_since_storm_mode`, `home_region`, `regions_in_window`, `region_mismatch`, `hour_of_day`, `gap_since_last_activity_min`, `owner_freeze_request` (from Photon `FREEZE`).
+
+**Fires when:** `distinct_merchants_15m ≥ 3` **and** `drain_share ≥ 0.8`.
+
+Default action: `freeze_cert`. (Even an approved soft freeze is a human decision; contrast with hard rules.)
+
+### 13.3 `region_dark`
+
+Per region, evaluated hourly (simulated time).
+
+Features: `active_certs`, `expiring_12h_share`, `hours_since_last_upload`, `active_alerts` (event, severity, source), `population_weight` (active residents), `merchants_open`.
+
+**Fires when:** `expiring_12h_share ≥ 0.3` **and** `hours_since_last_upload ≥ 48`.
+
+Default action: `dispatch_relay`.
+
+### 13.4 Why the agent adds value over the detectors
+
+The detectors are designed to fire on **traps** too (§16.4). A rules-only system flags all of them. The agent's job is to keep recall on real fraud while dismissing traps using the full context (pool share, repeat patterns, regions, alerts). The Evals tab compares the two.
+
+---
+
+## 14. StormDesk agent (Factory Droid SDK) [v4]
+
+### 14.1 Jobs
+
+| Trigger | Job | Output |
+|---|---|---|
+| A hard case opens | **Investigate:** gather evidence, independently re-verify both signatures and the rule with the deterministic verifier tool, compute exposure and who is owed what, write a case file and recovery plan | `CaseFile` → `cases.case_file_md` |
+| A candidate is created | **Triage:** decide whether it's real, cite evidence, choose severity and action, or dismiss with a reason | `Flag` → `flags` |
+| A merchant appeals by message (§17) | **Respond:** compare the claim with the logs, reply with evidence, escalate or resolve | `AppealReply` → `messages` |
+
+Jobs run in a worker (`stormdesk/worker.py`): an asyncio queue, max 4 concurrent Droid sessions.
+
+### 14.2 Harness configuration
+
+```python
+from droid_sdk import run, Session, SessionConfig, InteractionHandlers, PermissionRequest, PermissionResponse, ToolConfirmationOutcome
+from droid_sdk.mcp import create_sdk_mcp_server, tool
+
+server = create_sdk_mcp_server(name="stormdesk", tools=[...], version="1.0.0")
+
+def deny_everything_else(req: PermissionRequest) -> PermissionResponse:
+    # Only our MCP tools are allowed; they are read-only. Everything else is refused.
+    ...
+
+config = SessionConfig(
+    system_prompt=STORMDESK_PROMPT,          # §14.4
+    mcp_servers=[server],
+    disabled_tools={"Execute", "Edit", "Create", ...},   # VERIFY tool ids with session.list_tools()
+    disable_builtin_skills=True,
+)
+```
+
+- Use `run(prompt, output=Flag)` (or `Session.stream`) with **structured output** (Pydantic). Missing or invalid output = `RunFailure` with `error_structured_output`: retry once, then store the flag as `invalid`.
+- Stream messages; for each `ToolCall` / `ToolResult`, emit SSE `stormdesk_step` and append to `agent_transcript`.
+- **VERIFY in hour 1:** the exact built-in tool ids to disable (`list_tools(include_schemas=True)`), the MCP tool id format, and that structured output works with your `droid` version.
+- Model: let Droid pick (`model="auto"`) unless a Claude model is selectable; prefer Claude.
+
+### 14.3 Tools (all read-only, in-process MCP)
+
+| Tool | Args | Returns |
+|---|---|---|
+| `get_case` | `case_id` | rule, tags, cert, evidence ids, exposure |
+| `get_candidate` | `candidate_id` | kind, subject, window, frozen features |
+| `get_cert_chain` | `cert_id` | all tags in counter order, versions, status, settled total |
+| `verify_tags` | `tag_hashes[]` | deterministic re-check: signatures valid? which rule (if any) any pair breaks? (calls `protocol/rules.py`) |
+| `get_device_log` | `device_id, since, until` | DLOG entries (ACCEPT/REFUSE/CONTACT), chain status |
+| `get_contacts` | `device_id, since, until` | contacts with paired flags and peer ids |
+| `get_merchant_payments` | `merchant_id, since, until` | payments with funding split and cert status |
+| `query_features` | `entity: merchant\|cert\|region, id, features[]` | Chalk online query (§15.2) |
+| `get_region_status` | `region_id` | active certs, expiries, last upload, alerts (live + replayed, labeled) |
+| `get_nessie_balances` | `entity_id` | balances for demo entities (cached ≤ 10 s) |
+| `get_messages` | `merchant_id` | Photon conversation so far |
+
+There is **no** write tool. The agent's only output is its structured result.
+
+### 14.4 System prompt (starting point)
+
+```
+You are StormDesk, the back-office fraud analyst for StormCash, an offline payment system
+used after disasters. Capital One funds resident escrow accounts; a guarantee pool pays shops
+for accepted payments above a cheater's escrow.
+
+Facts you must respect:
+- Hard rules (SAME_COUNTER, BROKEN_LINK, TOTAL_BACKWARDS, OVER_CAP, MERCHANT_KNEW, LOG_TAMPER)
+  are mathematical proofs computed by deterministic code. Never second-guess a hard rule; you
+  may re-verify it with verify_tags and describe it.
+- Soft candidates are only suspicions. Many are innocent: remote shops with little foot traffic,
+  phones with drifting clocks, honest residents stocking up right after Storm Mode.
+- You cannot move money or freeze anything. You propose; a human operator decides.
+- Every claim must cite ids you actually retrieved from tools (tag hashes, log entry hashes,
+  contact ids, payment ids, alert ids). Never invent an id. Uncited claims are discarded.
+- Prefer dismissing with a clear reason over flagging when the evidence is weak.
+- Be brief. The operator reads your summary in 10 seconds.
+```
+
+### 14.5 Output schemas
+
+```python
+class Flag(BaseModel):
+    kind: Literal["merchant_silence", "cap_drain", "region_dark", "none"]
+    severity: Literal["info", "review", "urgent"]
+    subject_id: str
+    evidence_ids: list[str]               # must exist; server checks (§14.7)
+    exposure_cents: int
+    summary: str                          # ≤ 2 sentences, operator-facing
+    reasoning: str                        # ≤ 6 bullet points, shown on expand
+    proposed_action: Literal["none", "lower_merchant_limit", "hold_pool_payout",
+                             "freeze_cert", "dispatch_relay"]
+    action_params: dict[str, int | str]   # e.g. {"limit_cents": 1000}
+    merchant_notice: str | None           # draft text for Photon, if action affects a merchant
+
+class CaseFile(BaseModel):
+    rule: str
+    verified_independently: bool          # verify_tags agreed with the hard rule
+    who_paid: list[dict]                  # merchant, amount, source (escrow/pool)
+    exposure_cents: int
+    recovery_plan: list[str]
+    evidence_ids: list[str]
+    summary_md: str
+
+class AppealReply(BaseModel):
+    reply: str                            # sent to the merchant
+    claim_consistent_with_logs: bool
+    evidence_ids: list[str]
+    escalate: bool
+```
+
+### 14.6 Approval actions (deterministic, run by the server on Approve)
+
+| Action | Effect |
+|---|---|
+| `hold_pool_payout` | Merchant's not-yet-executed pool-funded payouts → `held`; future pool payouts held until released. Photon notice sent. |
+| `lower_merchant_limit` | Sets `merchants.per_payment_limit_cents`; publishes a new POLICY (spreads to phones by gossip). Photon notice sent. |
+| `freeze_cert` | `cert_status='frozen'`, new POLICY. |
+| `dispatch_relay` | Adds a task "Send a relay to <region>" to the operator's list (no money, no messages). |
+| `none` | Nothing. |
+
+Reject = flag `rejected`, nothing executes. Every approval writes an `approvals` row and an SSE event.
+
+### 14.7 Guardrails
+
+- **Citation check:** before saving, the server checks every `evidence_ids` entry exists in the DB (tags, payments, device_log entry hashes, contacts, alerts). Any miss → `citations_valid=false`, flag status `invalid`, never shown as actionable. Counted in evals.
+- No write tools; permission handler denies everything except our MCP tools.
+- Hard rules are never routed through the agent for a decision.
+- Every run's transcript is stored for replay and audit.
+
+### 14.8 Demo replay
+
+Agent runs take 30–90 s. For the planted demo cases, run StormDesk ahead of time (Saturday night) and store transcripts. The dashboard can **replay** a stored transcript step by step (labeled "replay of run at 11:42 PM") or run live on request.
+
+### 14.9 Factory requirement: README section "Where Droid runs"
+
+Explain: worker file, the three jobs, the tools, structured outputs, the permission handler, and that Droid runs on every case and candidate in the running product. Include a screenshot of the live step stream.
+
+**Done when:** a hard case and a merchant_silence candidate from the seeded town both produce valid outputs with verified citations, and the dashboard streams the steps.
+
+---
+
+## 15. Chalk: features, query tool, evaluations [v4]
+
+**VERIFY** every API below against docs.chalk.ai in hour 1; the shapes here follow the docs as read on Friday.
+
+### 15.1 Feature classes (`chalk/features.py`)
+
+```python
+from chalk.features import features
+
+@features
+class Merchant:
+    id: str                       # merchant_id hex
+    region_id: str
+    simulated: bool
+    contacts_per_hour_6h: float
+    neighbor_median_contacts_6h: float
+    silence_ratio_6h: float
+    pool_funded_count_6h: int
+    pool_funded_share_6h: float
+    distinct_cheater_certs_6h: int
+    near_cap_share_6h: float
+    paired_contact_share_6h: float
+
+@features
+class Certificate:
+    id: str
+    home_region: str
+    cap_cents: int
+    spent_15m_cents: int
+    distinct_merchants_15m: int
+    region_mismatch_15m: bool
+    minutes_since_storm_mode: int
+    status: str
+
+@features
+class Region:
+    id: str
+    active_certs: int
+    expiring_12h_share: float
+    hours_since_last_upload: float
+    active_alert_events: list[str]
+    alert_source: str             # 'live' | 'replayed'
+```
+
+- **SQL resolvers** (`chalk/resolvers/*.chalk.sql`) read the hosted Postgres (§6.1) for Merchant, Certificate and Region features.
+- **Python resolver** for live NWS alerts: `GET https://api.weather.gov/alerts/active?area=NC` with `User-Agent`, mapped to regions by county/zone; fallback to `weather_alerts` rows (`source='replayed'`).
+- Features in the window are computed against **simulated time** for simulated data. Pass `as_of` (sim clock) as an input feature or query parameter. **VERIFY** the cleanest way in Chalk (time-travel/`now` input vs. explicit window columns). If unclear in 30 min, precompute window features in SQL views in Postgres and let Chalk SQL resolvers read the views.
+
+### 15.2 `query_features` tool
+
+StormDesk calls Chalk's online query API through `ChalkClient().query(input={Merchant.id: ...}, output=[...])`. This is how Chalk "does real work" at runtime. Log every query (feature names, latency) for the Chalk add-on demo.
+
+Fallback if Chalk is down: the tool reads the same features from Postgres views and marks the result `source: "postgres_fallback"`.
+
+### 15.3 Evaluations
+
+**Dataset** (`chalk/evals/build_dataset.py`): rows from 5 simulator seeds (§16), one row per candidate.
+
+| Column | Meaning |
+|---|---|
+| `candidate_id`, `kind`, `subject_id`, `features` | input |
+| `label_kind` | ground truth: `merchant_silence` \| `cap_drain` \| `region_dark` \| `none` |
+| `label_action` | ground-truth best action |
+| `label_scenario` | `colluder`, `stolen_phone`, `dark_region`, `trap_remote_shop`, `trap_victim_shop`, `trap_stockup`, `trap_clock_drift`, `trap_quiet_region` |
+| `honest_subject` | bool |
+
+Target ~60 rows (time budget: 60 × ~60 s / 6 parallel ≈ 10 min per run).
+
+**Task:** a `chalkcompute.function` that calls `POST {PUBLIC_BASE_URL}/v1/stormdesk/run {candidate_id}` and returns the Flag JSON. (Chalk's functions can't run the local `droid` CLI; the tunnel solves it.) **Fallback:** run the agent locally over the dataset and upload outputs as the result dataset, then score in Chalk.
+
+**Scorers:**
+
+| Scorer | Type | Pass condition |
+|---|---|---|
+| `valid-json` | built-in | output parses as Flag |
+| `kind-correct` | function | `output.kind == label_kind` |
+| `action-correct` | function | `output.proposed_action == label_action` |
+| `no-false-flag` | function | if `honest_subject`, `output.kind == "none"` or severity `info` with action `none` |
+| `citations-valid` | function | every `evidence_ids` exists (call `GET /v1/exists?ids=` or check against row's known ids) |
+| `summary-quality` | LLM judge (stretch) | concise, cites evidence, no overclaiming |
+
+**Comparison to show (Evals tab):** rules-only baseline vs. StormDesk on the same rows:
+
+| Metric | Rules only | StormDesk |
+|---|---|---|
+| Colluders caught (recall) | from run | from run |
+| Honest subjects flagged (false-flag rate) | from run | from run |
+| Precision per kind | from run | from run |
+| Citations valid | n/a | from run |
+| Pool $ protected (held correctly) | from run | from run |
+
+**Never type numbers into this table by hand.** The tab renders the latest stored run (`chalk/evals/results/*.json`) with the run id and timestamp.
+
+**Done when:** one full Chalk Evaluation run completes and the Evals tab renders its results with the run id.
+
+---
+
+## 16. Town simulator (40 shops) [v4]
+
+### 16.1 Purpose
+
+One simulator feeds four things: the Town tab backdrop, StormDesk's data, the Chalk eval dataset, and the "how often does this work?" answer (share refused offline, caught at settlement, loss per cheater, time to settlement vs. relay density).
+
+### 16.2 Rules
+
+- Python, in `sim/`, imports `server/stormcash/protocol` and calls `settlement.ingest_items()` directly. The town is checked by **exactly** the same code as the real phones.
+- Simulated entities generate real P-256 keys and real signatures. `simulated=true` on every row. Ledger-only money (no Nessie).
+- Deterministic by `--seed`. Virtual clock; a 72 h storm simulates in < 60 s.
+- The UI labels every simulated shop and resident "simulated".
+
+### 16.3 Town model
+
+- Grid 40×24 cells. 4 regions (Buncombe County names for flavor): `asheville-downtown`, `west-asheville`, `black-mountain`, `swannanoa`.
+- 40 merchants placed in clusters per region. 2 of them are the **real** demo phones (Pharmacy, Gas Station), drawn at fixed positions in `asheville-downtown`. **Corner Store** is a simulated merchant (ledger-only money) with one real thing: its Photon contact is the laptop at the table.
+- ~400 residents with home regions; 60% adoption by default; each has a cert (cap 20 always-on, 50 after Storm Mode at T+2 h for 70%).
+- Residents walk: pick a destination merchant weighted by distance; travel time by distance; pay at merchants (amounts $3–$45, log-normal).
+- Phones meet when within 2 cells at the same tick (probability `p_link`, default 0.6) → run the sync logic (simplified: exchange item sets, write CONTACT entries both sides).
+- Relays: a phone gets internet with probability `p_uplink` per hour (default 0.03; a shelter merchant in `asheville-downtown` has uplink 0.5/h).
+- Tick = 1 simulated minute.
+
+### 16.4 Scenarios (labels for evals)
+
+| Scenario | Count/seed | Behavior | Ground truth |
+|---|---|---|---|
+| `double_spender` | 6 | rolls back after a payment, spends again 1–3 shops later (half reuse counter, half skip) | hard cases (R1/R2/R3) |
+| `colluder` | 2 | merchant turns gossip off for 6 h and accepts payments from double spenders; in seed 42, Corner Store also accepts one double spend right after a paired contact that delivered the conflicting tag (plants an R5 MERCHANT_KNEW case for the Digital Trust add-on) | `merchant_silence`, `hold_pool_payout` (+ the R5 hard case) |
+| `stolen_phone` | 2 | cert drains ≥ 80% at 3+ shops in 15 min, in a non-home region, after ≥ 3 h idle | `cap_drain`, `freeze_cert` |
+| `dark_region` | 1 | `swannanoa` loses all uplink for 60 h during an active alert | `region_dark`, `dispatch_relay` |
+| `trap_remote_shop` | 2 | honest merchant at the map edge, low contacts, receives 1 pool-funded payment as a **victim** of a double spender | `none` |
+| `trap_victim_shop` | 2 | honest merchant briefly silent (generator out, no payments) then victimized once | `none` |
+| `trap_stockup` | 3 | honest resident spends ≥ 80% at 3 shops in their home region within 30 min of Storm Mode | `none` |
+| `trap_clock_drift` | 2 | honest phone clock 8 min off | `none` (no hard rule fires; only noise) |
+| `trap_quiet_region` | 1 | region with no uploads for 48 h but few active certs and no alert | `none` or `info` |
+
+### 16.5 Outputs
+
+- Writes everything into Postgres through `ingest_items()` (uploads happen when simulated relays get uplink).
+- `sim/out/<seed>/labels.json`: ground truth per subject.
+- `sim/out/<seed>/stats.json`: share of double spends refused offline, caught at settlement, mean loss per cheater, median time to settlement, hops histogram. These feed the Town tab charts.
+- `POST /v1/demo/seed-town {seed}` runs seed 42 into the live DB with the planted demo cases: **Corner Store** = colluder (with the real Photon handle), one stolen phone, `swannanoa` dark.
+
+### 16.6 Sliders (Town tab)
+
+Adoption, foot traffic (`p_link`), relay density (`p_uplink`). Moving a slider runs a quick re-sim (seeded, ≤ 3 s, in-memory, not written to DB) and replots: share refused offline, caught at settlement, loss per cheater, median hours to settlement.
+
+**Done when:** `seed-town 42` produces the planted cases plus candidates for all three soft kinds, and stats.json has all metrics.
+
+---
+
+## 17. Photon messaging agent [v4]
+
+**VERIFY Photon 2.0's SDK/webhook shapes from the official guidelines and docs** (linked from hhuh.io) and the Friday workshop. Do not guess field names. Wrap it in `photon/client.py` with two functions: `send(channel, handle, text)` and a FastAPI route for inbound messages.
+
+### 17.1 Channels
+
+- **Primary:** Telegram (Telegram Desktop on a laptop at the table).
+- **Optional:** iMessage via Messages on a Mac signed into a teammate's Apple ID.
+- Phones are in airplane mode during the demo, so the "merchant" conversation lives on a laptop.
+
+### 17.2 Flows
+
+| Flow | Trigger | Message |
+|---|---|---|
+| Hold notice | Operator approves `hold_pool_payout` or `lower_merchant_limit` | Agent's `merchant_notice` draft, checked to contain no invented numbers (numbers must match the flag's evidence), e.g. "Corner Store: your $140 guarantee-pool payout is on hold. Your phone logged no contact with other phones from 2–8 PM while 2 nearby shops logged 41. Reply to explain." |
+| Appeal | Merchant replies | StormDesk `respond` job (§14.1) gets the message + `get_messages` + logs; replies with evidence; if `escalate`, flag status stays open with the appeal attached; dashboard shows the thread |
+| Settled notice | Payout executed | "Paid: $12.00 from StormCash for payment at 4:12 PM." (template, no agent) |
+| Resident FREEZE | Resident texts `FREEZE` from their registered handle | Freeze cert, new POLICY, confirm by text. Feeds `owner_freeze_request` in cap_drain. Mention in pitch; demo only if time allows. |
+
+### 17.3 Demo conversation (target)
+
+```
+StormCash: Corner Store, your $140 guarantee-pool payout is on hold. Your phone logged no contact
+           with other phones from 2–8 PM while 2 nearby shops logged 41. Reply to explain.
+Merchant:  we were closed, generator died
+StormCash: Your log shows you accepted 3 payments at 4:12, 4:30 and 5:05 PM during that window.
+           I've sent this to a reviewer with your reply attached.
+```
+
+The agent's reply must cite real log entries (citation check applies).
+
+### 17.4 Voice (stretch, last)
+
+Photon's best voice agent prize: the same appeal flow by phone call. Only after everything else.
+
+**Done when:** approving the Corner Store flag sends the notice to the laptop, a typed reply gets an evidence-based answer within 60 s, and the thread shows on the dashboard.
+
+---
+
+## 18. Dashboard
+
+React + Vite + TS, one page with four tabs and a persistent header. Live via SSE. Big fonts: judges stand 1 m away.
+
+### 18.1 Header
+
+Title, "Demo mode", connection dot, **Reset demo** button (calls `/v1/demo/reset`, < 30 s), clock.
+
+### 18.2 Accounts tab (Capital One add-on)
+
+- Cards: Maya Checking, Maya Escrow, Pharmacy, Gas Station, Guarantee Pool (Nessie), plus a "Simulated town (ledger only)" totals card. Live Nessie balances; animate on change.
+- Nessie call log (scrolling): `POST transfer escrow → Pharmacy, $12.00 · executed`.
+- Ledger panel: "Ledger balanced ✓", totals per account type.
+- Queued Nessie payouts counter (fallback visible).
+
+### 18.3 Cases tab (Digital Trust + Factory add-ons)
+
+- **Hard case panel:** the two conflicting tags side by side, the broken rule highlighted, the field that conflicts in red. Buttons: **Verify it yourself** (in-browser WebCrypto ECDSA P-256 check against `holder_pub`), **Proof QR** (opens `/proof/<case_id>` on a judge's phone).
+- **Case file** from StormDesk (markdown).
+- **StormDesk panel:** list of flags; selecting one shows the summary, evidence links, and the live/replayed tool-call steps (`get_merchant_payments` ✓, `query_features` ✓, …). **Approve** / **Reject** buttons with operator name.
+- Photon thread for the selected merchant flag.
+- "Merchant knew" case view: the merchant's ACCEPT entry listing the conflicting tag, with its signature.
+
+### 18.4 Town tab
+
+- SVG grid map: regions (shaded), merchants (dots; real ones larger and labeled; simulated ones labeled "simulated" in a legend), live payment pulses, relay uploads, region alert badges (labeled live/replayed), dark regions hatched.
+- Relay path panel: recent payments with hop paths.
+- Sliders (§16.6) + charts: share refused offline, caught at settlement, loss per cheater, time to settlement.
+
+### 18.5 Evals tab (Chalk add-on)
+
+- Run id, timestamp, dataset size, link to the Chalk run.
+- Rules-only vs. StormDesk table (§15.3) and a per-scenario breakdown; a "trap cases it got right" list with one example opened.
+- Empty state: "No eval run yet." Never placeholder numbers.
+
+### 18.6 Public proof page `/proof/:caseId`
+
+Mobile-friendly, no login. Shows the two tags, the rule, and a **Verify** button that runs WebCrypto ECDSA verification in the judge's browser against the holder key and the server-signed certificate. Explains in two sentences why this proves cheating.
+
+**Done when:** the full core demo runs with only dashboard clicks + phones, and every tab survives a page reload.
+
+---
+
+## 19. Mobile app
+
+### 19.1 Roles and setup
+
+Same app for everyone. First launch: choose **Resident** or **Merchant** (hidden demo menu can also assign a **demo label**: `MAYA`, `PHARMACY`, `GAS_STATION`). Setup needs internet: generate a P-256 key (software key in SecureStore; Secure Enclave timeboxed swap, §19.6), register, receive cert or merchant cert, download the latest policy.
+
+### 19.2 Screens
+
+| Screen | Role | Contents |
+|---|---|---|
+| Wallet | Resident | Big remaining balance ("$38 of $50 left"), cert status, Storm Mode toggle (online only), "Carrying N records", offline/online badge |
+| Pay | Resident | Camera scans REQ QR → "Pay Pharmacy $12.00" → Face ID → shows PAY QR |
+| Charge | Merchant | Keypad → shows REQ QR (2-min countdown) → "Scan customer's code" |
+| Scan payment | Merchant | Camera scans PAY QR → runs C1–C6 |
+| Result | Merchant | **Green:** "Verified. Backed by Capital One, $12 of $50 used." **Red:** names the failed check and rule, e.g. "Refused: these funds were already spent nearby (Rule: same counter). Certificate flagged." |
+| Records | Both | Carrying N items by kind, nearby peers, last sync, "Sync by QR" button, last upload + hops |
+| Demo menu (hidden: long-press logo) | Both | Demo label, demo topology on/off, **Judge mode**, reset local data, show device pub |
+
+### 19.3 Judge mode (attacker tool)
+
+Banner: **"Demo: attacker tool"**. Big red **Roll back wallet** with two modes:
+
+- **Reuse the money:** restore the wallet to before the last payment (same counter, same running total).
+- **Be clever:** restore, then skip the counter (counter +1 past the real one, running total from before the payment).
+
+Both produce payments that the gas station refuses via C6 (R1 or R2/R3), as long as it holds the pharmacy's tag. Copy explains: "This is what a modified app or a restored backup could do."
+
+### 19.4 Local stores (SQLite)
+
+| Table | Contents |
+|---|---|
+| `wallet` | cert versions, counter, cum, chain head, holder key ref |
+| `items` | every syncable item (§10.2): id, kind, body JSON, path, priority, received_at, receipted |
+| `device_log` | own DLOG entries |
+| `peers` | last seen peers, sessions |
+| `merchant_state` | open request (nonce, amount, expiry), merchant cert, limit |
+| `policy` | latest verified policy |
+
+### 19.5 Transport
+
+`transport/index.ts` exposes one interface; implementations: `multipeer` (expo-nearby-connections or `modules/sc-multipeer`) and `qr`.
+
+```ts
+interface Transport {
+  start(deviceLabel: string): Promise<void>;
+  onPeer(cb: (peer: Peer) => void): void;
+  open(peer: Peer): Promise<Channel>;     // runs §10.3 session
+  stop(): Promise<void>;
+}
+```
+
+- Advertise + browse while the app is foregrounded. Respect the demo topology allowlist.
+- Show peer connections on the Records screen and a small dot in the header.
+
+**Hour-1 test:** two iPhones in the hall discover and exchange a 2 KB message within 5 s, 5 times in a row. If not, write `modules/sc-multipeer` (Swift, ~150 lines: `MCPeerID`, `MCSession`, `MCNearbyServiceAdvertiser`, `MCNearbyServiceBrowser`, auto-invite and auto-accept within the allowlist) before anything else in the transport.
+
+### 19.6 Hardware keys (timeboxed 1 h, Saturday)
+
+Swap the software key for a Secure Enclave key (`kSecAttrTokenIDSecureEnclave`, ECDSA P-256, signs digests). Needs a small native module; DER → raw conversion helper. If not done in 1 h, stay on software keys and say so on stage.
+
+### 19.7 Performance
+
+- Payment QR end to end (scan REQ → Face ID → show PAY → merchant scans → result): **< 10 s**. Measure on Saturday.
+- Install **Release** builds Saturday night. Grant camera, local network, Bluetooth, Face ID during setup, never on stage.
+
+**Done when:** with all 3 phones in airplane mode (Wi-Fi and Bluetooth back on, no network joined), Maya pays the pharmacy, rolls back, and the gas station refuses, with the pharmacy's tag having reached it through Maya's phone.
+
+---
+
+## 20. Test vectors
+
+`spec/gen_vectors.py` (Python, `cryptography`) generates `spec/vectors.json` from **fixed private keys** (hard-coded test scalars) for: server, Maya (holder), Pharmacy, Gas Station, Corner Store.
+
+Each vector:
+
+```json
+{
+  "name": "tag_counter1",
+  "type": "TAG",
+  "fields": {"cert_id": "…hex…", "counter": 1, "...": "..."},
+  "canonical": "SC1|TAG|…",
+  "digest": "…hex…",
+  "pub": "…hex…",
+  "sig": "…hex (raw r||s, low-S)…",
+  "valid": true
+}
+```
+
+Required vectors:
+
+1. GEN, CERT v1, CERT v2 (Storm Mode), MCERT, REQ, DET, TAG counter 1, TAG counter 2, PAY.
+2. One **negative** vector per offline check C1–C6.
+3. One pair per equivocation rule R1, R2, R3, plus a valid 3-tag chain (no rule fires).
+4. R4 over-cap scenario (sequence of tags + caps).
+5. DLOG chain of 4 entries (ACCEPT, CONTACT, CONTACT, REFUSE) + a forked chain (R6) + a broken link (R6).
+6. R5 scenarios: (a) via `held_ids`, (b) via paired contact, (c) one-sided contact (must **not** fire R5).
+7. CONTACT id computed by both sides.
+8. POLICY, RCPT, RENEW.
+9. A high-S signature that must verify.
+10. A DER signature from Python converted to raw.
+
+Tests: `server/tests/test_vectors.py` and `mobile/src/protocol/__tests__/vectors.test.ts` both load `spec/vectors.json` and must reproduce every canonical string and digest byte for byte, verify every valid signature, reject every invalid vector, and agree on every rule outcome.
+
+**This is the first thing built (WS0).** Nothing else merges until both test files pass.
+
+---
+
+## 21. Demo: table, scripts, sponsor add-ons
+
+### 21.1 Table
+
+- 3 iPhones on stands, labeled **Maya**, **Pharmacy**, **Gas Station**, all on Release builds, chargers + power bank.
+- Mac 2: dashboard full screen (Accounts tab open). Second browser tab: proof page.
+- Mac 1: Telegram Desktop logged in as the **Corner Store owner**.
+- A printed **Proof QR card**.
+- Phones in airplane mode with Wi-Fi + Bluetooth on, no network joined. Gas Station has a hotspot or venue Wi-Fi ready for the reconnect beat.
+
+Pre-staged before each judging slot: `/v1/demo/reset`, Maya cert at Storm Mode $50, seeded town loaded, StormDesk replays ready.
+
+### 21.2 Core script (2:30, every judge)
+
+| Time | On screen / table | Say |
+|---|---|---|
+| 0:00 | Helene photo slide | "After Hurricane Helene, card readers in Asheville went dark and ATMs ran dry. A month later some shops were still cash-only. People had money in the bank and phones with battery, and still couldn't pay." |
+| 0:15 | Maya taps Storm Mode; Accounts tab: escrow $20 → $50, Nessie log line | "Capital One locks $50 of Maya's balance in escrow through Nessie, and our server signs her certificate. Her key never leaves her phone." |
+| 0:30 | Show airplane mode on all 3 phones | "Now everything is offline. No cell, no Wi-Fi network." |
+| 0:35 | Maya pays the Pharmacy $12 by QR → green | "No server. The pharmacy checks the bank's signature and Maya's, and sees it's backed: $12 of $50 used." |
+| 0:55 | Maya walks the phone past the Gas Station (topology: Pharmacy ↔ Maya ↔ Gas Station). Hand the judge Maya's phone → Judge mode → Roll back (reuse) | "Now you're Maya, and you're cheating. Roll your wallet back and spend the same money next door." |
+| 1:10 | Gas Station scans → **red**, names the rule. Offer "Be clever" → red again | "Refused, with no internet anywhere. Maya's phone carried the pharmacy's record here. Try the clever version: skip a counter. Also refused: the running total went backwards." |
+| 1:35 | Gas Station joins Wi-Fi → Accounts: Nessie log scrolls; relay path "Pharmacy → Maya → Gas Station → server · 2 hops" | "The gas station finds a signal and uploads its records and the pharmacy's, two hops away. The pharmacy is paid in Nessie. The certificate is frozen." |
+| 1:55 | Cases tab: two signatures; judge scans Proof QR and taps Verify on their own phone | "This isn't a fraud score. It's Maya's signature, twice, on the same money. Check it yourself." |
+| 2:10 | Town tab: "Your 3 phones are part of a 40-shop simulated town." StormDesk flag: Corner Store | "Our agent watches the whole town. It found a shop that went silent while taking guarantee-pool money." |
+| 2:25 | — | "Math flags. The agent investigates. A person decides." |
+
+### 21.3 Sponsor add-ons (30 s each, when that judge is at the table)
+
+| Judge | Show | Say |
+|---|---|---|
+| **Capital One** | Accounts tab: escrow, pool, merchant accounts, refund on close, call log, ledger balanced | "Every dollar moves through Nessie: escrow on Storm Mode, settlement to merchants, the guarantee pool above the escrow, and the refund on close. Here's every call." |
+| **Factory** | Cases → StormDesk: live step stream on a hard case, the Flag schema, the permission handler denying writes, README "Where Droid runs" | "Droid runs on every case and every suspicion in production. It re-verifies the proof itself, pulls the logs, and writes a structured proposal. It has no write tools; a person approves." |
+| **Chalk** | Evals tab: rules-only vs. StormDesk; a trap case it dismissed; `query_features` calls in the step stream | "The agent reads live features from Chalk: Nessie, phone logs, weather alerts. We evaluated it on labeled simulated towns with deliberate traps: here's what rules alone flag, and what the agent gets right." |
+| **Photon** | Approve the Corner Store flag → Mac 1 Telegram buzzes → type a reply → agent answers with evidence | "The merchant can argue back by text. The agent checks their claim against their own signed log, live." |
+| **Digital Trust** | "Merchant knew" case: Corner Store's own ACCEPT entry listing the conflicting tag | "We found an attack on our own system: a shop that plays dumb to get pool money. Its own signed log proves it knew." |
+
+### 21.4 Table version (90 s) and short-slot rule
+
+If judging slots are < 3 min, drop the Town beat from the core and show StormDesk only in sponsor add-ons.
+
+### 21.5 Backups
+
+1. Multipeer flaky → QR sync between phones (still offline).
+2. Live agent slow → replay stored transcript (labeled).
+3. Nessie down → queued payouts visible, ledger moving.
+4. Everything broken → 2-minute recorded video on Mac 2.
+
+---
+
+## 22. Build plan, cut order, checklists
+
+### 22.1 First hour (Friday, right after the opening ceremony)
+
+**Person A (Mac 1):**
+- [ ] Developer Mode on all 3 iPhones (restart)
+- [ ] Expo app shell with dev client builds and installs as Release on all 3 phones with free signing
+- [ ] `expo-nearby-connections` discovers + sends 2 KB between two iPhones in the hall, 5/5 times
+- [ ] **[v4.1]** Photon account + number (Photon workshop Fri 4–5 PM); Telegram on Mac 1 reaches a webhook through cloudflared
+
+**Person B (Mac 2):**
+- [ ] Repo created with this layout; this spec + CLAUDE.md committed
+- [ ] Hosted Postgres (Neon/Supabase) up; `schema.sql` applied
+- [ ] Nessie key works; two accounts; one transfer reaches `executed`
+- [ ] `droid` CLI logged in; `run(..., output=Model)` returns structured output; built-in tool ids listed
+- [ ] Chalk account (chalk.ai/hackharvard); evaluations quick start runs
+- [ ] Server signing key generated; public key pasted into `mobile/src/config.ts`
+
+**Claude (Mac 2):** WS0 protocol libs + `gen_vectors.py` + both vector test suites.
+
+### 22.2 Schedule
+
+| Block | Person A (mobile) | Person B (server/dash) | Claude sessions |
+|---|---|---|---|
+| **Fri 5–8 PM** | App shell, key, Face ID, QR show/scan, register flow | DB, `/register`, `/storm-mode` on Nessie, SSE skeleton | WS0 vectors (both languages) → WS2 settlement core |
+| **Fri 8 PM–1 AM** | Offline checks C1–C6, wallet + items + device_log stores, judge mode v1 | `/sync` + settlement + ledger + Nessie transfers; Accounts tab | WS2 cases + policy + R5/R6; WS4 simulator v1; WS3 dashboard skeleton |
+| **Sat 9 AM–1 PM** | Full offline pay flow on 3 phones; sync session over Multipeer | Cases tab + proof page; sponsor fair 10–12 (show Capital One, Factory, Chalk, Photon) | WS4 scenarios + seed-town; WS5 StormDesk worker + tools; WS6 Chalk features |
+| **Sat 1 PM** | **Decision:** Multipeer reliable in the hall? If not, QR sync now | | |
+| **Sat 1–6 PM** | Store-and-forward relay, demo topology, path metadata, upload | StormDesk panel + approvals; Town tab | WS6 eval dataset + first Chalk run; WS7 Photon notices + appeals |
+| **Sat 6 PM** | **Checkpoint:** core demo end to end. Apply cut order if behind. | | |
+| **Sat 6 PM–12 AM** | Judge mode both modes, Secure Enclave timebox (1 h), QR fallback | Evals tab, demo reset, replay mode, README | WS5 replays for planted cases; WS6 final eval run; WS7 appeal agent |
+| **Sat 12 AM** | **Feature freeze** | | |
+| **Sun 12–6 AM** | Release builds on all phones, permissions, rehearse, backup video **[v4.1]** | Devpost write-up, architecture image | README "Where Droid runs" / "How we use Chalk" drafts |
+| **Sun 6–8 AM** | Rehearse twice clean | Submit by 7:30 AM | — |
+
+### 22.3 Cut order (apply at Sat 6 PM checkpoint if behind)
+
+1. Photon voice
+2. Photon appeal agent (keep the one-way hold notice)
+3. `region_dark` + weather resolvers
+4. LLM-judge scorer
+5. Secure Enclave keys
+6. Two-hop demo topology (fall back to the gas station uploading its own + received items, 1 hop)
+7. Multipeer (fall back to QR sync)
+
+**Never cut:** offline pay, refusal C6, judge mode (both modes), Verify-it-yourself, Nessie settlement + Accounts tab, R5 merchant-knew, `merchant_silence` + StormDesk triage, one real Chalk eval run.
+
+### 22.4 Fallback table
+
+| Risk | Fallback | Switch |
+|---|---|---|
+| Multipeer unreliable | QR sync | Records → Sync by QR |
+| Hosted Postgres unreachable | Local Postgres on Mac 2; Chalk reads features via Postgres views exposed through the API tunnel or StormDesk uses `postgres_fallback` | `DATABASE_URL` |
+| Nessie down/slow | queued payouts + replay | automatic |
+| Droid slow or failing | replay stored transcripts | dashboard toggle |
+| Chalk eval task can't reach tunnel | run agent locally, upload outputs, score in Chalk | `chalk/evals/run_local.py` |
+| Photon webhook issues | outbound notice only; show the thread from the DB | config |
+| Venue Wi-Fi blocks server | phone hotspot for Mac 2 and the gas station | — |
+
+### 22.5 Saturday-night checklist
+
+- [ ] Release builds on all 3 phones; spare build plan documented
+- [ ] All permissions granted
+- [ ] Automatic time on before going offline
+- [ ] All demo Nessie customers and accounts pre-created
+- [ ] `seed-town 42` loaded; planted StormDesk runs replayable
+- [ ] Final Chalk eval run rendered on the Evals tab
+- [ ] Demo reset < 30 s, tested 3 times
+- [ ] 2-minute backup video recorded
+- [ ] README: pitch, setup, honest limits, "Where Droid runs", "How we use Chalk", "How we use Nessie", "How we use Photon"
+- [ ] Devpost skeleton + architecture image
+
+---
+
+## 23. Pitfalls
+
+- Hardware keys return DER; noble wants raw. One helper, tested by a vector.
+- Python and TypeScript render a field differently → digests differ. The vectors catch this; never skip them.
+- noble versions differ on prehash/lowS defaults → pin the version, test with vectors.
+- A permission prompt appears on stage. Grant everything during setup.
+- Debug builds are slow. Release builds Saturday night.
+- Multipeer needs the local-network permission and `NSBonjourServices`; without them, discovery silently fails.
+- Airplane mode turns Wi-Fi off. Turn Wi-Fi and Bluetooth back on, join nothing.
+- Clocks: automatic time on before going offline; 10-min tolerance.
+- QR too dense (PAY ≈ 600–800 chars): base64url already; if still slow, use a larger QR on screen, max brightness, error correction L, and drop optional fields. Measure Friday night.
+- Free signing: each phone may need its owner's Apple ID; never rebuild a demo phone after midnight without a known-good build.
+- Nessie at 9 AM Sunday may be slow. Everything pre-created Saturday.
+- Droid structured output failures are values, not exceptions: check `RunFailure.subtype`.
+- Chalk functions run remotely: they can't see localhost. Use the tunnel URL.
+- Simulated money must never hit Nessie.
+- Agent citations: validate server-side every time.
+- Battery: power bank, charge between rounds.
+
+---
+
+## 24. Judge Q&A (practice the first six word for word)
+
+1. **"Isn't this just UPI Lite X or e-CNY?"** Those prove people want offline payments and that caps work. They trust the phone and check for fraud later. We add backing the merchant can verify offline, double spends refused between phones, and signed proof, on ordinary iPhones.
+2. **"Can you actually stop double spending offline?"** Not perfectly; the Bank of England calls it the core trade-off. We stop it whenever a tag has reached the shop, cap it when one hasn't, and prove it at settlement every time.
+3. **"What if the cheater skips a counter?"** Their running total goes backwards, which is its own signed proof. We check three ways a chain can be inconsistent.
+4. **"Who eats the loss?"** Merchants are paid for payments they accepted. Escrow covers the first $50; above that the guarantee pool pays, funded by the bank as a program cost like card fraud. The cheater owes the pool, and the bank has their signatures. A merchant who knowingly accepted a double spend isn't paid by the pool, and their own log proves it.
+5. **"Shops are blocks apart. How does the second one hear about the first?"** Through customers' phones, which carry records shop to shop. Today Maya's phone does it: the pharmacy and gas station never connect directly.
+6. **"Why not a blockchain?"** Bitcoin stops double spends because the whole network agrees on one ledger. In a hurricane nobody can reach anybody. We kept the parts that work when the network is cut (per-account counters, gossip, refusing a spend you've seen, slashing-style proof) and dropped the part that needs everyone online.
+7. **"Isn't the AI deciding who's a fraudster?"** No. Math decides hard fraud. The agent investigates suspicions and proposes; a person approves. It can't move money, and every claim it makes must cite a real record or it's discarded.
+8. **"How good is the agent?"** Show the Evals tab: rules-only vs. agent on labeled simulated towns with deliberate traps. Quote only the numbers on screen.
+9. **"Maria lasted weeks. Doesn't 72 hours break this?"** Certificates renew through any phone that finds a signal, the same path that settles payments.
+10. **"Disasters with no warning?"** Everyone has a $20 always-on cap, renewed whenever they're online.
+11. **"Is it private?"** Phones share a pseudonymous id, amounts and running totals, never names or which shop was paid. Ids rotate per storm. Production encrypts relayed bundles to the server key.
+12. **"Isn't the rollback tool fake?"** It does what a modified app or a restored backup could do. Every offline system has to handle it.
+13. **"Stolen phone?"** Face ID per payment, the owner can text FREEZE from any phone, and the cert expires in 72 h without renewal.
+14. **"iPhones only sync with the app open?"** Yes, an honest limit today. The simulator shows how settlement time depends on how many people relay.
+15. **"Is this money transmission?"** Funds stay at the bank: escrow is the customer's own Capital One account, and merchants are paid by bank transfer. A real launch runs through the bank's licenses.
+
+---
+
+## 25. Glossary
+
+| Term | Meaning |
+|---|---|
+| Certificate (CERT) | Server-signed statement: this key may spend up to cap, backed by this escrow |
+| Version | A re-issue of the same cert_id (Storm Mode, renewal, close) |
+| Spend tag (TAG) | The resident's one signature per payment; the gossip record |
+| Chain | A wallet's tags linked by prev_hash, counter and running total |
+| Equivocation | Two tags under one cert that can't sit on one honest chain |
+| PROOF | A pair of equivocating tags; self-proving |
+| Device log (DLOG) | Each phone's signed, hash-chained record of accepts, refusals and contacts |
+| Contact | One sync session between two phones, logged by both |
+| Item | Anything that syncs phone to phone (§10.2) |
+| Relay / upload | A phone with internet posting carried items to the server |
+| Policy | Server-signed list of frozen certs and merchant limits |
+| Hard rule | Deterministic, provable fraud rule (R1–R6) |
+| Candidate | A detector's suspicion (soft) |
+| Flag | StormDesk's verdict on a candidate |
+| Guarantee pool | Operator account that pays accepted payments beyond a cheater's escrow |
+| Simulated | Data from the town simulator; always labeled |

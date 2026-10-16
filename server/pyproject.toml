@@ -1,0 +1,27 @@
+[project]
+name = "stormcash"
+version = "0.1.0"
+description = "StormCash server: settlement, ledger, Nessie, StormDesk, Photon"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "psycopg[binary,pool]>=3",
+    "cryptography",
+    "httpx",
+    "sse-starlette",
+    "pydantic>=2",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["stormcash*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

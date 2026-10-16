@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  server:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply schema.sql
+        run: psql postgresql://postgres:postgres@localhost:5432/postgres -v ON_ERROR_STOP=1 -f server/schema.sql
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install server
+        run: pip install -e "./server[dev]"
+      - name: Run tests
+        working-directory: server
+        # Exit code 5 means no tests were collected yet.
+        run: pytest || [ $? -eq 5 ]
+
+  mobile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: check
+        run: echo "exists=$([ -f mobile/package.json ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+      - if: steps.check.outputs.exists == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - if: steps.check.outputs.exists == 'true'
+        working-directory: mobile
+        run: npm ci && npm test --if-present
+
+  dashboard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: check
+        run: echo "exists=$([ -f dashboard/package.json ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+      - if: steps.check.outputs.exists == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - if: steps.check.outputs.exists == 'true'
+        working-directory: dashboard
+        run: npm ci && npm run build
