@@ -206,3 +206,36 @@ def test_upload_and_payment_events_are_published(world, deps, monkeypatch):
     upload = seen[-1][1]
     assert (upload["item_count"], upload["accepted"], upload["region_id"]) == (1, 1, "asheville-downtown")
     assert bytes(upload["device_pub"]) == pub(PHARMACY)
+
+
+def test_simulated_resident_paying_a_real_shop_never_touches_nessie(world, deps, fake_nessie):
+    """Pool money for a simulated resident's payment stays in the ledger even
+    though the shop and the pool have real Nessie accounts."""
+    sim_key = crypto.private_key_from_scalar(0x999)
+    _, cert, _ = registry.register_resident(deps, "Sim resident", pub(sim_key), "swannanoa", simulated=True)
+    from stormcash.protocol.objects import Det, Pay, Tag, genesis
+
+    det = Det(world.mcerts["pharmacy"].merchant_pub, b"\x09" * 16, 1)
+    tag = Tag(cert.cert_id, 1, genesis(cert.cert_id), 2000, 2000, det.digest()).signed(sim_key)
+    first = Pay(cert, tag, det)
+    det2 = Det(world.mcerts["pharmacy"].merchant_pub, b"\x0a" * 16, 2)
+    tag2 = Tag(cert.cert_id, 1, genesis(cert.cert_id), 1500, 1500, det2.digest()).signed(sim_key)
+    writes = nessie_writes(fake_nessie)
+    world.sync(PHARMACY, [first, Pay(cert, tag2, det2)])  # second one needs the pool
+    with deps.pool.connection() as conn:
+        sources = sorted((r["source"], r["status"]) for r in all_rows(conn, "SELECT * FROM payouts"))
+    assert sources == [("escrow", "ledger_only"), ("pool", "ledger_only")]
+    assert nessie_writes(fake_nessie) == writes
+
+
+def test_a_tag_is_receipted_only_once_its_pay_is_held(world, deps):
+    """PAY and TAG share an id: receipting the TAG early would make phones
+    delete the PAY before it reaches the server (§10.2)."""
+    pay = world.pay("pharmacy", 1200)
+    first = world.sync(MAYA, [pay.tag])  # Maya's wallet relays her own tag first
+    assert Rcpt.from_json(first["rcpt"]).item_ids == ()
+    with deps.pool.connection() as conn:
+        assert scalar(conn, "SELECT count(*) FROM tags") == 1
+    world.sync(GAS, [pay])  # the PAY arrives later through another relay
+    again = world.sync(MAYA, [pay.tag])
+    assert Rcpt.from_json(again["rcpt"]).item_ids == (pay.tag.tag_hash,)

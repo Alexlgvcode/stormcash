@@ -29,6 +29,11 @@ jobs:
         working-directory: server
         # Exit code 5 means no tests were collected yet.
         run: pytest || [ $? -eq 5 ]
+      - name: Install simulator
+        run: pip install -e ./sim
+      - name: Run simulator tests
+        working-directory: sim
+        run: pytest
 
   mobile:
     runs-on: ubuntu-latest

@@ -180,10 +180,12 @@ def check_merchant_knew(ctx, conn: psycopg.Connection, z: Tag, merchant: dict, d
     """R5 for payment z at merchant M. Opens the case (once) and suspends M's
     pool eligibility. Returns the case evidence when R5 holds."""
     merchant_pub = bytes(merchant["merchant_pub"])
+    tags = cert_tags(conn, z.cert_id)
+    if not any(x.tag_hash != z.tag_hash and rules.equivocation(x, z) for x in tags):
+        return None  # no conflicting tag: skip loading the logs
     t_accept = accept_time(conn, merchant_pub, z, det_ts)
     hit = rules.merchant_knew(
-        z, merchant_pub=merchant_pub, t_accept=t_accept, cert_tags=cert_tags(conn, z.cert_id),
-        logs=merchant_logs(conn, merchant_pub),
+        z, merchant_pub=merchant_pub, t_accept=t_accept, cert_tags=tags, logs=merchant_logs(conn, merchant_pub),
     )
     if hit is None:
         return None
@@ -247,10 +249,16 @@ def pair_contact(conn: psycopg.Connection, entry: Dlog) -> None:
     )
 
 
-def check_log(ctx, conn: psycopg.Connection, device_pub: bytes) -> None:
-    """R6 on a device's stored chain; a merchant loses pool eligibility."""
-    entries = [Dlog.from_json(r["body"]) for r in
-               all_rows(conn, "SELECT body FROM device_log WHERE device_pub = %s", (device_pub,))]
+def check_log(ctx, conn: psycopg.Connection, entry: Dlog) -> None:
+    """R6 around a newly stored entry; a merchant loses pool eligibility.
+
+    Only seq − 1, seq and seq + 1 can produce a new fork or broken link, so the
+    check stays O(1) per entry however long the log gets."""
+    device_pub = entry.device_pub
+    entries = [Dlog.from_json(r["body"]) for r in all_rows(
+        conn, "SELECT body FROM device_log WHERE device_pub = %s AND seq BETWEEN %s AND %s",
+        (device_pub, entry.seq - 1, entry.seq + 1),
+    )]
     finding = rules.log_tamper(entries)
     if finding is None:
         return

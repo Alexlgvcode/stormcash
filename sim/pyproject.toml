@@ -1,0 +1,19 @@
+[project]
+name = "stormcash-sim"
+version = "0.1.0"
+description = "StormCash town simulator (WS4): 40 shops through the real protocol and settlement code"
+requires-python = ">=3.11"
+dependencies = ["stormcash"]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["stormcash_sim*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

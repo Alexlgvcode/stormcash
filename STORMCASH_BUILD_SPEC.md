@@ -387,7 +387,7 @@ Field order below **is** the canonical order. JSON short key in brackets.
 
 #### PAY — payment (QR from payer to merchant; relayed to server)
 
-`{c: CERT(with sig), t: TAG(with sig), d: DET}`. A merchant stores the full PAY. Gossip carries only the TAG.
+`{c: CERT(with sig), t: TAG(with sig), d: DET}`. A merchant stores the full PAY. Gossip carries only the TAG. **[v4.3]** The PAY itself is relayed too (store-and-forward, §10.1), so a relay's upload can settle another shop's payment; production encrypts relayed bundles to the server key (§24 Q11).
 
 #### DLOG — device log entry [v4] (§9)
 
@@ -525,7 +525,7 @@ The device key is the holder key for residents and the merchant key for merchant
 | `CONTACT` | contact_id [`cid`] (bytes32), peer_pub [`pp`] (bytes33), sent_ids [`si`] (list of bytes8), recv_ids [`ri`] (list of bytes8), sent_overflow [`so`] (int), recv_overflow [`ro`] (int) |
 
 - Body keys sit in the same flat JSON object as the header (as in §12.2), with the signature in `sig`. Body fields of other kinds are absent.
-- `sent_ids` / `recv_ids` are the first 8 bytes of the item ids (§10.2) of **TAG and PROOF items only**, capped at 200 each. Anything beyond the cap is counted in `*_overflow`.
+- `sent_ids` / `recv_ids` are the first 8 bytes of the item ids (§10.2) of **TAG and PROOF items only**, capped at 200 each. Anything beyond the cap is counted in `*_overflow`. **[v4.3]** A PAY item counts as its TAG (same id).
 - `contact_id = SHA-256(canonical(CONTACT, pub_low, pub_high, nonce_low, nonce_high))`. The pubs are sorted bytewise; each side's HELLO nonce is ordered by its pub. Both sides compute the same id, so the server can pair the two logs of one meeting. The two pubs must differ.
 
 ### 9.3 Both sides log every contact
@@ -578,16 +578,18 @@ Every syncable thing is an **item**: `{kind, body, path}`.
 | `RENEW` | RENEW | canonical RENEW | 3 |
 | `TAG` | TAG | tag_hash | 4 |
 
-Note: `PAY` and `TAG` for one payment share an id on purpose: once a PAY is held, the TAG is redundant. "canonical X" means the object's digest without its signature. `id8` is the first 8 bytes of an item id.
+Note: `PAY` and `TAG` for one payment share an id on purpose: once a PAY is held, the TAG is redundant.
+
+**[v4.3] PAY supersedes TAG.** Because they share an id, a phone that holds only the TAG would never ask for the PAY, and the PAY could not travel past the shop (found by the simulator: two thirds of payments never reached the server). So: a phone holding only the TAG for an id still requests and stores the PAY, which replaces the TAG; and the server puts a TAG's id in a RCPT only once it holds the PAY, because a receipted id makes phones delete the PAY too. Until then the TAG is stored but not receipted, and phones keep carrying it. "canonical X" means the object's digest without its signature. `id8` is the first 8 bytes of an item id.
 
 `path` is **unsigned metadata**: an array of `[device_short_id, ts]` appended by each carrier. `device_short_id` = first 4 bytes of the device pub as hex. It is only for the dashboard's hop display, never for security.
 
 ### 10.3 Sync session (runs on every Multipeer connection; also over QR sync)
 
 ```
-1. HELLO      → {v:1, dp: device_pub, role, n: nonce16, pv: policy_ver, inv: [id8...] }
+1. HELLO      → {v:1, dp: device_pub, role, n: nonce16, pv: policy_ver, inv: [id8...], pays: [id8...] }   (pays [v4.3]: the inv ids held as PAY)
 2. HELLO      ← same from the peer
-3. WANT       → [id8 the peer has and I don't]  (both directions)
+3. WANT       → [id8 the peer has and I don't, plus ids in the peer's `pays` I hold only as TAG]  (both directions)
 4. ITEMS      → items for the requested ids, highest priority first, ≤ 64 KB per message, chunked
 5. DONE       → {}   both sides
 6. Each side appends one DLOG CONTACT entry (§9.2) and updates `path` on items it received.
@@ -1347,6 +1349,7 @@ One simulator feeds four things: the Town tab backdrop, StormDesk's data, the Ch
 - Python, in `sim/`, imports `server/stormcash/protocol` and calls `settlement.ingest_items()` directly. The town is checked by **exactly** the same code as the real phones.
 - Simulated entities generate real P-256 keys and real signatures. `simulated=true` on every row. Ledger-only money (no Nessie).
 - Deterministic by `--seed`. Virtual clock; a 72 h storm simulates in < 60 s.
+- **[v4.3] As built (`python -m stormcash_sim --seed 42 --hours 72`):** keys, cert ids and merchant ids are derived from the seed, so the same seed gives the same town byte for byte. Only adopters are modelled; residents make trips to shops and phones meet within 2 cells at a shop; shops don't link to each other directly (customers carry records, §24 Q5); a pair syncs at most once an hour; a carried item is dropped an hour after the server first had it (standing in for receipts gossiping down); POLICY travels as device state. A seed refuses to run twice into one database. The Deps must have Nessie off.
 - The UI labels every simulated shop and resident "simulated".
 
 ### 16.3 Town model
