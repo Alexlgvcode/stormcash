@@ -1,0 +1,90 @@
+// Canonical encoding (§7.2) and transport byte codecs (§7.3).
+// Byte fields are lowercase hex strings everywhere inside the app; base64url only on the wire.
+import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
+
+export type Hex = string;
+
+const HEX_RE = /^(?:[0-9a-f]{2})*$/;
+const ENUM_RE = /^[A-Z0-9_]+$/;
+
+export class EncodingError extends Error {}
+
+export function int(n: number): string {
+  if (!Number.isSafeInteger(n) || n < 0) throw new EncodingError(`invalid integer: ${n}`);
+  return String(n);
+}
+
+export function bytes(h: Hex, len?: number): string {
+  if (typeof h !== 'string' || !HEX_RE.test(h)) throw new EncodingError(`invalid hex: ${h}`);
+  if (len !== undefined && h.length !== len * 2) {
+    throw new EncodingError(`expected ${len} bytes, got ${h.length / 2}`);
+  }
+  return h;
+}
+
+export function str(s: string): string {
+  const n = s.normalize('NFC');
+  if (/[|,\n]/.test(n)) throw new EncodingError(`string contains a reserved character: ${s}`);
+  if ([...n].length > 48) throw new EncodingError(`string longer than 48 chars: ${s}`);
+  return n;
+}
+
+export function bytesList(list: Hex[], len?: number): string {
+  return list.map((h) => bytes(h, len)).sort().join(',');
+}
+
+// merchant_limits is a sorted list of plain strings ("<merchant_id_hex>:<cents>").
+export function strList(list: string[]): string {
+  return list.map(str).sort().join(',');
+}
+
+export function enumToken(t: string): string {
+  if (!ENUM_RE.test(t)) throw new EncodingError(`invalid enum token: ${t}`);
+  return t;
+}
+
+export function canonical(type: string, fields: string[]): string {
+  return ['SC1', type, ...fields].join('|');
+}
+
+export function sha256Hex(data: Uint8Array): Hex {
+  return bytesToHex(sha256(data));
+}
+
+export function digestOf(canonicalString: string): Hex {
+  return sha256Hex(utf8ToBytes(canonicalString));
+}
+
+// base64url without padding <-> hex
+
+const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+const B64_INDEX: Record<string, number> = Object.fromEntries([...B64].map((c, i) => [c, i]));
+
+export function hexToB64u(h: Hex): string {
+  const b = hexToBytes(bytes(h));
+  let out = '';
+  for (let i = 0; i < b.length; i += 3) {
+    const n = (b[i] << 16) | ((b[i + 1] ?? 0) << 8) | (b[i + 2] ?? 0);
+    const chars = Math.min(4, Math.ceil(((b.length - i) * 8) / 6));
+    for (let j = 0; j < chars; j++) out += B64[(n >> (18 - 6 * j)) & 63];
+  }
+  return out;
+}
+
+export function b64uToHex(s: string): Hex {
+  if (!/^[A-Za-z0-9_-]*$/.test(s) || s.length % 4 === 1) {
+    throw new EncodingError(`invalid base64url: ${s}`);
+  }
+  const out: number[] = [];
+  for (let i = 0; i < s.length; i += 4) {
+    const chunk = s.slice(i, i + 4);
+    let n = 0;
+    for (let j = 0; j < 4; j++) n = (n << 6) | (j < chunk.length ? B64_INDEX[chunk[j]] : 0);
+    const nBytes = chunk.length - 1;
+    for (let j = 0; j < nBytes; j++) out.push((n >> (16 - 8 * j)) & 255);
+  }
+  return bytesToHex(Uint8Array.from(out));
+}
+
+export { bytesToHex, hexToBytes };
