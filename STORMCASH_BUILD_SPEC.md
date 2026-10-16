@@ -1050,6 +1050,7 @@ All JSON. Byte fields base64url. Prefix `/v1`. Auth for demo: none on reads; res
 | `approval` | approval + executed actions |
 | `message` | Photon message in/out |
 | `upload` | device, items, hops |
+| `town` **[v4.3]** | `{seed, status, summary}` when seed-town finishes |
 
 ---
 
@@ -1103,6 +1104,8 @@ Default action: `dispatch_relay`.
 - One candidate per stretch: a new candidate is skipped if one for the same kind and subject overlaps its window. `region_dark`'s window is the dark stretch itself (from the last upload, or the region's first cert if there was none). A candidate with no flag is a queued StormDesk job.
 - `contacts_per_hour` counts distinct `contact_id`s the merchant is in, from either side's log. Neighbors are merchants within 3 grid cells (Euclidean). `pool_funded_share` = pool-funded payments ÷ accepted payments. `near_cap_share` compares `cum` with the cert's highest cap. `owner_freeze_request` is `false` until Photon FREEZE (WS7) exists.
 - Accepted payments are those `settled`, `held` or `denied_knowing`.
+- Store-and-forward data can arrive hours late, so a newly received pool-funded payment also re-checks its merchant's silence windows that contain it. `cap_drain` remembers which payments it has looked at (several uploads can land in the same second).
+- R5 loads only the log entries that can fire it (the merchant's ACCEPT for the payment, and the contacts whose id lists carry a conflicting tag), and per-entry re-checks are batched once per upload.
 
 ### 13.4 Why the agent adds value over the detectors
 
@@ -1383,12 +1386,21 @@ One simulator feeds four things: the Town tab backdrop, StormDesk's data, the Ch
 | `trap_clock_drift` | 2 | honest phone clock 8 min off | `none` (no hard rule fires; only noise) |
 | `trap_quiet_region` | 1 | region with no uploads for 48 h but few active certs and no alert | `none` or `info` |
 
+### 16.4a As built [v4.3]
+
+- Scripted double spends pay first at the Downtown Shelter, which is forced to upload, so the rolled-back re-spend elsewhere needs guarantee-pool money ($35 of a $50 cap: $20 from the pool). Organic double spenders roll back 1–3 shops later, up to twice; their phones relay nothing.
+- `colluder`: Corner Store (gossip + uplink off T+26–32 h) and one clustered shop (T+50–56 h); their app accepts what fails C2/C6 but logs honestly. The planted R5: a courier syncs with the Shelter, then with Corner Store (a paired contact carrying the tag), then the rolled-back wallet pays Corner Store, whose ACCEPT lists the tag in `held_ids` → MERCHANT_KNEW (clause a).
+- `stolen_phone`: an idle phone pays 3 West Asheville shops $15 + $15 + $13 in 8 minutes. `dark_region`: no uplink in Swannanoa T+6–66 h; the sim inserts the Flash Flood Warning as `source='replayed'`. `trap_remote_shop`: two West Asheville shops moved to the map edge. `trap_victim_shop`: shut 4 h first. `trap_stockup`: $15 + $14 + $13 right after Storm Mode. `trap_clock_drift`: +8 min. `trap_quiet_region`: Black Mountain without uplink from T+12 h, no alert.
+- `labels.json`: `{seed, start, hours, subjects: [{subject_type, subject_id, name, scenario, expected_kind, expected_action, hard_rules, note}]}`; `expected_kind` is a soft kind, `hard_case` or `none`.
+- `stats.json`: `double_spends` (attempts, refused offline, accepted offline, caught at settlement, shares, refusals by check), `cheaters`, `mean_loss_per_cheater_cents` (pool money paid on cheaters' certs ÷ cheaters), `median_hours_to_settlement`, `hops_histogram`, plus counts of candidates and cases.
+- Seed 42 (checked by `sim/tests/test_scenarios.py`): R1/R2/R3 cases, MERCHANT_KNEW at Corner Store, and `merchant_silence` (colluders and traps), `cap_drain` (stolen phones and stock-up traps) and `region_dark` (Swannanoa and the quiet-region trap) candidates, every one on a labeled subject; the honest town alone produces none.
+
 ### 16.5 Outputs
 
 - Writes everything into Postgres through `ingest_items()` (uploads happen when simulated relays get uplink).
 - `sim/out/<seed>/labels.json`: ground truth per subject.
 - `sim/out/<seed>/stats.json`: share of double spends refused offline, caught at settlement, mean loss per cheater, median time to settlement, hops histogram. These feed the Town tab charts.
-- `POST /v1/demo/seed-town {seed}` runs seed 42 into the live DB with the planted demo cases: **Corner Store** = colluder (with the real Photon handle), one stolen phone, `swannanoa` dark.
+- `POST /v1/demo/seed-town {seed}` runs seed 42 into the live DB with the planted demo cases: **Corner Store** = colluder (with the real Photon handle), one stolen phone, `swannanoa` dark. **[v4.3]** Operator header required; answers 202 and runs in the background (72 h ending now; Nessie off; simulated events go to a quiet broker), `GET /v1/demo/seed-town` reports `{status, progress, summary}`, and a `town` SSE event fires when it's done. Body: `{seed, hours, residents, corner_store_contact?: {channel, handle}}`. Against the hosted DB it is slower than the ~10 s locally: seed it ahead of judging.
 
 ### 16.6 Sliders (Town tab)
 

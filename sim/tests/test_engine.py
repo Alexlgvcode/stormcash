@@ -34,7 +34,7 @@ def db_facts(deps) -> dict:
 
 
 def test_short_town_writes_ledger_only_data(sim_deps):
-    summary = Sim(sim_deps, Params(seed=7, hours=8, residents=120, start=START)).run()
+    summary = Sim(sim_deps, Params(seed=7, hours=8, residents=120, start=START, scenarios=False)).run()
     facts = db_facts(sim_deps)
     assert summary["accepted"] > 50 and summary["contacts"] > 50 and summary["uploads"] > 0
     assert 0 < facts["payments"] <= summary["accepted"]
@@ -47,7 +47,7 @@ def test_short_town_writes_ledger_only_data(sim_deps):
 
 
 def test_same_seed_same_town(fresh_db):
-    runs = []
+    runs = []  # scenarios on: planting is deterministic too
     for i in range(2):
         name = f"{psycopg.conninfo.conninfo_to_dict(fresh_db)['dbname']}_r{i}"
         with psycopg.connect(ADMIN_URL, autocommit=True) as admin:
@@ -69,9 +69,9 @@ def test_same_seed_same_town(fresh_db):
 
 
 def test_a_seed_cannot_run_twice_into_one_database(sim_deps):
-    Sim(sim_deps, Params(seed=3, hours=1, residents=20, start=START)).run()
+    Sim(sim_deps, Params(seed=3, hours=1, residents=20, start=START, scenarios=False)).run()
     with pytest.raises(RuntimeError, match="already ran"):
-        Sim(sim_deps, Params(seed=3, hours=1, residents=20, start=START)).run()
+        Sim(sim_deps, Params(seed=3, hours=1, residents=20, start=START, scenarios=False)).run()
 
 
 def test_refuses_to_run_with_nessie(fresh_db):
@@ -83,10 +83,13 @@ def test_refuses_to_run_with_nessie(fresh_db):
         deps.pool.close()
 
 
-def test_72h_storm_in_under_60_seconds(sim_deps):
-    """Done-when for #21 (spec §16.2)."""
-    summary = Sim(sim_deps, Params(seed=42, hours=72, start=START)).run()
+def test_72h_honest_storm_in_under_60_seconds(sim_deps):
+    """Done-when for #21 (spec §16.2): an honest town opens no cases and no candidates."""
+    summary = Sim(sim_deps, Params(seed=42, hours=72, start=START, scenarios=False)).run()
     assert summary["wall_seconds"] < 60
     assert summary["accepted"] > 500
     assert summary["settled"] >= 0.95 * summary["accepted"]  # the last few may still be in transit
     assert db_facts(sim_deps)["unbalanced"] == 0
+    with sim_deps.pool.connection() as conn:
+        assert scalar(conn, "SELECT count(*) FROM cases") == 0
+        assert scalar(conn, "SELECT count(*) FROM candidates") == 0
