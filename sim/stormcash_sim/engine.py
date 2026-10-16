@@ -14,6 +14,10 @@ Simplifications, all deliberate:
   standing in for the RCPT spreading back down (§10.4).
 - POLICY travels as device state (the highest version wins on sync) rather than
   as items.
+
+Scenario behaviour (§16.4) plugs in through device windows (gossip off,
+uplink off, shop closed), clock offsets, lenient merchant apps, double
+spenders' wallets and scripted events; see scenarios.py.
 """
 
 from __future__ import annotations
@@ -24,6 +28,7 @@ import math
 import random
 import statistics
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from stormcash import registry
@@ -59,6 +64,7 @@ CARRY_AFTER_SERVER_S = 3600
 STORM_CAP_CENTS = 5000
 MIN_PAYMENT_CENTS = 300
 GOSSIP_KINDS = ("TAG", "PAY", "PROOF")
+LENIENT_SKIPS = ("C2", "C6")  # what a modified (colluding) merchant app ignores
 
 
 @dataclass
@@ -75,6 +81,7 @@ class Params:
     trip_every_min: float = 240.0
     pair_cooldown_min: int = 60
     start: int | None = None  # Unix seconds of T0; default: now − hours, on the hour
+    scenarios: bool = True  # plant the §16.4 scenarios and traps
 
 
 def derive_key(seed: int, name: str):
@@ -87,6 +94,10 @@ def derive_id(seed: int, name: str) -> bytes:
     return hashlib.sha256(f"stormcash-sim-id/{seed}/{name}".encode()).digest()[:16]
 
 
+def _in(windows: list[tuple[int, int]], tick: int) -> bool:
+    return any(start <= tick < end for start, end in windows)
+
+
 class Device:
     def __init__(self, idx: int, name: str, key, region: str, x: int, y: int, uplink_per_hour: float) -> None:
         self.idx, self.name, self.key, self.region, self.x, self.y = idx, name, key, region, x, y
@@ -96,8 +107,13 @@ class Device:
         self.carry: dict[bytes, Item] = {}  # item id -> item (with its path)
         self.tags: dict[bytes, dict[bytes, Tag]] = {}  # cert_id -> tag_hash -> tag
         self.policy: Policy | None = None
-        self.gossip_on = True
         self.p_uplink_tick = 1 - (1 - uplink_per_hour) ** (1 / 60)
+        self.clock_offset = 0  # seconds this phone's clock is off (trap_clock_drift)
+        self.gossip_off: list[tuple[int, int]] = []  # tick windows with Multipeer off
+        self.uplink_off: list[tuple[int, int]] = []  # tick windows with no internet
+
+    def gossip_on(self, tick: int) -> bool:
+        return not _in(self.gossip_off, tick)
 
     def hold(self, item: Item, item_key: bytes) -> None:
         self.carry.setdefault(item_key, item)
@@ -122,8 +138,9 @@ class Device:
         self.tags.setdefault(tag.cert_id, {})[tag.tag_hash] = tag
 
     def append_log(self, now: int, **fields) -> Dlog:
+        ts = now + self.clock_offset
         prev = self.log[-1].entry_hash if self.log else dlog_genesis(self.pub)
-        entry = Dlog(device_pub=self.pub, seq=len(self.log) + 1, prev_hash=prev, ts=now, **fields).signed(self.key)
+        entry = Dlog(device_pub=self.pub, seq=len(self.log) + 1, prev_hash=prev, ts=ts, **fields).signed(self.key)
         self.log.append(entry)
         self.hold(Item("DLOG", entry, ((self.short, now),)), entry.entry_hash)
         return entry
@@ -139,6 +156,17 @@ def _wants(d: Device, key: bytes, item: Item) -> bool:
 class Shop(Device):
     mcert: Mcert
 
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.lenient = False  # colluder: the app skips C2 and C6
+        self.closed: list[tuple[int, int]] = []  # tick windows the shop is shut (generator out)
+
+    def open(self, tick: int) -> bool:
+        return not _in(self.closed, tick)
+
+    def gossip_on(self, tick: int) -> bool:
+        return super().gossip_on(tick) and self.open(tick)
+
 
 class Resident(Device):
     def __init__(self, *args, **kwargs) -> None:
@@ -147,10 +175,32 @@ class Resident(Device):
         self.counter, self.head, self.cum = 0, b"", 0
         self.at_shop: Shop | None = None
         self.storm = False
+        self.role: str | None = None
+        self.scripted = False  # moves only when a scenario script says so
+        self.gossips_own_tags = True  # a cheating wallet keeps its tags to itself
+        self.cheats_left = 0  # organic double spender: rollbacks still to do
+        self.armed: dict | None = None  # {"snapshot", "countdown", "mode"}
 
     @property
     def remaining(self) -> int:
         return self.cert.cap_cents - self.cum
+
+    def snapshot(self) -> tuple[int, bytes, int]:
+        return self.counter, self.head, self.cum
+
+
+@dataclass
+class Attempt:
+    """One double-spend attempt (the rolled-back payment)."""
+
+    cheater: int
+    cert_id: bytes
+    tag_hash: bytes
+    shop: int
+    at: int
+    mode: str
+    scenario: str
+    refused: str | None  # failed check, or None if the shop accepted it
 
 
 @dataclass
@@ -164,6 +214,7 @@ class Stats:
     items_uploaded: int = 0
     pay_time: dict[bytes, int] = field(default_factory=dict)  # tag_hash -> accepted at
     settle_time: dict[bytes, int] = field(default_factory=dict)  # tag_hash -> first reached the server
+    attempts: list[Attempt] = field(default_factory=list)
 
 
 class Sim:
@@ -183,8 +234,11 @@ class Sim:
         self.server_tags: set[bytes] = set()  # TAGs stored without their PAY yet
         self.events: list[tuple[int, int, str, int]] = []
         self.seq = 0
+        self.scripts: dict[int, Callable[[int], None]] = {}
         self.last_sync: dict[tuple[int, int], int] = {}
         self.present: dict[int, list[Resident]] = {}  # shop idx -> residents there
+        self.plan = None  # scenarios.Plan once planted
+        self.progress: float | None = None  # share of ticks done, for the seed-town status
 
     # Setup -----------------------------------------------------------------------------
 
@@ -192,6 +246,10 @@ class Sim:
         p, rng = self.p, self.rng
         shop_specs = town.build_shops(rng, p.p_uplink, p.shelter_uplink)
         adopters = [r for r in town.build_residents(rng, p.residents) if rng.random() < p.adoption]
+        if p.scenarios:
+            from . import scenarios
+
+            shop_specs = scenarios.place_remote_shops(shop_specs)
         first_key = derive_key(p.seed, shop_specs[0].name)
         with self.deps.pool.connection() as conn:
             if scalar(conn, "SELECT 1 FROM merchants WHERE merchant_pub = %s",
@@ -201,7 +259,7 @@ class Sim:
         for spec in shop_specs:
             shop = Shop(len(self.devices), spec.name, derive_key(p.seed, spec.name), spec.region, spec.x, spec.y,
                         spec.uplink_per_hour)
-            merchant_id, mcert, _ = registry.register_merchant(
+            _, mcert, _ = registry.register_merchant(
                 self.deps, spec.name, shop.pub, spec.region, spec.x, spec.y, simulated=True, now=self.t0,
                 merchant_id=derive_id(p.seed, spec.name),
             )
@@ -221,15 +279,26 @@ class Sim:
             s.idx: [o for o in self.shops if town.distance(s.x, s.y, o.x, o.y) <= CONTACT_RANGE]
             for s in self.shops
         }
+        if p.scenarios:
+            from . import scenarios
+
+            self.plan = scenarios.plant(self)
         self._push(int(p.storm_at_h * 60), "storm", -1)
         for r in self.residents:
-            self._push(self._next_trip(0), "trip", r.idx)
+            if not r.scripted:
+                self._push(self._next_trip(0), "trip", r.idx)
 
     # Events ------------------------------------------------------------------------------
 
     def _push(self, tick: int, kind: str, idx: int) -> None:
         self.seq += 1
         heapq.heappush(self.events, (tick, self.seq, kind, idx))
+
+    def at(self, tick: int, fn: Callable[[int], None]) -> None:
+        """Run a scenario script at a tick (with the tick as argument)."""
+        self.seq += 1
+        self.scripts[self.seq] = fn
+        heapq.heappush(self.events, (tick, self.seq, "script", self.seq))
 
     def _local_minute(self, tick: int) -> int:
         return ((self.t0 + tick * TICK_S + LOCAL_UTC_OFFSET_S) // 60) % 1440
@@ -246,7 +315,13 @@ class Sim:
     def _now(self, tick: int) -> int:
         return self.t0 + tick * TICK_S
 
+    def tick_of(self, hours: float) -> int:
+        return int(hours * 60)
+
     def _handle(self, tick: int, kind: str, idx: int) -> None:
+        if kind == "script":
+            self.scripts.pop(idx)(tick)
+            return
         if kind == "storm":
             for r in self.residents:
                 if r.storm:
@@ -255,8 +330,11 @@ class Sim:
         r = self.devices[idx]
         assert isinstance(r, Resident)
         if kind == "trip":
-            weights = [1 / (1 + town.distance(r.x, r.y, s.x, s.y)) ** 2 for s in self.shops]
-            shop = self.rng.choices(self.shops, weights)[0]
+            if r.scripted:
+                return
+            shops = [s for s in self.shops if s.open(tick)]
+            weights = [1 / (1 + town.distance(r.x, r.y, s.x, s.y)) ** 2 for s in shops]
+            shop = self.rng.choices(shops, weights)[0]
             travel = max(2, math.ceil(town.distance(r.x, r.y, shop.x, shop.y) / 0.5))
             r.at_shop = None
             self._push(tick + travel, f"arrive:{shop.idx}", r.idx)
@@ -264,7 +342,7 @@ class Sim:
             shop = self.devices[int(kind.split(":")[1])]
             r.at_shop = shop
             self.present.setdefault(shop.idx, []).append(r)
-            self.pay(r, shop, self._now(tick))
+            self.visit(r, shop, tick)
             self._push(tick + self.rng.randint(5, 12), "leave", r.idx)
         elif kind == "leave":
             shop = r.at_shop
@@ -278,19 +356,61 @@ class Sim:
         dollars = min(45.0, max(3.0, self.rng.lognormvariate(math.log(12), 0.6)))
         return round(dollars * 100)
 
-    def pay(self, r: Resident, shop: Shop, now: int) -> None:
+    def visit(self, r: Resident, shop: Shop, tick: int) -> None:
+        """A resident at a shop pays; an organic double spender may roll back."""
+        now = self._now(tick)
+        if r.armed is not None:
+            r.armed["countdown"] -= 1
+            if r.armed["countdown"] <= 0:
+                armed, r.armed = r.armed, None
+                self.respend(r, shop, now, armed["snapshot"], armed["amount"], armed["mode"], "double_spender")
+                return
+        before = r.snapshot()
+        pay = self.pay(r, shop, now)
+        if pay is not None and r.cheats_left > 0 and r.cert.cap_cents == STORM_CAP_CENTS:
+            r.cheats_left -= 1
+            mode = "reuse" if r.idx % 2 == 0 else "skip"
+            r.armed = {"snapshot": before, "countdown": self.rng.randint(1, 3), "amount": pay.tag.amount_cents,
+                       "mode": mode}
+
+    def pay(self, r: Resident, shop: Shop, now: int, amount: int | None = None) -> Pay | None:
         """Maya-style payment by QR, checked by the shop with C1–C6 (§8.1, §8.2)."""
-        amount = min(self.amount_cents(), r.remaining)
+        amount = min(amount or self.amount_cents(), r.remaining)
         if amount < MIN_PAYMENT_CENTS:
             self.stats.out_of_money += 1
-            return
+            return None
+        tag, det, req = self._sign(r, shop, now, r.counter + 1, r.head, amount, r.cum + amount)
+        r.counter, r.head, r.cum = tag.counter, tag.tag_hash, tag.cum_cents
+        if r.gossips_own_tags:
+            r.hold(Item("TAG", tag, ((r.short, now),)), tag.tag_hash)  # the wallet keeps and gossips its tags
+        pay = Pay(r.cert, tag, det)
+        self.accept(shop, pay, req, now)
+        return pay
+
+    def respend(self, r: Resident, shop: Shop, now: int, snapshot: tuple[int, bytes, int], amount: int, mode: str,
+                scenario: str) -> rules.CheckResult:
+        """Spend money a rolled-back wallet already spent (§16.4 double_spender).
+        reuse: same counter again (R1). skip: jump a counter with the old
+        total, so the running total goes backwards (R3)."""
+        counter, head, cum = snapshot
+        if mode == "reuse":
+            tag, det, req = self._sign(r, shop, now, counter + 1, head, amount, cum + amount)
+        else:
+            fake_prev = hashlib.sha256(b"skip" + r.head).digest()
+            tag, det, req = self._sign(r, shop, now, r.counter + 2, fake_prev, amount, cum + amount)
+        r.counter, r.head, r.cum = tag.counter, tag.tag_hash, tag.cum_cents  # the rolled-back wallet goes on from here
+        result = self.accept(shop, Pay(r.cert, tag, det), req, now)
+        self.stats.attempts.append(Attempt(r.idx, r.cert.cert_id, tag.tag_hash, shop.idx, now, mode, scenario,
+                                           None if result.ok else result.check))
+        return result
+
+    def _sign(self, r: Resident, shop: Shop, now: int, counter: int, prev: bytes, amount: int,
+              cum: int) -> tuple[Tag, Det, Req]:
         nonce = self.rng.randbytes(16)
         req = Req(shop.mcert.merchant_id, amount, nonce, now + 120)
-        det = Det(shop.pub, nonce, now)
-        tag = Tag(r.cert.cert_id, r.counter + 1, r.head, amount, r.cum + amount, det.digest()).signed(r.key)
-        r.counter, r.head, r.cum = tag.counter, tag.tag_hash, tag.cum_cents
-        r.hold(Item("TAG", tag, ((r.short, now),)), tag.tag_hash)  # the wallet keeps and gossips its tags
-        self.accept(shop, Pay(r.cert, tag, det), req, now)
+        det = Det(shop.pub, nonce, now + r.clock_offset)
+        tag = Tag(r.cert.cert_id, counter, prev, amount, cum, det.digest()).signed(r.key)
+        return tag, det, req
 
     def accept(self, shop: Shop, pay: Pay, req: Req, now: int) -> rules.CheckResult:
         tag = pay.tag
@@ -300,19 +420,20 @@ class Sim:
             stored_tags=stored, now=now,
         )
         self.stats.payments += 1
-        if result.ok:
+        if result.ok or (shop.lenient and result.check in LENIENT_SKIPS):
             shop.hold(Item("PAY", pay, ((shop.short, now),)), tag.tag_hash)
+            # Logged honestly, even by a lenient app: held_ids lists what it held (§9.4 a).
             shop.append_log(now, kind="ACCEPT", tag_hash=tag.tag_hash, cert_id=tag.cert_id,
                             held_ids=tuple(t.tag_hash for t in stored))
             self.stats.accepted += 1
             self.stats.pay_time[tag.tag_hash] = now
-        else:
-            shop.append_log(now, kind="REFUSE", tag_hash=tag.tag_hash, cert_id=tag.cert_id, check=result.check)
-            if result.rule is not None:
-                proof = rules.make_proof(result.conflict, tag)
-                shop.hold(Item("PROOF", proof, ((shop.short, now),)), item_id("PROOF", proof))
-            shop.hold(Item("PAY", pay, ((shop.short, now),)), tag.tag_hash)  # kept as evidence
-            self.stats.refused[result.check] = self.stats.refused.get(result.check, 0) + 1
+            return rules.PASSED
+        shop.append_log(now, kind="REFUSE", tag_hash=tag.tag_hash, cert_id=tag.cert_id, check=result.check)
+        if result.rule is not None:
+            proof = rules.make_proof(result.conflict, tag)
+            shop.hold(Item("PROOF", proof, ((shop.short, now),)), item_id("PROOF", proof))
+        shop.hold(Item("PAY", pay, ((shop.short, now),)), tag.tag_hash)  # kept as evidence
+        self.stats.refused[result.check] = self.stats.refused.get(result.check, 0) + 1
         return result
 
     # Gossip and relays ---------------------------------------------------------------------------
@@ -324,8 +445,6 @@ class Sim:
 
     def sync(self, a: Device, b: Device, now: int) -> None:
         """One sync session (§10.3): exchange items, then both sides log CONTACT."""
-        if not (a.gossip_on and b.gossip_on):
-            return
         self._prune(a, now)
         self._prune(b, now)
         a_to_b = [(k, it) for k, it in a.carry.items() if _wants(b, k, it)]
@@ -359,9 +478,13 @@ class Sim:
             nearby_shops = self.neighbors[shop_idx]
             nearby = [r for s in nearby_shops for r in self.present.get(s.idx, ())]
             for r in here:
+                if not r.gossip_on(tick):
+                    continue
                 partners: list[Device] = [s for s in nearby_shops]
                 partners += [o for o in nearby if o.idx > r.idx]
                 for other in partners:
+                    if not other.gossip_on(tick):
+                        continue
                     pair = (min(r.idx, other.idx), max(r.idx, other.idx))
                     if tick - self.last_sync.get(pair, -cooldown) < cooldown:
                         continue
@@ -398,14 +521,16 @@ class Sim:
         ticks = self.p.hours * 60
         rng = self.rng
         for tick in range(ticks):
+            self.progress = tick / ticks
             while self.events and self.events[0][0] <= tick:
                 _, _, kind, idx = heapq.heappop(self.events)
                 self._handle(tick, kind, idx)
             self.meet(tick)
             now = self._now(tick)
             for d in self.devices:
-                if rng.random() < d.p_uplink_tick:
+                if rng.random() < d.p_uplink_tick and not _in(d.uplink_off, tick):
                     self.upload(d, now)
+        self.progress = 1.0
         return self.summary(time.monotonic() - started)
 
     def summary(self, wall_s: float) -> dict:
@@ -421,6 +546,7 @@ class Sim:
             "accepted": s.accepted,
             "refused": dict(sorted(s.refused.items())),
             "out_of_money": s.out_of_money,
+            "double_spend_attempts": len(s.attempts),
             "contacts": s.contacts,
             "uploads": s.uploads,
             "items_uploaded": s.items_uploaded,

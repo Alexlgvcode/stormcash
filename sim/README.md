@@ -22,7 +22,7 @@ python -m stormcash_sim --seed 42 --hours 72
 
 Options (spec §16.3 defaults): `--residents 400 --adoption 0.6 --storm-share 0.7 --storm-at-h 2 --p-link 0.6 --p-uplink 0.03 --shelter-uplink 0.5 --start <unix T0>`.
 
-It prints a summary (payments, contacts, uploads, median minutes for a payment to reach the server, wall time). A 72 h storm takes about 9 s against a local Postgres.
+It prints a summary (payments, contacts, uploads, double-spend attempts, median minutes for a payment to reach the server, wall time). A 72 h storm with every scenario takes about 10 s against a local Postgres.
 
 ## Model (v1, #21)
 
@@ -32,7 +32,13 @@ It prints a summary (payments, contacts, uploads, median minutes for a payment t
 - Phones within 2 cells at a shop sync with probability `p_link` (once per pair per hour): items exchange, both sides log CONTACT. Shops don't link to each other directly.
 - Each phone gets internet with probability `p_uplink` per hour (Shelter 0.5/h) and uploads through `ingest_items`.
 
-Scenarios, labels and stats come with #25.
+## Scenarios (#25)
+
+With `--scenarios` (the default), `scenarios.plant()` adds every §16.4 scenario and trap on top of the honest town: organic and scripted double spenders, the two colluders with the planted MERCHANT_KNEW at Corner Store, two stolen phones, Swannanoa dark during a replayed Flash Flood Warning, and the remote-shop, victim-shop, stock-up, clock-drift and quiet-region traps. `--no-scenarios` runs the honest town only (it produces no cases and no candidates).
+
+Each run writes `sim/out/<seed>/labels.json` (ground truth per subject, for the evals) and `stats.json` (double spends refused offline vs caught at settlement, mean loss per cheater, median hours to settlement, hops histogram). Spec §16.4a has the details.
+
+`POST /v1/demo/seed-town` runs the same thing inside the server, 72 h ending now (needs `pip install -e ./sim` in the server's environment).
 
 ## Tests
 

@@ -13,7 +13,7 @@ from psycopg.types.json import Jsonb
 from . import registry
 from .db import all_rows, one, scalar
 from .protocol import rules
-from .protocol.objects import Dlog, Policy, Tag, b64u_encode, proof_id
+from .protocol.objects import Dlog, Policy, Tag, b64u_encode, id8, proof_id
 
 EQUIVOCATION_RULES = (rules.SAME_COUNTER, rules.BROKEN_LINK, rules.TOTAL_BACKWARDS)
 POLICY_LOCK = 0x5C_9011C7  # pg_advisory_xact_lock key serializing POLICY versions
@@ -153,14 +153,27 @@ def check_over_cap(ctx, conn: psycopg.Connection, cert_id: bytes) -> None:
 # R5 --------------------------------------------------------------------------------
 
 
-def merchant_logs(conn: psycopg.Connection, merchant_pub: bytes) -> list[Dlog]:
-    """M's ACCEPT and CONTACT entries plus every peer CONTACT entry naming M."""
+def merchant_logs(conn: psycopg.Connection, merchant_pub: bytes, z: Tag, conflicts: list[Tag]) -> list[Dlog]:
+    """The log entries R5 can use for payment z at merchant M: M's ACCEPT
+    entries for z, and both sides' CONTACT entries of every contact whose id
+    lists carry a conflicting tag's id8. Other entries can't make R5 fire, so
+    rules.merchant_knew gives the same answer on this subset as on every log."""
+    x8s = [id8(x.tag_hash) for x in conflicts]
+    contact_ids = [
+        b64u_encode(bytes(r["contact_id"]))
+        for r in all_rows(
+            conn,
+            """SELECT DISTINCT contact_id FROM contacts
+               WHERE (device_pub = %s AND recv_ids && %s::bytea[]) OR (peer_pub = %s AND sent_ids && %s::bytea[])""",
+            (merchant_pub, x8s, merchant_pub, x8s),
+        )
+    ]
     rows = all_rows(
         conn,
-        """SELECT body FROM device_log WHERE device_pub = %s AND kind IN ('ACCEPT', 'CONTACT')
+        """SELECT body FROM device_log WHERE device_pub = %s AND kind = 'ACCEPT' AND body->>'th' = %s
            UNION ALL
-           SELECT body FROM device_log WHERE kind = 'CONTACT' AND device_pub <> %s AND body->>'pp' = %s""",
-        (merchant_pub, merchant_pub, b64u_encode(merchant_pub)),
+           SELECT body FROM device_log WHERE kind = 'CONTACT' AND body->>'cid' = ANY(%s)""",
+        (merchant_pub, b64u_encode(z.tag_hash), contact_ids),
     )
     return [Dlog.from_json(r["body"]) for r in rows]
 
@@ -181,11 +194,13 @@ def check_merchant_knew(ctx, conn: psycopg.Connection, z: Tag, merchant: dict, d
     pool eligibility. Returns the case evidence when R5 holds."""
     merchant_pub = bytes(merchant["merchant_pub"])
     tags = cert_tags(conn, z.cert_id)
-    if not any(x.tag_hash != z.tag_hash and rules.equivocation(x, z) for x in tags):
+    conflicts = [x for x in tags if x.tag_hash != z.tag_hash and rules.equivocation(x, z)]
+    if not conflicts:
         return None  # no conflicting tag: skip loading the logs
     t_accept = accept_time(conn, merchant_pub, z, det_ts)
     hit = rules.merchant_knew(
-        z, merchant_pub=merchant_pub, t_accept=t_accept, cert_tags=tags, logs=merchant_logs(conn, merchant_pub),
+        z, merchant_pub=merchant_pub, t_accept=t_accept, cert_tags=tags,
+        logs=merchant_logs(conn, merchant_pub, z, conflicts),
     )
     if hit is None:
         return None

@@ -62,6 +62,7 @@ class _Ctx:
     certs: list[Cert] = field(default_factory=list)
     moves: list[uuid.UUID] = field(default_factory=list)
     events: list[tuple[str, dict]] = field(default_factory=list)
+    recheck: set[bytes] = field(default_factory=set)  # devices whose payments need R5 again
 
 
 # Lookups ---------------------------------------------------------------------------
@@ -173,10 +174,10 @@ def handle_dlog(ctx: _Ctx, conn: psycopg.Connection, item: Item) -> None:
         cases.pair_contact(conn, entry)
     cases.check_log(ctx, conn, entry)
     # New log evidence may show a merchant knew (§11.2 step 5): the device itself,
-    # or the merchant a peer's CONTACT entry names.
-    cases.recheck_merchant_payments(ctx, conn, entry.device_pub)
+    # or the merchant a peer's CONTACT entry names. Re-checked once per upload.
+    ctx.recheck.add(entry.device_pub)
     if entry.kind == "CONTACT":
-        cases.recheck_merchant_payments(ctx, conn, entry.peer_pub)
+        ctx.recheck.add(entry.peer_pub)
 
 
 def handle_renew(ctx: _Ctx, conn: psycopg.Connection, item: Item) -> None:
@@ -375,6 +376,11 @@ def ingest_items(
             dropped += 1
             continue
         (tag_ids if item.kind == "TAG" else accepted).append(item.id)
+
+    if ctx.recheck:
+        with deps.pool.connection() as conn:
+            for device in sorted(ctx.recheck):
+                cases.recheck_merchant_payments(ctx, conn, device)
 
     with deps.pool.connection() as conn:
         # A TAG shares its id with its PAY (§10.2). Receipting the id before the

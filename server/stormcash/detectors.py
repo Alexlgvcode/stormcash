@@ -37,8 +37,10 @@ class DetectorState:
     """Per-process progress: the last evaluated hour and payment."""
 
     last_hour: int | None = None
-    last_payment_received: int | None = None
-    published: list[dict] = field(default_factory=list)
+    last_run: int | None = None
+    # Payments cap_drain already looked at (tag_hash -> received). Several
+    # uploads can land in the same second, so time alone can't be the cursor.
+    seen: dict[bytes, int] = field(default_factory=dict)
 
 
 def _insert(conn: psycopg.Connection, kind: str, subject_id: str, window_start: int, window_end: int,
@@ -62,7 +64,8 @@ def _insert(conn: psycopg.Connection, kind: str, subject_id: str, window_start: 
 # merchant_silence (§13.1) ---------------------------------------------------------------
 
 
-def merchant_silence(conn: psycopg.Connection, window_end: int) -> list[dict]:
+def merchant_silence(conn: psycopg.Connection, window_end: int, only: set[bytes] | None = None) -> list[dict]:
+    """Evaluate the 6 h window ending at window_end (for `only` these merchants)."""
     ws, we = window_end - SILENCE_WINDOW_S, window_end
     hours = SILENCE_WINDOW_S / HOUR
     merchants = all_rows(conn, "SELECT merchant_id, merchant_pub, x, y FROM merchants")
@@ -96,6 +99,8 @@ def merchant_silence(conn: psycopg.Connection, window_end: int) -> list[dict]:
     out = []
     for m in merchants:
         mid = bytes(m["merchant_id"])
+        if only is not None and mid not in only:
+            continue
         stats = pay.get(mid)
         if stats is None or stats["pool_funded_count"] < 1:
             continue  # can't fire without pool money in the window
@@ -263,22 +268,37 @@ def run_incremental(deps, now: int) -> list[dict]:
 
     cap_drain looks at payments received since the last run; merchant_silence
     and region_dark run once per hour boundary passed (catching up on missed
-    hours), so they cost nothing on most uploads."""
+    hours), so they cost nothing on most uploads. Store-and-forward data can
+    arrive hours late, so a newly received pool-funded payment also re-checks
+    the silence windows (of its merchant) that contain it."""
     state: DetectorState = deps.detector_state
     created: list[dict] = []
     with deps.pool.connection() as conn:
-        since = state.last_payment_received if state.last_payment_received is not None else now - HOUR
-        for p in all_rows(
+        since = state.last_run if state.last_run is not None else now - HOUR
+        late: dict[int, set[bytes]] = {}  # window_end -> merchants to re-check
+        rows = all_rows(
             conn,
-            """SELECT DISTINCT cert_id, device_ts FROM payments
-               WHERE received_at > to_timestamp(%s) AND received_at <= to_timestamp(%s) AND status = ANY(%s)
-               ORDER BY device_ts""",
+            """SELECT cert_id, device_ts, merchant_id, funded_pool_cents, tag_hash,
+                      extract(epoch FROM received_at)::bigint AS received
+               FROM payments
+               WHERE received_at >= to_timestamp(%s) AND received_at <= to_timestamp(%s) AND status = ANY(%s)
+               ORDER BY device_ts, tag_hash""",
             (since, now, list(ACCEPTED)),
-        ):
+        )
+        new = [p for p in rows if bytes(p["tag_hash"]) not in state.seen]
+        for p in new:
+            state.seen[bytes(p["tag_hash"])] = p["received"]
             row = cap_drain_for_payment(conn, bytes(p["cert_id"]), p["device_ts"])
             if row:
                 created.append(row)
-        state.last_payment_received = now
+            if p["funded_pool_cents"] > 0:
+                first_end = (p["device_ts"] // HOUR + 1) * HOUR
+                for end in range(first_end, min(first_end + SILENCE_WINDOW_S, now // HOUR * HOUR + 1), HOUR):
+                    late.setdefault(end, set()).add(bytes(p["merchant_id"]))
+        state.last_run = now
+        state.seen = {h: t for h, t in state.seen.items() if t >= since}  # only the look-back needs them
+        for end in sorted(late):
+            created += merchant_silence(conn, end, only=late[end])
 
         hour = now // HOUR
         first = hour if state.last_hour is None else max(state.last_hour + 1, hour - MAX_CATCHUP_HOURS)

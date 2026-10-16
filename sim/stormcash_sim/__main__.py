@@ -15,6 +15,7 @@ import json
 from stormcash.app import build_deps
 from stormcash.config import load_settings
 
+from . import outputs
 from .engine import Params, Sim
 
 
@@ -23,6 +24,9 @@ def main() -> None:
     ap = argparse.ArgumentParser(prog="stormcash_sim", description=__doc__.split("\n\n")[0])
     for f in dataclasses.fields(Params):
         flag = "--" + f.name.replace("_", "-")
+        if f.type == "bool":
+            ap.add_argument(flag, action=argparse.BooleanOptionalAction, default=getattr(defaults, f.name))
+            continue
         kind = int if f.type in ("int", "int | None") else float
         ap.add_argument(flag, type=kind, default=getattr(defaults, f.name))
     ap.add_argument("--database-url", help="override DATABASE_URL")
@@ -35,7 +39,11 @@ def main() -> None:
     deps = build_deps(dataclasses.replace(settings, **overrides))
     params = Params(**{f.name: getattr(args, f.name) for f in dataclasses.fields(Params)})
     try:
-        print(json.dumps(Sim(deps, params).run(), indent=2))
+        sim = Sim(deps, params)
+        summary = sim.run()
+        folder = outputs.write(sim, summary)
+        print(json.dumps(summary, indent=2))
+        print(f"wrote {folder}/labels.json and stats.json")
     finally:
         deps.pool.close()
 
