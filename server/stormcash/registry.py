@@ -174,10 +174,12 @@ def register_resident(
     *,
     simulated: bool = False,
     now: int | None = None,
+    cert_id: bytes | None = None,
 ) -> tuple[uuid.UUID, Cert, bool]:
     """Create a resident, Nessie checking ($500) + escrow ($0), lock $20 and
     issue cert v1 (cap $20). Returns (resident_id, cert, created); registering
-    the same holder_pub again returns the existing resident and latest cert."""
+    the same holder_pub again returns the existing resident and latest cert.
+    `cert_id` is only for the seeded simulator; phones always get a random one."""
     now = _now(now)
     display_name = _string(display_name, "display_name")
     region_id = _string(region_id, "region_id") or None
@@ -190,7 +192,7 @@ def register_resident(
         _check_region(conn, region_id)
 
     resident_id = uuid.uuid4()
-    cert_id = crypto.random_id()
+    cert_id = cert_id or crypto.random_id()
     real = not simulated and deps.nessie is not None
     customer_id = checking_id = escrow_id = None
     if real:
@@ -258,8 +260,10 @@ def register_merchant(
     *,
     simulated: bool = False,
     now: int | None = None,
+    merchant_id: bytes | None = None,
 ) -> tuple[bytes, Mcert, bool]:
-    """Create a merchant (+ a $0 Nessie account for real ones) and issue an MCERT."""
+    """Create a merchant (+ a $0 Nessie account for real ones) and issue an MCERT.
+    `merchant_id` is only for the seeded simulator."""
     now = _now(now)
     display_name = _string(display_name, "display_name")
     region_id = _string(region_id, "region_id") or None
@@ -281,7 +285,7 @@ def register_merchant(
         except NessieError as exc:
             raise Unavailable(f"Nessie unavailable ({exc}); retry, or set NESSIE_DISABLED=1") from exc
 
-    merchant_id = crypto.random_id()
+    merchant_id = merchant_id or crypto.random_id()
     with deps.pool.connection() as conn:
         row = one(
             conn,

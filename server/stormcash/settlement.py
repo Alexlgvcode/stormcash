@@ -17,7 +17,7 @@ import psycopg
 from psycopg.types.json import Jsonb
 
 from . import cases, ledger, registry
-from .db import one, scalar
+from .db import all_rows, one, scalar
 from .deps import Deps
 from .nessie import MoneyMover, is_whole_dollars
 from .protocol import rules
@@ -38,8 +38,9 @@ class SyncResult:
     rcpt: Rcpt
     policy: Policy
     certs: list[Cert]
-    accepted: list[bytes]
+    accepted: list[bytes]  # ids in the RCPT
     dropped: int
+    unreceipted: list[bytes] = field(default_factory=list)  # stored TAGs whose PAY the server lacks
 
     def to_json(self) -> dict:
         return {
@@ -167,7 +168,7 @@ def handle_dlog(ctx: _Ctx, conn: psycopg.Connection, item: Item) -> None:
             (entry.contact_id, entry.device_pub, entry.peer_pub, entry.ts, list(entry.sent_ids), list(entry.recv_ids)),
         )
         cases.pair_contact(conn, entry)
-    cases.check_log(ctx, conn, entry.device_pub)
+    cases.check_log(ctx, conn, entry)
     # New log evidence may show a merchant knew (§11.2 step 5): the device itself,
     # or the merchant a peer's CONTACT entry names.
     cases.recheck_merchant_payments(ctx, conn, entry.device_pub)
@@ -307,7 +308,8 @@ def fund_payment(
             resident["escrow_account_id"] if source == "escrow" and resident_real
             else settings.nessie_pool_account_id if source == "pool" else None
         )
-        use_nessie = bool(merchant_real and nessie_from and is_whole_dollars(cents))
+        # Simulated money never touches Nessie (§11.4), even when paid to a real shop.
+        use_nessie = bool(merchant_real and resident_real and nessie_from and is_whole_dollars(cents))
         payout_id = scalar(
             conn,
             """INSERT INTO payouts (tag_hash, merchant_id, amount_cents, source, status)
@@ -359,6 +361,7 @@ def ingest_items(
     now = int(time.time()) if now is None else now
     ctx = _Ctx(deps, device_pub, now, simulated)
     accepted: list[bytes] = []
+    tag_ids: list[bytes] = []
     for item in sorted(items, key=lambda it: KIND_ORDER[it.kind]):
         try:
             with deps.pool.connection() as conn:
@@ -366,9 +369,16 @@ def ingest_items(
         except (InvalidItem, EncodingError):
             dropped += 1
             continue
-        accepted.append(item.id)
+        (tag_ids if item.kind == "TAG" else accepted).append(item.id)
 
     with deps.pool.connection() as conn:
+        # A TAG shares its id with its PAY (§10.2). Receipting the id before the
+        # PAY arrives would make phones delete the PAY, so a TAG is receipted
+        # only once the server holds the payment.
+        paid = {bytes(r["tag_hash"]) for r in all_rows(
+            conn, "SELECT tag_hash FROM payments WHERE tag_hash = ANY(%s)", (tag_ids,))} if tag_ids else set()
+        unreceipted = [t for t in tag_ids if t not in paid]
+        accepted += [t for t in tag_ids if t in paid]
         policy = current_policy(conn, deps.server_key, now)
         upload = one(
             conn,
@@ -387,4 +397,4 @@ def ingest_items(
         deps.events.publish(event, data)
     hops = max((len(it.path) - 1 for it in items if it.kind == "PAY"), default=0)
     deps.events.publish("upload", {**upload, "accepted": len(accepted), "dropped": dropped, "hops": max(0, hops)})
-    return SyncResult(rcpt, policy, ctx.certs, accepted, dropped)
+    return SyncResult(rcpt, policy, ctx.certs, accepted, dropped, unreceipted)
