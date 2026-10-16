@@ -1,7 +1,7 @@
 // This device's signed, hash-chained log (§9.2). Every entry is also an item so it syncs.
 import { dlogGenesis, dlogHash, signDlog, type Dlog, type Hex } from '../protocol';
 import { getDb } from './db';
-import { nowS, putItem } from './items';
+import { nowS, originHop, putItem } from './items';
 
 type DlogBody =
   | Pick<Extract<Dlog, { kind: 'ACCEPT' }>, 'kind' | 'tag_hash' | 'cert_id' | 'held_ids'>
@@ -25,7 +25,7 @@ export function appendLog(body: DlogBody, devicePub: Hex, priv: Hex, ts = nowS()
       'INSERT INTO device_log (seq, entry_hash, kind, entry_json, ts) VALUES (?, ?, ?, ?, ?)',
       seq, dlogHash(entry), entry.kind, JSON.stringify(entry), ts,
     );
-    putItem('DLOG', entry, [], ts);
+    putItem('DLOG', entry, originHop(devicePub, ts), ts);
   });
   return entry;
 }

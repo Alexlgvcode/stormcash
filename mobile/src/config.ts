@@ -6,3 +6,7 @@ export const SERVER_PUB = '030c300f1f00882c4c6f7baada7cd83243b1a84821eacb4dd450c
 export const DEFAULT_API_BASE = 'http://localhost:8000';
 
 export const DEMO_REGION = 'asheville-downtown';
+
+// Where the device private key lives (SecureStore item name); recorded in the wallet store.
+export const KEY_NAME = 'stormcash.device_priv';
+export const KEY_REF = 'securestore:' + KEY_NAME;

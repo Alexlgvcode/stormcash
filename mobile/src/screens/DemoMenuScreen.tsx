@@ -7,11 +7,11 @@ import { useNav } from '../nav';
 import {
   getDemoLabel, getRole, getServerPub, setDemoLabel, setServerPub, type DemoLabel,
 } from '../settings';
-import { getSetting, resetDb, setSetting } from '../store/db';
+import { isTopologyOn } from '../demo/topology';
+import { resetDb, setSetting } from '../store/db';
+import { syncManager } from '../sync/manager';
 
 const LABELS: DemoLabel[] = ['MAYA', 'PHARMACY', 'GAS_STATION'];
-
-export const isTopologyOn = (): boolean => getSetting('demo_topology') === '1';
 
 export function DemoMenuScreen() {
   const nav = useNav();
@@ -19,9 +19,11 @@ export function DemoMenuScreen() {
   const [topology, setTopology] = useState(isTopologyOn());
   const [serverPub, setServerPubState] = useState(getServerPub());
 
-  const pickLabel = (l: DemoLabel) => {
+  const pickLabel = async (l: DemoLabel) => {
     setDemoLabel(l);
     setLabel(l);
+    await syncManager.stop(); // peers see the new name after a restart
+    await syncManager.start();
   };
 
   const toggleTopology = () => {
@@ -35,6 +37,7 @@ export function DemoMenuScreen() {
       {
         text: 'Reset', style: 'destructive',
         onPress: async () => {
+          await syncManager.stop();
           resetDb();
           await deleteDeviceKey();
           await getDeviceKey();

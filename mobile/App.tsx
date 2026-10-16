@@ -5,11 +5,13 @@ import { getDeviceKey } from './src/keys';
 import { NavContext, type Nav, type Route } from './src/nav';
 import { getRole } from './src/settings';
 import { getDb } from './src/store/db';
+import { syncManager } from './src/sync/manager';
 import { ChargeScreen } from './src/screens/ChargeScreen';
 import { DemoMenuScreen } from './src/screens/DemoMenuScreen';
 import { JudgeModeScreen } from './src/screens/JudgeModeScreen';
 import { MerchantHomeScreen } from './src/screens/MerchantHomeScreen';
 import { PayScreen } from './src/screens/PayScreen';
+import { RecordsScreen } from './src/screens/RecordsScreen';
 import { ResultScreen } from './src/screens/ResultScreen';
 import { SetupScreen } from './src/screens/SetupScreen';
 import { WalletScreen } from './src/screens/WalletScreen';
@@ -30,6 +32,12 @@ export default function App() {
     refresh: () => setVersion((v) => v + 1),
   }), []);
 
+  // Advertise + browse while the app is open, once this phone is registered (§19.5).
+  const role = ready ? getRole() : null;
+  useEffect(() => {
+    if (role) syncManager.start();
+  }, [role]);
+
   const render = useCallback(() => {
     const role = getRole();
     if (!role || route.name === 'setup') return <SetupScreen />;
@@ -38,6 +46,8 @@ export default function App() {
         return <PayScreen />;
       case 'charge':
         return <ChargeScreen />;
+      case 'records':
+        return <RecordsScreen />;
       case 'demo':
         return <DemoMenuScreen />;
       case 'judge':

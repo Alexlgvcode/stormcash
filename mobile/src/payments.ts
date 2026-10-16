@@ -6,7 +6,7 @@ import {
   type CheckResult, type Det, type Hex, type MCert, type Pay, type PaymentRequest, type Req, type Tag,
 } from './protocol';
 import { appendLog } from './store/devicelog';
-import { putItem, tagsForCert } from './store/items';
+import { originHop, putItem, tagsForCert } from './store/items';
 import { openRequest, setOpenRequest } from './store/merchant';
 import { currentPolicy } from './store/policy';
 import { commitPayment, latestCert, walletState } from './store/wallet';
@@ -106,7 +106,7 @@ export function receivePayment(qr: string, mc: MCert, keys: Keys, serverPub: Hex
   }
 
   if (result.ok) {
-    putItem('PAY', pay, [], now);
+    putItem('PAY', pay, originHop(keys.pub, now), now);
     appendLog({
       kind: 'ACCEPT', tag_hash: th!, cert_id: pay.t.cert_id,
       held_ids: held.map(tagHash).filter((h) => h !== th),
@@ -114,9 +114,9 @@ export function receivePayment(qr: string, mc: MCert, keys: Keys, serverPub: Hex
     setOpenRequest(null);
   } else if (th) {
     if (result.check === 'C6') {
-      putItem('PAY', pay, [], now); // evidence
+      putItem('PAY', pay, originHop(keys.pub, now), now); // evidence
       const proof = result.conflict ? makeProof(result.conflict, pay.t) : null;
-      if (proof) putItem('PROOF', proof, [], now);
+      if (proof) putItem('PROOF', proof, originHop(keys.pub, now), now);
     }
     appendLog({ kind: 'REFUSE', tag_hash: th, cert_id: pay.t.cert_id, check: result.check }, keys.pub, keys.priv, now);
   }

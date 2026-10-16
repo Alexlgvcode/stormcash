@@ -2,8 +2,8 @@
 import * as SecureStore from 'expo-secure-store';
 import { newPrivateKey, publicKeyOf, type Hex } from './protocol';
 
-const KEY_NAME = 'stormcash.device_priv';
-export const KEY_REF = 'securestore:' + KEY_NAME;
+import { KEY_NAME } from './config';
+export { KEY_REF } from './config';
 
 export interface DeviceKey { priv: Hex; pub: Hex }
 
@@ -33,4 +33,4 @@ export async function deleteDeviceKey(): Promise<void> {
   await SecureStore.deleteItemAsync(KEY_NAME);
 }
 
-export const shortId = (pub: Hex): string => pub.slice(2, 10);
+export const shortId = (pub: Hex): string => pub.slice(0, 8); // = deviceShortId (§10.2)
