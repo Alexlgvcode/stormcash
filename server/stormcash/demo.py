@@ -218,6 +218,8 @@ def clear_town(deps: Deps, now: int | None = None) -> dict:
         conn.execute("DELETE FROM ledger_entries WHERE txn_id IN (SELECT txn_id FROM ledger_entries WHERE account = ANY(%s))",
                      (accounts,))
         conn.execute("DELETE FROM merchant_contacts WHERE merchant_id = ANY(%s)", (merchant_ids,))
+        conn.execute("DELETE FROM resident_contacts WHERE resident_id = ANY(%s)", (residents,))
+        conn.execute("DELETE FROM messages WHERE resident_id = ANY(%s)", (residents,))
         conn.execute("DELETE FROM cert_status WHERE cert_id = ANY(%s)", (certs,))
         conn.execute("DELETE FROM certificates WHERE cert_id = ANY(%s)", (certs,))
         conn.execute("DELETE FROM residents WHERE resident_id = ANY(%s)", (residents,))

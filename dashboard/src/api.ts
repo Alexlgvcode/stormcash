@@ -257,11 +257,23 @@ export interface Run {
 
 export interface Message {
   message_id: number;
-  merchant_id: string;
+  merchant_id: string | null;
+  resident_id?: string | null; // a resident's thread (FREEZE by text, §17.2)
   flag_id: number | null;
   direction: "in" | "out";
   channel: string;
   body: string;
   created_at: number;
   delivered?: boolean;
+}
+
+/** GET /v1/photon/freezes: a cert frozen because its owner texted FREEZE (§17.2). */
+export interface OwnerFreeze {
+  cert_id: string;
+  status: string;
+  frozen_at: number | null;
+  owner_freeze_at: number;
+  resident_id: string;
+  display_name: string;
+  policy_ver: number | null;
 }

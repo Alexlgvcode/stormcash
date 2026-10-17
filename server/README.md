@@ -22,7 +22,7 @@ A new database gets the whole schema:
 psql "$DATABASE_URL" -f schema.sql
 ```
 
-A database created before v4.3 (the hosted demo DB) needs the migrations; each is safe to run twice:
+A database created from an older schema.sql (the hosted demo DB) needs the migrations; each is safe to run twice:
 
 ```bash
 psql "$DATABASE_URL" -f migrations/001_nessie_moves.sql
@@ -34,6 +34,10 @@ psql "$DATABASE_URL" -f migrations/002_stormdesk_runs.sql
 
 ```bash
 psql "$DATABASE_URL" -f migrations/003_payouts_held.sql
+```
+
+```bash
+psql "$DATABASE_URL" -f migrations/004_resident_freeze.sql
 ```
 
 ## Run

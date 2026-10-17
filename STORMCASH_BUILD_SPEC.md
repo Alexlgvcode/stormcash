@@ -14,6 +14,7 @@
 > **v4.10 (Oct 17):** the colluder scenario now takes pool money that the hard rules can't deny (3 cheaters' re-spends per colluder, §16.4), after the first live triage dismissed a colluder whose only pool payment was already covered. Marked **[v4.10]**.
 > **v4.11 (Oct 17):** first real StormDesk Chalk Evaluation (#33, §15.3): the eval dataset is rebuilt from the v4.10 simulator (43 rows), and a Droid guard checks every row's model and credits from the Droid session files, stops the run on a model switch or at a credit cap, and never saves a mixed or partial run as StormDesk. Marked **[v4.11]**.
 > **v4.12 (Oct 17):** StormDesk prompt v2 (§14.4): how to weigh soft evidence, written after reading v1's eval errors, so not a blind holdout. Marked **[v4.12]**.
+> **v4.13 (Oct 17):** resident FREEZE by text built (§17.2): residents get a Photon handle (`resident_contacts`), a FREEZE text freezes the cert through the hard-rule freeze path and publishes a POLICY, `cert_status.owner_freeze_at` feeds cap_drain's `owner_freeze_request`, and resident threads live in `messages` (§11.1, §12.1, §12.3, §13.2). Migration `004_resident_freeze.sql`. Marked **[v4.13]**.
 > **Builds on:** "StormCash: The 10/10 Build" v3 (Oct 16, Alexandre Lugovoi, on Brian Maina's Oct 11 draft). Everything new since v3 is marked **[v4]**.
 
 ---
@@ -689,6 +690,13 @@ CREATE TABLE merchant_contacts (        -- Photon mapping
   PRIMARY KEY (channel, handle)
 );
 
+CREATE TABLE resident_contacts (        -- [v4.13] Photon mapping for residents (FREEZE by text, §17.2)
+  resident_id UUID NOT NULL REFERENCES residents,
+  channel TEXT NOT NULL,                -- 'telegram' | 'imessage' | 'sms'
+  handle TEXT NOT NULL,
+  PRIMARY KEY (channel, handle)
+);
+
 CREATE TABLE certificates (
   cert_id BYTEA NOT NULL,
   cert_ver INT NOT NULL,
@@ -707,7 +715,8 @@ CREATE TABLE cert_status (
   max_cap_cents INT NOT NULL,
   frozen_at BIGINT,
   storm_mode BOOLEAN NOT NULL DEFAULT FALSE,
-  storm_mode_at BIGINT
+  storm_mode_at BIGINT,
+  owner_freeze_at BIGINT                -- [v4.13] the owner texted FREEZE (§17.2); cap_drain's owner_freeze_request
 );
 
 -- Protocol data
@@ -841,6 +850,7 @@ CREATE TABLE approvals (
 CREATE TABLE messages (                 -- Photon conversations
   message_id BIGSERIAL PRIMARY KEY,
   merchant_id BYTEA REFERENCES merchants,
+  resident_id UUID REFERENCES residents, -- [v4.13] a resident's thread (FREEZE by text); merchant_id is then NULL
   flag_id BIGINT REFERENCES flags,
   direction TEXT NOT NULL CHECK (direction IN ('out','in')),
   channel TEXT NOT NULL,
@@ -1037,7 +1047,7 @@ All JSON. Byte fields base64url. Prefix `/v1`. Auth for demo: none on reads; res
 
 | Method + path | Body / query | Returns | Owner |
 |---|---|---|---|
-| `POST /v1/residents/register` | `{display_name, holder_pub, region_id}` | `{resident_id, cert}` — creates Nessie customer, checking (seeded $500), escrow (opened at $0); locks $20 as a withdrawal + deposit pair (§11.4); issues cert v1 cap 2000 | WS2 |
+| `POST /v1/residents/register` | `{display_name, holder_pub, region_id, contact?: {channel, handle}}` (**[v4.13]** `contact` is the Photon handle that may text FREEZE; also saved when the resident already exists) | `{resident_id, cert}` — creates Nessie customer, checking (seeded $500), escrow (opened at $0); locks $20 as a withdrawal + deposit pair (§11.4); issues cert v1 cap 2000 | WS2 |
 | `POST /v1/merchants/register` | `{display_name, merchant_pub, region_id, x, y, contact?: {channel, handle}}` | `{merchant_id, mcert}` | WS2 |
 | `POST /v1/storm-mode` | `{cert_id, cap_cents}` | `{cert}` — tops escrow up in Nessie, issues new version | WS2 |
 | `POST /v1/storm-mode/close` | `{cert_id}` | `{cert}` (cap back to 2000; refund scheduled per §7.4) | WS2 |
@@ -1057,6 +1067,9 @@ All JSON. Byte fields base64url. Prefix `/v1`. Auth for demo: none on reads; res
 | `GET /v1/relay/paths` | `?limit=20` | recent payments with `path`, hops, latency. **[v4.3]** Each hop names the device (resident or merchant, from `device_short_id`) | WS2 |
 | `GET /v1/town/quick` **[v4.3]** | `?adoption&p_link&p_uplink` | the §16.6 quick re-sim: `{baseline, current, seconds}` | WS4 |
 | `POST /v1/photon/inbound` | Photon webhook payload | 200 | WS7 |
+| `POST /v1/photon/resident-contact` **[v4.13]** | `{resident_id \| display_name, channel, handle}` | the resident and the saved handle. Operator header; `display_name` must match exactly one real (not simulated) resident, e.g. Maya | WS7 |
+| `GET /v1/photon/messages` **[v4.13]** | `?merchant_id=` or `?resident_id=` | `{messages}`: one shop's or resident's Photon thread, oldest first | WS7 |
+| `GET /v1/photon/freezes` **[v4.13]** | `?cert_id&limit` | certs whose owner texted FREEZE: `[{cert_id, status, frozen_at, owner_freeze_at, resident_id, display_name, policy_ver}]`, `policy_ver` = the first POLICY listing the cert | WS7 |
 | `POST /v1/demo/reset` | | clears real-device demo data, reissues Maya's cert, keeps the simulated town | WS2 |
 |  |  | **[v4.3]** Operator header. Deletes what touches a real resident or shop (payments, tags, cases, candidates, logs, contacts, uploads, payouts, whole ledger transactions, queued moves), opens fresh Nessie accounts under the same customers (checking $500, escrow $0, shops $0; Nessie balances can't be edited), reissues each real resident a new cert (new `cert_id`, $20 locked), restores the shops' pool eligibility and publishes a POLICY without the old certs. The phone gets its new cert by registering again. Optional `{storm_cap_cents: 5000}` pre-stages Storm Mode. Measured live: under 1 s. |  |
 | `POST /v1/demo/seed-town` | `{seed}` | runs the simulator into the DB (§16) | WS4 |
@@ -1087,7 +1100,8 @@ All JSON. Byte fields base64url. Prefix `/v1`. Auth for demo: none on reads; res
 | `stormdesk_step` | `{flag_or_case, tool, input_summary, ok}` (live tool calls) |
 | `flag` | flag row |
 | `approval` | approval + executed actions |
-| `message` | Photon message in/out |
+| `message` | Photon message in/out. **[v4.13]** `merchant_id` or `resident_id` says whose thread |
+| `owner_freeze` **[v4.13]** | `{resident_id, cert_ids, newly_frozen, policy_ver, owner_freeze_at}` after a resident's FREEZE text |
 | `upload` | device, items, hops |
 | `town` **[v4.3]** | `{seed, status, summary}` when seed-town finishes |
 
@@ -1124,6 +1138,8 @@ Per cert, any 15-minute window.
 Features: `distinct_merchants_15m`, `spent_15m_cents`, `cap_cents`, `drain_share`, `minutes_since_storm_mode`, `home_region`, `regions_in_window`, `region_mismatch`, `hour_of_day`, `gap_since_last_activity_min`, `owner_freeze_request` (from Photon `FREEZE`).
 
 **Fires when:** `distinct_merchants_15m ≥ 3` **and** `drain_share ≥ 0.8`.
+
+**[v4.13]** `owner_freeze_request` is true when `cert_status.owner_freeze_at` is set when the candidate is created (the owner texted FREEZE, §17.2, before or during the drain's uploads). Like every feature it is frozen at creation; the dashboard shows a later request next to the flag from `GET /v1/photon/freezes`.
 
 Default action: `freeze_cert`. (Even an approved soft freeze is a human decision; contrast with hard rules.)
 
@@ -1545,6 +1561,14 @@ Adoption, foot traffic (`p_link`), relay density (`p_uplink`). Moving a slider r
 | Settled notice | Payout executed | "Paid: $12.00 from StormCash for payment at 4:12 PM." (template, no agent) |
 | Resident FREEZE | Resident texts `FREEZE` from their registered handle | Freeze cert, new POLICY, confirm by text. Feeds `owner_freeze_request` in cap_drain. Mention in pitch; demo only if time allows. |
 
+**[v4.13] Resident FREEZE, as built (`photon/freeze.py`).**
+- The text must be exactly `FREEZE` after trimming, in any case. It comes from a handle in `resident_contacts` (set by `contact` on register, or by the operator with `POST /v1/photon/resident-contact`). The handle isn't verified (demo only; a real deployment would confirm it with a code).
+- Deterministic, never through StormDesk: every cert of the resident that isn't `closed` goes through `cases.freeze_cert` (`cert_status = 'frozen'`, a new signed POLICY, SSE `policy`), `cert_status.owner_freeze_at` is set once, and SSE `owner_freeze` fires. A second FREEZE changes nothing (no new POLICY) and gets the same confirmation; duplicate webhook deliveries are dropped by message id.
+- Reply (template): "Your StormCash wallet is frozen. Shops will refuse it as the freeze list spreads." The FREEZE and the reply are recorded on the resident's thread (`messages.resident_id`). With `PHOTON_DISABLED=1` the freeze still happens and the reply is recorded with `delivered: false`.
+- Texting can't unfreeze: any other text from a resident gets "Text FREEZE to freeze your StormCash wallet. Texting can't unfreeze it." A FREEZE from an unknown handle gets a neutral reply ("This account isn't linked to a StormCash wallet, so nothing was changed.") and changes nothing; other texts from unknown handles are ignored.
+- One handle can be both a shop and a resident (one Telegram account at the table): `FREEZE` is the resident's, anything else is the shop's appeal.
+- Dashboard: Cases → Owner freezes lists them with the thread; a `cap_drain` flag on a frozen-by-owner cert shows the request.
+
 ### 17.3 Demo conversation (target)
 
 ```
@@ -1884,7 +1908,7 @@ If judging slots are < 3 min, drop the Town beat from the core and show StormDes
 10. **"Disasters with no warning?"** Everyone has a $20 always-on cap, renewed whenever they're online.
 11. **"Is it private?"** Phones share a pseudonymous id, amounts and running totals, never names or which shop was paid. Ids rotate per storm. Production encrypts relayed bundles to the server key.
 12. **"Isn't the rollback tool fake?"** It does what a modified app or a restored backup could do. Every offline system has to handle it.
-13. **"Stolen phone?"** Face ID per payment, the owner can text FREEZE from any phone, and the cert expires in 72 h without renewal.
+13. **"Stolen phone?"** Face ID per payment, the owner can text FREEZE from their registered Telegram account on any device, and the cert expires in 72 h without renewal.
 14. **"iPhones only sync with the app open?"** Yes, an honest limit today. The simulator shows how settlement time depends on how many people relay.
 15. **"Is this money transmission?"** Funds stay at the bank: escrow is the customer's own Capital One account, and merchants are paid by bank transfer. A real launch runs through the bank's licenses.
 

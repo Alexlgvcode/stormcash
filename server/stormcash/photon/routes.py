@@ -1,4 +1,5 @@
-"""Photon routes (spec §12.1, §17): inbound webhook, a shop's thread, and a manual notice trigger."""
+"""Photon routes (spec §12.1, §17): inbound webhook (shop appeals, resident FREEZE), threads, a manual
+notice trigger, and the operator's way to give a resident a Photon handle."""
 
 from __future__ import annotations
 
@@ -8,14 +9,17 @@ import hmac
 import json
 import logging
 import time
+import uuid
 from collections import OrderedDict
 
 from fastapi import APIRouter, Header, HTTPException, Query, Request
+from pydantic import BaseModel
 
+from .. import registry
 from ..db import all_rows, one, scalar
 from ..jsonutil import jsonable
 from ..routes.demo import require_operator
-from . import appeal, client, notices
+from . import appeal, client, freeze, notices
 from .config import PhotonSettings, load
 
 log = logging.getLogger(__name__)
@@ -68,8 +72,9 @@ def _open_flag(conn, merchant_id: bytes) -> int | None:
 
 @router.post("/v1/photon/inbound")
 async def inbound(request: Request) -> dict:
-    """Photon (Spectrum) webhook. Verifies the signature, records the merchant's message and
-    starts the StormDesk respond job; the reply goes out when it finishes."""
+    """Photon (Spectrum) webhook. Verifies the signature. A resident's FREEZE freezes their wallet
+    deterministically and is confirmed by text (photon/freeze.py, no agent). A shop's message is
+    recorded and starts the StormDesk respond job; the reply goes out when it finishes."""
     cfg = settings(request)
     raw = await request.body()
     if not cfg.allow_unsigned:
@@ -93,6 +98,10 @@ async def inbound(request: Request) -> dict:
     handle = str((message.get("sender") or {}).get("id") or "")
     text = str(content.get("text") or "").strip()
     deps = request.app.state.deps
+    if text:
+        answer = await asyncio.to_thread(freeze.handle_inbound, deps, cfg, channel, handle, text)
+        if answer is not None:
+            return jsonable(answer)
     with deps.pool.connection() as conn:
         row = one(conn, "SELECT merchant_id FROM merchant_contacts WHERE channel = %s AND handle = %s",
                   (channel, handle))
@@ -108,20 +117,79 @@ async def inbound(request: Request) -> dict:
 
 
 @router.get("/v1/photon/messages")
-def thread(request: Request, merchant_id: str, limit: int = Query(100, ge=1, le=500)) -> dict:
-    """A shop's Photon conversation, oldest first (dashboard thread)."""
+def thread(request: Request, merchant_id: str | None = None, resident_id: str | None = None,
+           limit: int = Query(100, ge=1, le=500)) -> dict:
+    """A shop's or a resident's Photon conversation, oldest first (dashboard thread)."""
+    if (merchant_id is None) == (resident_id is None):
+        raise HTTPException(400, "give exactly one of merchant_id or resident_id")
     try:
-        mid = bytes.fromhex(merchant_id)
+        column, key = ("merchant_id", bytes.fromhex(merchant_id)) if merchant_id is not None \
+            else ("resident_id", uuid.UUID(resident_id))
     except ValueError:
-        raise HTTPException(400, "merchant_id must be hex")
+        raise HTTPException(400, "merchant_id must be hex, resident_id a UUID")
     with request.app.state.deps.pool.connection() as conn:
         rows = all_rows(
             conn,
-            """SELECT * FROM (SELECT * FROM messages WHERE merchant_id = %s ORDER BY message_id DESC LIMIT %s) m
+            f"""SELECT * FROM (SELECT * FROM messages WHERE {column} = %s ORDER BY message_id DESC LIMIT %s) m
                ORDER BY message_id""",
-            (mid, limit),
+            (key, limit),
         )
-    return jsonable({"merchant_id": merchant_id, "messages": [{**r, "merchant_id": merchant_id} for r in rows]})
+    if merchant_id is not None:
+        return jsonable({"merchant_id": merchant_id, "messages": [{**r, "merchant_id": merchant_id} for r in rows]})
+    return jsonable({"resident_id": resident_id, "messages": rows})
+
+
+class ResidentContactIn(BaseModel):
+    resident_id: str | None = None
+    display_name: str | None = None  # a real (not simulated) resident's exact name, e.g. "Maya"
+    channel: str
+    handle: str
+
+
+@router.post("/v1/photon/resident-contact")
+def resident_contact(body: ResidentContactIn, request: Request, x_sc_operator: str | None = Header(None)) -> dict:
+    """Operator (demo): give a resident the Photon handle that may text FREEZE (§17.2)."""
+    require_operator(x_sc_operator)
+    if (body.resident_id is None) == (body.display_name is None):
+        raise HTTPException(400, "give exactly one of resident_id or display_name")
+    with request.app.state.deps.pool.connection() as conn:
+        if body.resident_id is not None:
+            try:
+                rows = all_rows(conn, "SELECT resident_id, display_name FROM residents WHERE resident_id = %s",
+                                (uuid.UUID(body.resident_id),))
+            except ValueError:
+                raise HTTPException(400, "resident_id must be a UUID")
+        else:
+            rows = all_rows(conn, """SELECT resident_id, display_name FROM residents
+                                     WHERE NOT simulated AND display_name = %s""", (body.display_name,))
+        if len(rows) != 1:
+            raise HTTPException(404 if not rows else 409,
+                                f"{len(rows)} residents match; give resident_id" if rows else "no such resident")
+        contact = registry.set_resident_contact(conn, rows[0]["resident_id"],
+                                                {"channel": body.channel, "handle": body.handle})
+    return jsonable({**rows[0], **contact})
+
+
+@router.get("/v1/photon/freezes")
+def owner_freezes(request: Request, cert_id: str | None = None, limit: int = Query(50, ge=1, le=500)) -> list[dict]:
+    """Certificates whose owner texted FREEZE, newest first, with the first POLICY that listed each."""
+    try:
+        cid = None if cert_id is None else bytes.fromhex(cert_id)
+    except ValueError:
+        raise HTTPException(400, "cert_id must be hex")
+    with request.app.state.deps.pool.connection() as conn:
+        rows = all_rows(
+            conn,
+            """SELECT s.cert_id, s.status, s.frozen_at, s.owner_freeze_at, r.resident_id, r.display_name,
+                      (SELECT min(policy_ver) FROM policy_versions p WHERE s.cert_id = ANY(p.frozen_certs)) AS policy_ver
+               FROM cert_status s
+               JOIN residents r ON r.resident_id = (SELECT resident_id FROM certificates c
+                                                    WHERE c.cert_id = s.cert_id LIMIT 1)
+               WHERE s.owner_freeze_at IS NOT NULL AND (%s::bytea IS NULL OR s.cert_id = %s)
+               ORDER BY s.owner_freeze_at DESC LIMIT %s""",
+            (cid, cid, limit),
+        )
+    return jsonable([{**r, "cert_id": bytes(r["cert_id"]).hex()} for r in rows])
 
 
 @router.post("/v1/photon/notify/{flag_id}")

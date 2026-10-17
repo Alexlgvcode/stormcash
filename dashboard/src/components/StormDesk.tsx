@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { getJSON, operatorPost, type FlagDetail, type FlagRow, type Message, type Run, type Step, type Usage } from "../api";
 import { useEvents } from "../events";
 import { clockTime, dollars } from "../format";
+import { OwnerFreezeNote } from "./OwnerFreeze";
 
 const KIND_TITLE: Record<string, string> = {
   merchant_silence: "Shop went quiet",
@@ -266,6 +267,7 @@ function FlagView({ flagId, onChanged }: { flagId: number; onChanged: () => void
   const { flag, agent } = detail;
   const merchantFlag = flag.kind === "merchant_silence" || flag.proposed_action === "hold_pool_payout"
     || flag.proposed_action === "lower_merchant_limit";
+  const certFlag = detail.candidate?.kind === "cap_drain" || flag.proposed_action === "freeze_cert";
 
   async function rerun() {
     live.reset();
@@ -286,6 +288,10 @@ function FlagView({ flagId, onChanged }: { flagId: number; onChanged: () => void
         {flag.subject_name ?? flag.subject_id}: {flag.summary}
       </p>
       {flag.exposure_cents > 0 && <p className="text-slate-400">Exposure: {dollars(flag.exposure_cents)}</p>}
+      {certFlag && (
+        <OwnerFreezeNote certId={flag.subject_id}
+          seenByDetector={detail.candidate?.features?.owner_freeze_request === true} />
+      )}
       {agent?.reasoning && (
         <div>
           <button onClick={() => setShowReasoning((v) => !v)} className="text-sm text-sky-300 hover:underline">

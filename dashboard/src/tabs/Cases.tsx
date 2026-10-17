@@ -1,10 +1,12 @@
 // Cases tab (spec §18.3, Digital Trust add-on): hard cases with both tags side
 // by side, the conflicting field in red, Verify it yourself, the Proof QR, the
-// "merchant knew" view and StormDesk's case file.
+// "merchant knew" view and StormDesk's case file; StormDesk flags; and certs
+// their owners froze by texting FREEZE (§17.2).
 import QRCode from "qrcode";
 import { useCallback, useEffect, useState } from "react";
 import { getJSON, type CaseDetail, type CaseSummary, type Health } from "../api";
 import { RULE_TEXT, TagCard, TagPair, VerifyPanel } from "../components/Evidence";
+import { OwnerFreezes } from "../components/OwnerFreeze";
 import { CaseStormDesk, FlagsView } from "../components/StormDesk";
 import { useEvents } from "../events";
 import { clockTime, dollars } from "../format";
@@ -138,15 +140,19 @@ function CaseView({ caseId }: { caseId: number }) {
   );
 }
 
+type CasesView = "cases" | "flags" | "freezes";
+const VIEW_TITLE: Record<CasesView, string> = { cases: "Hard cases", flags: "StormDesk flags", freezes: "Owner freezes" };
+
 export function CasesTab() {
-  const [view, setView] = useState<"cases" | "flags">(() => {
+  const [view, setView] = useState<CasesView>(() => {
     try {
-      return localStorage.getItem("sc-cases-view") === "flags" ? "flags" : "cases";
+      const saved = localStorage.getItem("sc-cases-view");
+      return saved === "flags" || saved === "freezes" ? saved : "cases";
     } catch {
       return "cases";
     }
   });
-  const pick = (v: "cases" | "flags") => {
+  const pick = (v: CasesView) => {
     setView(v);
     try {
       localStorage.setItem("sc-cases-view", v);
@@ -157,15 +163,15 @@ export function CasesTab() {
   return (
     <div>
       <div className="flex gap-2 px-6 pt-4">
-        {(["cases", "flags"] as const).map((v) => (
+        {(["cases", "flags", "freezes"] as const).map((v) => (
           <button key={v} onClick={() => pick(v)}
             className={`rounded-full px-4 py-2 text-base font-semibold ${
               view === v ? "bg-sky-500 text-slate-950" : "bg-slate-800 text-slate-300 hover:bg-slate-700"}`}>
-            {v === "cases" ? "Hard cases" : "StormDesk flags"}
+            {VIEW_TITLE[v]}
           </button>
         ))}
       </div>
-      {view === "cases" ? <HardCases /> : <FlagsView />}
+      {view === "cases" ? <HardCases /> : view === "flags" ? <FlagsView /> : <OwnerFreezes />}
     </div>
   );
 }
