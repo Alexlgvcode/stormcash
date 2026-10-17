@@ -50,7 +50,8 @@ One `EventSource` on `GET /v1/stream` (§12.3). The Accounts tab refetches `GET 
 - **Cases tab:** every hard case, live over SSE. Each case shows both tags side by side with the conflicting field in red, a **Verify it yourself** button, the **Proof QR**, the merchant's own ACCEPT entry for "merchant knew" cases, and StormDesk's case file.
 - **`/proof/<case_id>`:** the mobile page a judge opens from the QR code. No login.
 - **Verify it yourself** runs entirely in the browser (`src/verify.ts`). It rebuilds every signed string from the fields shown, checks the signatures with WebCrypto ECDSA P-256 / SHA-256, and re-checks the rule.
-- **Tests:** `npm test` checks the same code against `spec/vectors.json`.
+- **A second, independent check (proof page):** the same press also runs our C++ verifier (`cpp/verify`), compiled to WebAssembly, on the same proof (`src/cppverify.ts`, `src/proof/CppCheck.tsx`). WebCrypto stays the primary result. Under it, the page shows the C++ verdict, then "Verified by 2 independent implementations", "Neither implementation verified this proof" or "The two implementations disagree". If the WebAssembly can't load, it shows "C++ check unavailable". The module is in `src/wasm/` and is built by `cpp/verify/wasm/build.sh`; don't edit it by hand, and CI checks that it matches the C++ sources. Only the proof page loads it (518 KB, 163 KB gzipped).
+- **Tests:** `npm test` checks the same code against `spec/vectors.json`, and runs both checks on proofs captured from the server and on tampered copies (`src/cppverify.test.ts`).
 
 **For the demo:**
 

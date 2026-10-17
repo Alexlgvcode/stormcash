@@ -237,7 +237,7 @@ Details: [`server/stormcash/photon/README.md`](server/stormcash/photon/README.md
 
 ## C++ toolkit
 
-[`cpp/`](cpp/README.md) holds `stormcash-verify`, a third implementation of the protocol's checking side next to the Python server and the TypeScript phones, written in C++20 from the spec. It reproduces all 124 shared test vectors (canonical strings, digests, transport JSON, signatures and every rule from C1–C6 and R1–R6), and checks a case proof from `GET /v1/proof/{case_id}` offline: `stormcash-verify proof proof.json --server-pub <key>`. CI builds it with sanitizers in the `cpp` job. It is off the demo path.
+[`cpp/`](cpp/README.md) holds `stormcash-verify`, a third implementation of the protocol's checking side next to the Python server and the TypeScript phones, written in C++20 from the spec. It reproduces all 124 shared test vectors (canonical strings, digests, transport JSON, signatures and every rule from C1–C6 and R1–R6), and checks a case proof from `GET /v1/proof/{case_id}` offline: `stormcash-verify proof proof.json --server-pub <key>`. The public proof page runs the same check in the judge's browser, compiled to WebAssembly, as a second check next to WebCrypto: "Verified by 2 independent implementations" when both agree, with no code shared between them. It has its own P-256 (p256-m) and SHA-256 there, and OpenSSL natively. CI runs every test and vector with both crypto backends, plus Project Wycheproof's P-256 tests (`cpp` job), and checks the committed WebAssembly against the sources (`wasm` job). If the WebAssembly can't load, the page says so and WebCrypto's result stands alone.
 
 [`cpp/scale/`](cpp/scale/README.md) is Scale Lab (`stormcash-scale`), a **simulated** city-scale version of the §16 town: the same gossip and rules on a grid of town tiles, from one town up to a million residents, with Monte Carlo replicates on a thread pool. It is checked against the Python simulator before any scaled-up number is reported, and every result it writes is labelled simulated.
 
@@ -251,7 +251,7 @@ Details: [`server/stormcash/photon/README.md`](server/stormcash/photon/README.md
 | `dashboard/` | React dashboard and public proof page | WS3 |
 | `sim/` | 40-shop town simulator | WS4 |
 | `chalk/` | Chalk features, resolvers and evals | WS6 |
-| `cpp/` | C++ toolkit: `stormcash-verify` (independent verifier for the vectors and case proofs) and Scale Lab (simulated city-scale gossip) | — |
+| `cpp/` | C++ toolkit: `stormcash-verify` (independent verifier for the vectors and case proofs; also the proof page's second check, as WebAssembly) and Scale Lab (simulated city-scale gossip) | — |
 | `fixtures/` | Replayed NWS alerts | — |
 
 ## Workflow

@@ -40,7 +40,7 @@ export function ProofPage({ caseId }: { caseId: number }) {
         if (id !== run.current) return;
         setCpp(
           verdict.status === "error"
-            ? { kind: "unavailable", reason: `It couldn't read this proof: ${verdict.error}.` }
+            ? { kind: "unavailable", reason: "It couldn't read this proof.", detail: verdict.error }
             : { kind: "done", verdict },
         );
       })
@@ -49,8 +49,8 @@ export function ProofPage({ caseId }: { caseId: number }) {
         const reason =
           typeof WebAssembly === "undefined"
             ? "This browser doesn't run WebAssembly."
-            : `The WebAssembly module didn't load or run (${String(e)}).`;
-        setCpp({ kind: "unavailable", reason });
+            : "The WebAssembly module didn't load or run in this browser.";
+        setCpp({ kind: "unavailable", reason, detail: String(e) });
       });
   }
 

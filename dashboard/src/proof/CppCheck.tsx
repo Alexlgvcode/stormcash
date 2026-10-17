@@ -5,7 +5,7 @@ import type { Agreement, CppVerdict } from "../cppverify";
 export type CppState =
   | { kind: "running" }
   | { kind: "done"; verdict: CppVerdict }
-  | { kind: "unavailable"; reason: string };
+  | { kind: "unavailable"; reason: string; detail?: string };
 
 const HEADLINE: Record<"proven" | "incomplete" | "invalid", { text: string; color: string }> = {
   proven: { text: "Verified ✓", color: "text-emerald-300" },
@@ -26,6 +26,7 @@ export function CppCheck({ state }: { state: CppState }) {
           <p className="mt-1 break-words text-sm text-slate-400">
             {state.reason} The WebCrypto result above doesn't depend on it.
           </p>
+          {state.detail && <p className="mt-1 text-xs wrap-anywhere text-slate-500">{state.detail}</p>}
         </>
       )}
       {state.kind === "done" && <Verdict v={state.verdict} />}
@@ -36,17 +37,30 @@ export function CppCheck({ state }: { state: CppState }) {
 function Verdict({ v }: { v: CppVerdict }) {
   const head = HEADLINE[v.status as keyof typeof HEADLINE] ?? HEADLINE.invalid;
   const lines = v.lines ?? [];
+  const failed = lines.filter((l) => !l.ok);
   return (
     <>
       <p className={`mt-2 text-xl font-bold ${head.color}`}>{head.text}</p>
-      <p className="mt-1 break-words text-sm text-slate-300">{v.verdict}</p>
+      {v.status === "invalid" && failed.length > 0 ? (
+        // The checks that failed, marked as failed (the CLI's verdict quotes the first one).
+        <ul className="mt-1 space-y-1 text-sm">
+          {failed.map((l, i) => (
+            <li key={i} className="flex gap-2">
+              <span className="text-rose-400">✗</span>
+              <span className="min-w-0 wrap-anywhere text-slate-300">{l.text}</span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-1 break-words text-sm text-slate-300">{v.verdict}</p>
+      )}
       <details className="mt-3 text-sm">
         <summary className="cursor-pointer py-1 text-sky-300">All {lines.length} checks the C++ verifier ran</summary>
         <ul className="mt-2 space-y-1">
           {lines.map((l, i) => (
             <li key={i} className="flex gap-2">
               <span className={l.ok ? "text-emerald-400" : "text-rose-400"}>{l.ok ? "✓" : "✗"}</span>
-              <span className="min-w-0 break-all font-mono text-xs text-slate-300">{l.text}</span>
+              <span className="min-w-0 font-mono text-xs wrap-anywhere text-slate-300">{l.text}</span>
             </li>
           ))}
         </ul>

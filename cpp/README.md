@@ -1,8 +1,8 @@
 # cpp/: the C++ toolkit
 
-Two tools, both off the demo path (nothing in the server, phones or dashboard depends on them):
+Two tools:
 
-- **`stormcash-verify`** (`verify/`, this page) is a third, independent implementation of the checking side of the StormCash protocol (spec §7–§10), next to the Python server (`server/stormcash/protocol/`) and the TypeScript phones (`mobile/src/protocol/`). It was written from the spec in C++20, and it agrees with the other two on every one of the 124 shared test vectors. It can also check a case proof offline, the way the public proof page does in a browser.
+- **`stormcash-verify`** (`verify/`, this page) is a third, independent implementation of the checking side of the StormCash protocol (spec §7–§10), next to the Python server (`server/stormcash/protocol/`) and the TypeScript phones (`mobile/src/protocol/`). It was written from the spec in C++20, and it agrees with the other two on every one of the 124 shared test vectors. It also checks a case proof offline, and the public proof page runs that check in the judge's browser as WebAssembly, as a second check next to WebCrypto ([In the browser](#in-the-browser-webassembly)). Nothing else depends on it, and the page works without it.
 - **Scale Lab** (`stormcash-scale`, [`scale/`](scale/README.md)) is a city-scale simulator of the §16 town's gossip, validated against the Python simulator. Everything it reports is simulated.
 
 ## Build and run
@@ -111,6 +111,42 @@ What a `/v1/proof` file can't show, and the tool says so instead of passing it:
 - **Who the merchant is.** The ACCEPT entry is checked against its own device key; the file has no MCERT tying that key to a shop.
 - **OVER_CAP and LOG_TAMPER.** These cases have no tag pair, and `/v1/proof` answers 404 for them.
 
+## In the browser (WebAssembly)
+
+The public proof page (`/proof/<case_id>`, spec §18.6) runs the proof check twice when the judge presses **Verify**: once with the browser's WebCrypto (`dashboard/src/verify.ts`, the primary result, unchanged), and once with this verifier compiled to WebAssembly. The page shows both verdicts, then "Verified by 2 independent implementations" if both verify, "Neither implementation verified this proof" if neither does, or "The two implementations disagree". If the WebAssembly can't load, it says "C++ check unavailable" and the WebCrypto result stands alone.
+
+The two share no code. The C++ side decodes the transport JSON with its own strict codec, rebuilds every canonical string and digest, re-derives the rule, and checks signatures with the portable crypto backend (p256-m and its own SHA-256), not with the browser's crypto.
+
+`verify/wasm/verify_wasm.cpp` exports one function:
+
+```c
+char* stormcash_verify_proof(const char* proof_json, const char* server_pub);  // free with stormcash_free()
+```
+
+It takes the `/v1/proof` JSON, plus the server key to pin (hex or base64url), or `""` to use the file's own key. It returns the verdict `stormcash-verify proof` prints, as JSON: `status` (`proven`, `incomplete`, `invalid`, or `error` for input it can't read), `lines` (each check and whether it passed), `notes`, `verdict`, `report` (the CLI's text) and `crypto` (the backend). `dashboard/src/cppverify.ts` loads it and calls it.
+
+**Build.** It needs Emscripten 6.0.10 from emsdk; the exact commands are at the top of the script:
+
+```bash
+cpp/verify/wasm/build.sh
+```
+
+This configures `cpp/` with `emcmake` (the portable backend, no tests, no Scale Lab), builds `stormcash_verify.mjs` (an ES module, 8 KB) and `stormcash_verify.wasm` (518 KB, 163 KB gzipped), and copies them to `dashboard/src/wasm/`. Vite gives them hashed names, and only the proof page loads them, so no other page downloads anything more. The server serves them as `application/wasm`. About 337 KB of the module is utf8proc's Unicode tables, which NFC needs (§7.2). In desktop Chrome on a Mac laptop it instantiates in about 20 ms and checks a proof in about 10 ms; it hasn't been timed on a phone.
+
+**Why the built files are committed.** The dashboard builds them in as they are, so its CI job stays `npm ci && npm test && npm run build`, and anything that builds the dashboard (the server's `dashboard/dist`, a laptop at the demo table) needs no Emscripten. The risk with a committed binary is that it drifts from the source, so CI's `wasm` job rebuilds it with the pinned Emscripten and fails unless the result equals the committed files byte for byte:
+
+```bash
+cpp/verify/wasm/build.sh --check
+```
+
+The build is reproducible: the same sources give the same bytes in any directory and on any machine (`-ffile-prefix-map` keeps local paths out). If the check fails, rebuild and commit. The dashboard's `npm test` then runs the committed module on the proof fixtures captured from the server and on tampered copies, next to the WebCrypto check, and requires them to agree (`dashboard/src/cppverify.test.ts`).
+
+**Decisions worth knowing:**
+
+- **Exceptions are native WebAssembly exceptions** (`-fwasm-exceptions`, legacy encoding: Chrome 95+, Firefox 100+, Safari 15.2+). The library reports a malformed input by throwing and catching inside, so exceptions must work. On an older browser the module fails to load, and the page says "C++ check unavailable".
+- **No link-time optimization.** With Emscripten 6.0.10, `-flto` together with `-fwasm-exceptions` lets a thrown exception escape its `catch` block (a three-line `try`/`catch` shows it). `-Oz` alone gives 518 KB instead of 483 KB.
+- **The page's key wording.** `check_proof` takes how the key was pinned as a parameter, so the browser's verdict says "built into this page" (a build with `VITE_SERVER_PUB`) instead of the CLI's "--server-pub".
+
 ## Crypto backends
 
 SHA-256 and the P-256 math sit behind a small interface (`verify/src/crypto_backend.hpp`) with two implementations, chosen when the build is configured:
@@ -182,6 +218,6 @@ All of these differences are stricter, and none of them changes a vector outcome
 
 ## Limits
 
-- **This toolkit only verifies.** It has no signing code. The test keys' private halves in `vectors.json` are never read.
+- **This toolkit only verifies.** It has no signing code of its own. p256-m's key generation and signing are compiled in with the portable backend, but they can't run: the random-number function they need always fails here (`p256m_sec1.c`). The test keys' private halves in `vectors.json` are never read.
 - **It is independent at the protocol layer.** The encoding, codecs and rules are a separate implementation. With the default backend, SHA-256 and ECDSA come from OpenSSL 3, and Python's `cryptography` also links OpenSSL, so that build's elliptic-curve math is not independent of the server's. The portable backend (p256-m and the SHA-256 here) shares no crypto code with OpenSSL, with noble (the phones) or with a browser's WebCrypto. That is the build the proof page runs.
 - **NFC depends on the Unicode version.** utf8proc 2.9.0 is Unicode 15.1; the CI's Python 3.11 is Unicode 14.0. NFC is stable for characters both versions know, so the two can only differ on a character assigned after Unicode 14 that has a decomposition. No vector has one.
