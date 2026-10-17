@@ -128,3 +128,45 @@ def test_seed_town_endpoint(app, tmp_path, monkeypatch):
         assert scalar(conn, "SELECT bool_and(simulated) FROM merchants") is True
         assert scalar(conn, """SELECT m.display_name FROM merchant_contacts c JOIN merchants m USING (merchant_id)
                                WHERE c.handle = '@cornerstore'""") == "Corner Store"
+
+
+def test_seed_town_replace_keeps_real_devices(app, tmp_path, monkeypatch):
+    """A changed scenario can be re-seeded into the live DB: the old town goes, real phones stay."""
+    from stormcash import ledger, registry
+
+    monkeypatch.setattr(outputs, "OUT_DIR", tmp_path)
+    deps = app.app.state.deps
+    _, maya_cert, _ = registry.register_resident(deps, "Maya", crypto.public_key_bytes(crypto.private_key_from_scalar(7)),
+                                      "asheville-downtown")
+    registry.register_merchant(deps, "Pharmacy", crypto.public_key_bytes(crypto.private_key_from_scalar(8)),
+                               "asheville-downtown")
+    body = {"seed": 9002, "hours": 3, "residents": 60,
+            "corner_store_contact": {"channel": "telegram", "handle": "@cornerstore"}}
+
+    def seed(**extra) -> dict:
+        app.post("/v1/demo/seed-town", json={**body, **extra}, headers={"X-SC-Operator": "test"})
+        deadline = time.monotonic() + 60
+        while (status := app.get("/v1/demo/seed-town").json())["status"] == "running" and time.monotonic() < deadline:
+            time.sleep(0.2)
+        return status
+
+    def snapshot() -> dict:
+        with deps.pool.connection() as conn:
+            return {t: scalar(conn, f"SELECT count(*) FROM {t}") for t in
+                    ("residents", "merchants", "certificates", "payments", "cases", "candidates", "uploads")}
+
+    assert seed()["status"] == "done"
+    first = snapshot()
+    assert seed()["status"] == "failed"  # the same seed twice needs replace
+    status = seed(replace=True, corner_store_contact=None)
+    assert status["status"] == "done", status
+    assert status["cleared"]["shops"] == 38
+    assert snapshot() == first  # the same town again, nothing left over
+    with deps.pool.connection() as conn:
+        assert scalar(conn, "SELECT count(*) FROM residents WHERE NOT simulated") == 1
+        assert scalar(conn, "SELECT count(*) FROM merchants WHERE NOT simulated") == 1
+        assert scalar(conn, "SELECT count(*) FROM certificates WHERE cert_id = %s", (maya_cert.cert_id,)) == 1
+        assert ledger.unbalanced_txns(conn) == []
+        # Corner Store keeps its Photon handle without being told again.
+        assert scalar(conn, """SELECT m.display_name FROM merchant_contacts c JOIN merchants m USING (merchant_id)
+                               WHERE c.handle = '@cornerstore'""") == "Corner Store"

@@ -160,3 +160,70 @@ def _customer_of(deps: Deps, account_id: str) -> str | None:
         return deps.nessie.get_account(account_id).get("customer_id")
     except NessieError:
         return None
+
+
+def clear_town(deps: Deps, now: int | None = None) -> dict:
+    """Remove the simulated town so `seed-town` can run a seed again (§16.4).
+
+    Deletes every simulated resident and shop and everything that touches them:
+    certificates, tags, payments, payouts, cases, candidates (and every
+    region_dark candidate, which only the town raises), flags, StormDesk runs,
+    logs, contacts, uploads, ledger transactions (whole ones, so the ledger stays
+    balanced) and the shops' Photon threads. Real-device data stays. The shops'
+    Photon contacts are returned so the caller can restore them on the new town
+    (seeds derive shop ids, so the same seed gives the same shop ids).
+    """
+    now = int(time.time()) if now is None else now
+    ctx = _Ctx(deps, b"", now, False)
+    with deps.pool.connection() as conn:
+        residents = [r["resident_id"] for r in all_rows(conn, "SELECT resident_id FROM residents WHERE simulated")]
+        shops = all_rows(conn, "SELECT merchant_id, merchant_pub FROM merchants WHERE simulated")
+        merchant_ids = [bytes(m["merchant_id"]) for m in shops]
+        certs = [bytes(r["cert_id"]) for r in all_rows(
+            conn, "SELECT DISTINCT cert_id FROM certificates WHERE resident_id = ANY(%s)", (residents,))]
+        devices = [bytes(r["holder_pub"]) for r in all_rows(
+            conn, "SELECT holder_pub FROM residents WHERE simulated")] + [bytes(m["merchant_pub"]) for m in shops]
+        contacts = all_rows(conn, "SELECT merchant_id, channel, handle FROM merchant_contacts WHERE merchant_id = ANY(%s)",
+                            (merchant_ids,))
+        accounts = ([ledger.checking(r) for r in residents] + [ledger.escrow(c) for c in certs]
+                    + [ledger.fraud_receivable(c) for c in certs] + [ledger.merchant(m) for m in merchant_ids])
+
+        tags = [bytes(r["tag_hash"]) for r in all_rows(
+            conn, "SELECT tag_hash FROM tags WHERE cert_id = ANY(%s) UNION "
+                  "SELECT tag_hash FROM payments WHERE merchant_id = ANY(%s)", (certs, merchant_ids))]
+        cases_ = [r["case_id"] for r in all_rows(
+            conn, """SELECT case_id FROM cases WHERE cert_id = ANY(%s) OR merchant_id = ANY(%s) OR device_pub = ANY(%s)
+                     OR tag_a = ANY(%s) OR tag_b = ANY(%s)""", (certs, merchant_ids, devices, tags, tags))]
+        candidates = [r["candidate_id"] for r in all_rows(
+            conn, "SELECT candidate_id FROM candidates WHERE subject_id = ANY(%s) OR kind = 'region_dark'",
+            ([c.hex() for c in certs] + [m.hex() for m in merchant_ids],))]
+        flags = [r["flag_id"] for r in all_rows(
+            conn, "SELECT flag_id FROM flags WHERE candidate_id = ANY(%s)", (candidates,))]
+
+        conn.execute("DELETE FROM nessie_moves WHERE payout_id IN (SELECT payout_id FROM payouts WHERE tag_hash = ANY(%s) "
+                     "OR merchant_id = ANY(%s))", (tags, merchant_ids))
+        conn.execute("DELETE FROM payouts WHERE tag_hash = ANY(%s) OR merchant_id = ANY(%s)", (tags, merchant_ids))
+        conn.execute("DELETE FROM payments WHERE tag_hash = ANY(%s)", (tags,))
+        conn.execute("DELETE FROM stormdesk_runs WHERE case_id = ANY(%s) OR candidate_id = ANY(%s) OR merchant_id = ANY(%s)",
+                     (cases_, candidates, merchant_ids))
+        conn.execute("DELETE FROM messages WHERE merchant_id = ANY(%s) OR flag_id = ANY(%s)", (merchant_ids, flags))
+        conn.execute("DELETE FROM approvals WHERE flag_id = ANY(%s)", (flags,))
+        conn.execute("DELETE FROM flags WHERE flag_id = ANY(%s)", (flags,))
+        conn.execute("DELETE FROM cases WHERE case_id = ANY(%s)", (cases_,))
+        conn.execute("DELETE FROM candidates WHERE candidate_id = ANY(%s)", (candidates,))
+        conn.execute("DELETE FROM tags WHERE tag_hash = ANY(%s)", (tags,))
+        conn.execute("DELETE FROM device_log WHERE device_pub = ANY(%s)", (devices,))
+        conn.execute("DELETE FROM contacts WHERE device_pub = ANY(%s) OR peer_pub = ANY(%s)", (devices, devices))
+        conn.execute("DELETE FROM uploads WHERE simulated OR device_pub = ANY(%s)", (devices,))
+        conn.execute("DELETE FROM ledger_entries WHERE txn_id IN (SELECT txn_id FROM ledger_entries WHERE account = ANY(%s))",
+                     (accounts,))
+        conn.execute("DELETE FROM merchant_contacts WHERE merchant_id = ANY(%s)", (merchant_ids,))
+        conn.execute("DELETE FROM cert_status WHERE cert_id = ANY(%s)", (certs,))
+        conn.execute("DELETE FROM certificates WHERE cert_id = ANY(%s)", (certs,))
+        conn.execute("DELETE FROM residents WHERE resident_id = ANY(%s)", (residents,))
+        conn.execute("DELETE FROM merchants WHERE merchant_id = ANY(%s)", (merchant_ids,))
+        cases.publish_policy(ctx, conn)  # the town's frozen certs and shop limits leave the policy
+    for event, data in ctx.events:
+        deps.events.publish(event, data)
+    return {"residents": len(residents), "shops": len(shops), "payments": len(tags), "cases": len(cases_),
+            "candidates": len(candidates), "contacts": contacts}
