@@ -50,6 +50,10 @@ class Settings:
     # The reviewer Droid after every triage (§14.7b). Off unless loaded from the environment
     # (STORMDESK_REVIEW, default on), so bare Settings (tests) keep one run per triage.
     stormdesk_review: bool = False
+    # Appeals as one conversation (§17.2): each shop's appeal thread keeps one Droid session, resumed for
+    # every new text. Off unless loaded from the environment (STORMDESK_APPEAL_SESSIONS, default on);
+    # off = one fresh run per message.
+    stormdesk_appeal_sessions: bool = False
     # The Evals tab's Chalk results (§18.5); empty: chalk/evals/results in this checkout.
     evals_results_dir: str = ""
 
@@ -105,5 +109,6 @@ def load_settings(env_file: Path | None = SERVER_DIR / ".env") -> Settings:
         stormdesk_model=env.get("STORMDESK_MODEL", ""),
         stormdesk_auto=_flag(env.get("STORMDESK_AUTO"), True),
         stormdesk_review=_flag(env.get("STORMDESK_REVIEW"), True),
+        stormdesk_appeal_sessions=_flag(env.get("STORMDESK_APPEAL_SESSIONS"), True),
         evals_results_dir=env.get("EVALS_RESULTS_DIR", ""),
     )

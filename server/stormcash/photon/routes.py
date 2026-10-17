@@ -109,17 +109,37 @@ async def inbound(request: Request) -> dict:
             return {"ok": True, "ignored": "unknown sender"}
         merchant_id = bytes(row["merchant_id"])
         flag_id = _open_flag(conn, merchant_id)
-    await asyncio.to_thread(client.record, deps, merchant_id, "in", channel, text, flag_id)
-    task = asyncio.create_task(appeal.respond(request.app, cfg, merchant_id, text, flag_id))
+    received = await asyncio.to_thread(client.record, deps, merchant_id, "in", channel, text, flag_id)
+    task = asyncio.create_task(appeal.respond(request.app, cfg, merchant_id, text, flag_id,
+                                              in_message_id=received["message_id"]))
     request.app.state.photon_tasks = {t for t in getattr(request.app.state, "photon_tasks", set()) if not t.done()}
     request.app.state.photon_tasks.add(task)
     return {"ok": True, "merchant_id": merchant_id.hex(), "flag_id": flag_id}
 
 
+# The StormDesk turns behind a shop's thread (§17.2): which run answered which message, in which Droid session.
+TURNS_SQL = """
+SELECT r.run_id, r.runner, r.status, r.session_id, r.citations_valid, r.started_at, r.finished_at,
+       r.transcript->'appeal' AS appeal, r.transcript->>'model' AS model,
+       r.transcript->'usage'->'factory_credits' AS factory_credits, r.transcript->'duration_s' AS duration_s,
+       r.transcript->>'fallback_from_droid' AS fallback_from_droid
+FROM stormdesk_runs r
+WHERE r.job = 'respond' AND r.merchant_id = %s AND r.transcript ? 'appeal'
+  AND (r.transcript->'appeal'->>'in_message_id')::bigint >= %s
+ORDER BY r.run_id"""
+
+
+def _turn(row: dict) -> dict:
+    appeal = row.pop("appeal") or {}
+    keys = ("mode", "flag_id", "in_message_id", "out_message_id", "reply_sent", "session", "turn", "resume_error")
+    return {**row, **{k: appeal.get(k) for k in keys}}
+
+
 @router.get("/v1/photon/messages")
 def thread(request: Request, merchant_id: str | None = None, resident_id: str | None = None,
            limit: int = Query(100, ge=1, le=500)) -> dict:
-    """A shop's or a resident's Photon conversation, oldest first (dashboard thread)."""
+    """A shop's or a resident's Photon conversation, oldest first (dashboard thread). A shop's thread also has
+    `turns`: the StormDesk respond runs that answered its messages, with their Droid session and turn."""
     if (merchant_id is None) == (resident_id is None):
         raise HTTPException(400, "give exactly one of merchant_id or resident_id")
     try:
@@ -134,8 +154,11 @@ def thread(request: Request, merchant_id: str | None = None, resident_id: str | 
                ORDER BY message_id""",
             (key, limit),
         )
+        turns = [_turn(r) for r in all_rows(conn, TURNS_SQL, (key, rows[0]["message_id"]))] \
+            if merchant_id is not None and rows else []
     if merchant_id is not None:
-        return jsonable({"merchant_id": merchant_id, "messages": [{**r, "merchant_id": merchant_id} for r in rows]})
+        return jsonable({"merchant_id": merchant_id, "messages": [{**r, "merchant_id": merchant_id} for r in rows],
+                         "turns": turns})
     return jsonable({"resident_id": resident_id, "messages": rows})
 
 

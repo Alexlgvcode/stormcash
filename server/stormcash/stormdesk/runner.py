@@ -69,6 +69,10 @@ class Job:
     proposal: dict | None = None
     flag_id: int | None = None  # the stored flag the review is for (None: a proposal passed in, e.g. by an eval)
     reviewed_run_id: int | None = None
+    # respond (§17.2): the appeal thread. {"mode": "session" | "per_message", "flag_id", "in_message_id"}; in
+    # session mode service.py adds the Droid session to resume ("resume_session_id", "turn") and the prompt
+    # seeded with the stored thread ("restart_prompt", "seeded_messages") for when it can't be resumed.
+    appeal: dict | None = None
 
     @property
     def output_model(self) -> type[BaseModel]:
@@ -91,6 +95,7 @@ class RunOutcome:
     model_requested: str | None = None
     attempts: list[dict] | None = None  # Droid only: one {attempt, ok, error} per session (structured-output retry)
     permission_denials: list[dict] | None = None  # Droid only: what the permission handler refused ([] when nothing)
+    appeal: dict | None = None  # an appeal turn in session mode: how its Droid session was opened, and its turn
 
 
 USAGE_FIELDS = ("input_tokens", "output_tokens", "cache_creation_tokens", "cache_read_tokens", "thinking_tokens",
@@ -366,6 +371,8 @@ class DroidRunner:
     async def run(self, job: Job, prompt: str, steps: Steps) -> RunOutcome:
         from droid_sdk import InteractionHandlers, Session, ToolCall, ToolResult
 
+        if job.kind == "respond" and (job.appeal or {}).get("mode") == "session":
+            return await self._appeal_turn(job, prompt, steps)
         config = session_config(self.deps, job.system_prompt)
         denials: list[dict] = []
         handlers = InteractionHandlers(on_permission=lambda request: permission_handler(request, denials))
@@ -407,6 +414,111 @@ class DroidRunner:
             log.warning("StormDesk attempt %s failed: %s", attempt, error)
         return RunOutcome(self.name, None, session_id, error, usage=usage, model=model, model_requested=requested,
                           attempts=attempts, permission_denials=denials)
+
+
+    async def _appeal_turn(self, job: Job, prompt: str, steps: Steps) -> RunOutcome:
+        """One turn of a shop's appeal in the thread's own Droid session (§17.2). Resumes the session the thread
+        already has, or starts one. The same tools, built-ins off, permission handler and AppealReply output as
+        every run; a failed structured output is asked again once, in the same session. If the session can't be
+        reopened (expired, saved on another machine), a new one starts from the thread stored in `messages`."""
+        from droid_sdk import InteractionHandlers, Session
+
+        appeal = job.appeal or {}
+        denials: list[dict] = []
+        handlers = InteractionHandlers(on_permission=lambda request: permission_handler(request, denials))
+        requested = self.model or "auto"
+        resume_id = appeal.get("resume_session_id")
+        opened = {"session": "started", "turn": 1}
+        session = None
+        if resume_id:
+            config = session_config(self.deps, job.system_prompt)
+            candidate = Session.resume(resume_id, interactions=handlers, mcp_servers=config.mcp_servers,
+                                       api_key=self.api_key, disabled_tools=BUILTIN_TOOLS, disable_builtin_skills=True)
+            try:
+                await candidate.open()
+                session = candidate
+                opened = {"session": "resumed", "turn": appeal.get("turn") or 2}
+            except Exception as exc:  # e.g. SessionNotFoundError: start over, seeded with the stored thread
+                await _close_quietly(candidate)
+                log.warning("Appeal session %s couldn't be resumed: %s", resume_id, exc)
+                opened = {"session": "restarted", "turn": 1, "resume_error": f"{type(exc).__name__}: {exc}",
+                          "resumed_from": resume_id, "seeded_messages": appeal.get("seeded_messages", 0)}
+                prompt = appeal.get("restart_prompt") or prompt
+        if session is None:
+            session = Session(model=self.model, config=session_config(self.deps, job.system_prompt),
+                              interactions=handlers, api_key=self.api_key)
+            try:
+                await session.open()
+            except Exception as exc:  # Droid can't run at all: the service answers with the fake runner
+                await _close_quietly(session)
+                return RunOutcome(self.name, None, None, f"{type(exc).__name__}: {exc}", unavailable=True,
+                                  model_requested=requested, attempts=[], permission_denials=denials, appeal=opened)
+        usage, model, error, session_id = None, None, None, None
+        attempts: list[dict] = []
+        try:
+            for attempt in (1, 2):  # a structured-output failure is a value: ask again once, same session (§14.2)
+                ask = prompt if attempt == 1 else (
+                    f"Your last answer wasn't a valid AppealReply ({error}). Answer the shop's message again as an "
+                    "AppealReply.")
+                result = await _stream_turn(session, job, ask, steps)
+                model = session_model(session) or model
+                session_id = result.session_id or _session_id(session) or session_id
+                usage = add_usage(usage, result.usage)
+                log.info("StormDesk appeal turn %s (%s) attempt %s on %s: %s", opened["turn"], opened["session"],
+                         attempt, model, usage)
+                output, error, unavailable = _judge(job, result)
+                attempts.append({"attempt": attempt, "ok": output is not None, "error": error})
+                used = {"usage": usage, "model": model, "model_requested": requested, "attempts": attempts,
+                        "permission_denials": denials, "appeal": opened}
+                if output is not None:
+                    return RunOutcome(self.name, output, session_id, **used)
+                if unavailable:
+                    return RunOutcome(self.name, None, session_id, error, unavailable=True, **used)
+                log.warning("StormDesk appeal attempt %s failed: %s", attempt, error)
+        finally:
+            await _close_quietly(session)
+        return RunOutcome(self.name, None, session_id, error, usage=usage, model=model, model_requested=requested,
+                          attempts=attempts, permission_denials=denials, appeal=opened)
+
+
+async def _stream_turn(session, job: Job, prompt: str, steps: Steps):
+    """Send one turn on an open session and record its tool calls as steps; returns the turn's result."""
+    from droid_sdk import ToolCall, ToolResult
+
+    stream = session.stream(prompt, output=job.output_model, timeout=RUN_TIMEOUT_S)
+    async for event in stream:
+        if isinstance(event, ToolCall):
+            steps.call(event.name.rsplit("__", 1)[-1], dict(event.input or {}), event.tool_use_id)
+        elif isinstance(event, ToolResult):
+            steps.result(event.tool_use_id, not event.is_error)
+    return stream.result
+
+
+def _judge(job: Job, result) -> tuple[BaseModel | None, str | None, bool]:
+    """(output, error, unavailable) for one turn's result, by the same rules as DroidRunner.run (§14.2)."""
+    if result.success and result.structured_output is not None:
+        try:
+            return job.output_model.model_validate(_thaw(result.structured_output)), None, False
+        except ValidationError as exc:
+            return None, f"output did not match {job.output_model.__name__}: {exc.error_count()} errors", False
+    if result.subtype == "error_during_execution":  # the agent couldn't run (e.g. "model_usage_exhausted")
+        message = getattr(result.error, "message", None) or result.text or "no output"
+        return None, f"error_during_execution: {message}", True
+    return None, f"{result.subtype}: {result.structured_output_error or 'no output'}", False
+
+
+def _session_id(session) -> str | None:
+    try:
+        return session.id
+    except Exception:  # never opened
+        return None
+
+
+async def _close_quietly(session) -> None:
+    try:
+        await session.close()
+    except Exception as exc:  # closing a session that failed to open: nothing left to clean up
+        log.debug("closing a Droid session failed: %s", exc)
 
 
 def session_model(session) -> str | None:
