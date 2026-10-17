@@ -172,7 +172,15 @@ StormDesk is the back office of the running product, in [`server/stormcash/storm
 
 _A live Droid run (`claude-sonnet-5-5`) triaging the Corner Store candidate on the seeded town: 14 read-only tool calls streamed to the dashboard, 63,437 Factory credits. With prompt v1 it dismissed the candidate; with prompt v2 the same candidate is flagged (see Honest limits)._
 
-**First live reviews** (`claude-sonnet-5-5`, seed 42). The reviewer re-checked prompt v2's Corner Store flag in 13 tool calls and agreed. All 10 ids it cited were valid; it took 56,198 credits and 44 s. On a stolen phone (Resident 174) it agreed with freezing the certificate in 8 tool calls (16,828 credits, 30 s). It also noted that the proposal's text had missed the region mismatch and the idle gap. Neither shows a disagreement. How often the reviewer disagrees, and whether that helps, needs an eval on stored proposals; until one runs we claim nothing about it.
+**First live reviews** (`claude-sonnet-5-5`, seed 42). The reviewer re-checked prompt v2's Corner Store flag in 13 tool calls and agreed. All 10 ids it cited were valid; it took 56,198 credits and 44 s. On a stolen phone (Resident 174) it agreed with freezing the certificate in 8 tool calls (16,828 credits, 30 s). It also noted that the proposal's text had missed the region mismatch and the idle gap. Neither shows a disagreement. **Reviewer eval** (Chalk Evaluations, held-out seeds 1 and 2, the 20 stored prompt-v2 proposals from run `51b74f56…`; only the reviewer ran, 799,185 credits, all `claude-sonnet-5-5`). Chalk runs `28f97eca-0402-4c86-9c76-5e380eae6dc0` (v2 alone) and `e3ecc828-c97e-41d3-9cf8-d7185b3d8013` (v2 + reviewer):
+
+| | v2 alone | v2 + reviewer |
+|---|---|---|
+| Real cases that reach a person | 6 / 9 | 8 / 9 |
+| Honest subjects that reach a person | 0 / 11 | 0 / 11 |
+| Invalid citations reaching a person | 0 | 0 |
+
+The reviewer agreed 17 times, disagreed once and said the evidence was insufficient twice, so 3 rows were escalated to a person. Two of those were real cases v2 had dismissed. The one disagreement was with v2's correct hold on Corner Store, which was already in front of a person. The reviewer never changes the proposal; it only decides whether a person must look.
 
 ## How we use Chalk
 
@@ -210,6 +218,7 @@ _A live Droid run (`claude-sonnet-5-5`) triaging the Corner Store candidate on t
 - Nessie amounts are whole dollars; one helper converts cents to dollars and refuses anything else rather than rounding.
 - **If Nessie is slow or down**, the payout is queued and replayed until both halves exist; a payout is "executed" only when they do. Every call is in the dashboard's Nessie call log.
 - Simulated money never touches Nessie.
+- **Reconciled with the bank.** `GET /v1/accounts/reconcile` and the Accounts tab's "Reconciled with Capital One Nessie" panel compare, account by account in cents, what our ledger says with what Nessie's own records add up to. They show ✓, or the difference with its cause taken from real data: a queued payout, half a pair, a ledger-only amount, or a Nessie record with no ledger entry. Each demo reset opens a fresh guarantee pool account, so the pool's records start clean.
 
 ## How we use Photon
 
