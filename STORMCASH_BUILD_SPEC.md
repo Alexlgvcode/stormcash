@@ -211,7 +211,7 @@ stormcash/
     features.py
     resolvers/
     evals/
-  cpp/                       # C++ toolkit (off the demo path): stormcash-verify, a third verifier of the §20 vectors and case proofs
+  cpp/                       # C++ toolkit (off the demo path): stormcash-verify, a third verifier of the §20 vectors and case proofs; scale/, Scale Lab (simulated city-scale §16 town)
   fixtures/
     nws_helene_buncombe.json # replayed alerts, labeled
 ```

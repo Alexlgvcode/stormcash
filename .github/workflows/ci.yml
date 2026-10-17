@@ -67,6 +67,12 @@ jobs:
         env:
           UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
         run: cpp/build/verify/stormcash-verify vectors spec/vectors.json --strict
+      - name: Release build (optimizer-only warnings, as errors)
+        run: |
+          cmake -S cpp -B cpp/build-release -DCMAKE_BUILD_TYPE=Release -DSTORMCASH_WERROR=ON -DSTORMCASH_BUILD_TESTS=OFF
+          cmake --build cpp/build-release -j 4
+          cpp/build-release/verify/stormcash-verify vectors spec/vectors.json --strict
+          cpp/build-release/scale/stormcash-scale run --residents 10000 --replicates 4
 
   dashboard:
     runs-on: ubuntu-latest
