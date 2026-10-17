@@ -368,6 +368,21 @@ def test_a_fabricated_claim_never_reaches_the_pr_step(deps, app_client):
     assert guardrail["count"] == 1
 
 
+def test_a_second_request_is_refused_while_a_run_is_starting(deps):
+    desk = author.Author(deps, runner=ScriptedAuthor(), pr=lambda *a: {"skipped": "test"},
+                         make_sandbox=lambda: sandbox.create("HEAD", os_sandbox=OS_SANDBOX))
+
+    async def go():
+        desk.start(author.make_job("region_dark", []), check_enabled=False)
+        with pytest.raises(author.AuthorError, match="already in progress"):
+            desk.start(author.make_job("region_dark", []), check_enabled=False)  # before the first holds the lock
+        await asyncio.gather(*desk.tasks)
+
+    asyncio.run(go())
+    with deps.pool.connection() as conn:
+        assert one(conn, "SELECT count(*) AS n FROM stormdesk_runs WHERE job = 'author'")["n"] == 1
+
+
 def test_a_run_that_is_not_droid_never_opens_a_pr(deps):
     calls = []
     _, row = run_author(deps, ScriptedAuthor(name="fake"), lambda *a: calls.append(a))

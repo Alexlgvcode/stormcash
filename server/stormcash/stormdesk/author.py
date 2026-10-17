@@ -524,7 +524,7 @@ class Author:
             state = status(self.deps)
             if not state["enabled"]:
                 raise AuthorError("the author job can't run here: " + "; ".join(state["reasons"]))
-        if self.lock.locked():
+        if self.lock.locked() or self.tasks:  # tasks: a run started but not yet holding the lock
             raise AuthorError("an author run is already in progress")
         with self.deps.pool.connection() as conn:
             run_id = scalar(conn, """INSERT INTO stormdesk_runs (job, runner, status, transcript)

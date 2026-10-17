@@ -51,4 +51,5 @@ def author_runs(request: Request) -> dict:
                                         transcript->'usage' AS usage, transcript->'model' AS model
                                  FROM stormdesk_runs WHERE job = 'author' ORDER BY run_id DESC LIMIT 20""")
     running = getattr(request.app.state, "author", None)
-    return jsonable({**author.status(deps), "running": bool(running and running.lock.locked()), "runs": rows})
+    return jsonable({**author.status(deps), "running": bool(running and (running.lock.locked() or running.tasks)),
+                     "runs": rows})
