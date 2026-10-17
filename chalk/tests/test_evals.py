@@ -356,7 +356,7 @@ def test_session_info_reads_model_and_credits(tmp_path):
     write_session(tmp_path / "-some-cwd", SID, ["claude-sonnet-5-5", "claude-sonnet-5-5"], 47054)
     info = gateway.find_session(SID, str(tmp_path))
     assert info == {"models_used": ["claude-sonnet-5-5"], "factory_credits": 47054,
-                    "configured_model": "claude-sonnet-5-5"}
+                    "configured_model": "claude-sonnet-5-5", "folder": str(tmp_path / "-some-cwd")}
     assert gateway.find_session("../../etc/passwd", str(tmp_path)) is None
     assert gateway.audit(str(tmp_path / "-some-cwd"), 0) == {"sessions": 1, "factory_credits": 47054,
                                                              "models_seen": ["claude-sonnet-5-5"]}
@@ -398,6 +398,17 @@ def test_breaker_refuses_rows_after_a_model_change_or_the_cap(tmp_path, fake_ser
         with pytest.raises(gateway.Refused):
             jobs.start(42, 6)
     assert jobs.stats()["audit"]["factory_credits"] == credits
+
+
+def test_audit_follows_the_folder_droid_wrote_to(tmp_path, fake_server):
+    server_url, _, state = fake_server
+    write_session(tmp_path / "-real-folder", SID, ["m"], 500)
+    state["run"] = {**RUN, "runner": "droid", "flag": {"agent_session_id": SID}}
+    jobs = gateway.Jobs({42: server_url}, "m", require_model="m", max_credits=10**6,
+                        sessions_dir=str(tmp_path / "-guessed-folder"), sessions_root=str(tmp_path))
+    jobs.started = 0
+    run_one(jobs)
+    assert jobs.tripped is None and jobs.stats()["audit"]["factory_credits"] == 500
 
 
 def test_breaker_trips_when_the_server_reports_another_model(tmp_path, fake_server):

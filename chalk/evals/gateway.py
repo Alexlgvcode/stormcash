@@ -77,7 +77,7 @@ def find_session(session_id: str | None, root: str = SESSIONS_ROOT) -> dict | No
     for folder in os.listdir(root) if os.path.isdir(root) else []:
         stem = os.path.join(root, folder, session_id)
         if os.path.exists(stem + ".jsonl"):
-            return session_info(stem)
+            return {**session_info(stem), "folder": os.path.join(root, folder)}
     return None
 
 
@@ -192,6 +192,10 @@ class Jobs:
                 result = json.loads(resp.read())
             if result.get("runner") == "droid":
                 session = find_session((result.get("flag") or {}).get("agent_session_id"), self.sessions_root)
+                if session and session["folder"] != self.sessions_dir:
+                    # The audit follows the folder Droid actually wrote the eval servers' sessions to.
+                    print(f"gateway: auditing Droid sessions in {session['folder']}", flush=True)
+                    self.sessions_dir = session["folder"]
             update = {"status": "done", "output": to_output(result, self.model, session)}
         except urllib.error.HTTPError as exc:
             update = {"status": "failed", "error": f"server answered {exc.code}: {exc.read()[:300].decode(errors='replace')}"}
@@ -270,7 +274,8 @@ def main() -> None:
     ap.add_argument("--model", default=None, help="the model the eval servers ask Droid for (recorded in _run)")
     ap.add_argument("--require-model", default=None, help="trip the breaker if any Droid session uses another model")
     ap.add_argument("--max-credits", type=float, default=None, help="trip the breaker at this many Factory credits")
-    ap.add_argument("--sessions-dir", default=None, help="the eval servers' Droid session folder, for the audit")
+    ap.add_argument("--sessions-dir", default=None,
+                    help="the eval servers' Droid session folder (a hint: the first row's session sets it)")
     args = ap.parse_args()
     token = os.environ.get("EVAL_GATEWAY_TOKEN", "")
     if len(token) < 24:
