@@ -1,9 +1,10 @@
-"""Send a message to a merchant and record it (spec §17).
+"""Send a message to a merchant or resident and record it (spec §17).
 
 `send(channel, handle, text)` talks to the Node bridge (photon/bridge), which owns the Spectrum
 SDK. `send_to_merchant` adds the bookkeeping: the merchant's handle from `merchant_contacts`,
-a `messages` row and a `message` SSE event. A send that fails (or Photon switched off) is still
-recorded, so the dashboard thread stays honest about what was and wasn't delivered.
+a `messages` row and a `message` SSE event. `reply` answers the handle that wrote in (a resident's
+FREEZE, §17.2) and records it on the resident's thread. A send that fails (or Photon switched off)
+is still recorded, so the dashboard thread stays honest about what was and wasn't delivered.
 """
 
 from __future__ import annotations
@@ -45,16 +46,18 @@ def merchant_contact(conn, merchant_id: bytes) -> dict | None:
                (merchant_id,))
 
 
-def record(deps, merchant_id: bytes, direction: str, channel: str, body: str, flag_id: int | None,
-           delivered: bool | None = None, error: str | None = None) -> dict:
+def record(deps, merchant_id: bytes | None, direction: str, channel: str, body: str, flag_id: int | None,
+           delivered: bool | None = None, error: str | None = None, *, resident_id=None) -> dict:
+    """One `messages` row on a shop's thread (merchant_id) or a resident's (resident_id)."""
     with deps.pool.connection() as conn:
         row = one(
             conn,
-            """INSERT INTO messages (merchant_id, flag_id, direction, channel, body)
-               VALUES (%s, %s, %s, %s, %s) RETURNING *""",
-            (merchant_id, flag_id, direction, channel, body),
+            """INSERT INTO messages (merchant_id, resident_id, flag_id, direction, channel, body)
+               VALUES (%s, %s, %s, %s, %s, %s) RETURNING *""",
+            (merchant_id, resident_id, flag_id, direction, channel, body),
         )
-    event = {**row, "merchant_id": merchant_id.hex()}
+    event = {**row, "merchant_id": merchant_id.hex() if merchant_id else None,
+             "resident_id": str(resident_id) if resident_id else None}
     if direction == "out":
         event.update(delivered=delivered, error=error)
     deps.events.publish("message", event)
@@ -74,3 +77,18 @@ def send_to_merchant(deps, settings: PhotonSettings, merchant_id: bytes, text: s
     except SendError as exc:
         log.warning("Photon send to %s failed: %s", merchant_id.hex(), exc)
         return record(deps, merchant_id, "out", contact["channel"], text, flag_id, False, str(exc))
+
+
+def reply(deps, settings: PhotonSettings, channel: str, handle: str, text: str, *, resident_id=None,
+          transport: httpx.BaseTransport | None = None) -> dict:
+    """Answer the handle that wrote in. Recorded on the resident's thread when there is one;
+    an unknown handle's reply is sent but not stored (there is no thread to put it on)."""
+    delivered, error = True, None
+    try:
+        send(settings, channel, handle, text, transport)
+    except SendError as exc:
+        log.warning("Photon reply to %s:%s failed: %s", channel, handle, exc)
+        delivered, error = False, str(exc)
+    if resident_id is None:
+        return {"direction": "out", "channel": channel, "body": text, "delivered": delivered, "error": error}
+    return record(deps, None, "out", channel, text, None, delivered, error, resident_id=resident_id)

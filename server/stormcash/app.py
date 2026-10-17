@@ -70,7 +70,8 @@ def build_deps(settings: Settings, nessie_transport: httpx.BaseTransport | None 
     deps = Deps(settings, pool, events, nessie, MoneyMover(pool, nessie, events))
     deps.mover.on_payout_executed = lambda payout_id: _settled_notice(deps, payout_id)
     with pool.connection() as conn:
-        for table, migration in (("nessie_moves", "001_nessie_moves"), ("stormdesk_runs", "002_stormdesk_runs")):
+        for table, migration in (("nessie_moves", "001_nessie_moves"), ("stormdesk_runs", "002_stormdesk_runs"),
+                                 ("resident_contacts", "004_resident_freeze")):
             if conn.execute("SELECT to_regclass(%s) AS t", (table,)).fetchone()["t"] is None:
                 raise RuntimeError(f"database is missing {table}: apply server/migrations/{migration}.sql")
         check = conn.execute(

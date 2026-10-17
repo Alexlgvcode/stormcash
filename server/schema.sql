@@ -39,6 +39,13 @@ CREATE TABLE merchant_contacts (        -- Photon mapping
   PRIMARY KEY (channel, handle)
 );
 
+CREATE TABLE resident_contacts (        -- [v4.13] Photon mapping for residents (FREEZE by text, §17.2)
+  resident_id UUID NOT NULL REFERENCES residents,
+  channel TEXT NOT NULL,                -- 'telegram' | 'imessage' | 'sms'
+  handle TEXT NOT NULL,
+  PRIMARY KEY (channel, handle)
+);
+
 CREATE TABLE certificates (
   cert_id BYTEA NOT NULL,
   cert_ver INT NOT NULL,
@@ -57,7 +64,8 @@ CREATE TABLE cert_status (
   max_cap_cents INT NOT NULL,
   frozen_at BIGINT,
   storm_mode BOOLEAN NOT NULL DEFAULT FALSE,
-  storm_mode_at BIGINT
+  storm_mode_at BIGINT,
+  owner_freeze_at BIGINT                -- [v4.13] the owner texted FREEZE (§17.2); cap_drain's owner_freeze_request
 );
 
 -- Protocol data
@@ -191,6 +199,7 @@ CREATE TABLE approvals (
 CREATE TABLE messages (                 -- Photon conversations
   message_id BIGSERIAL PRIMARY KEY,
   merchant_id BYTEA REFERENCES merchants,
+  resident_id UUID REFERENCES residents, -- [v4.13] a resident's thread (FREEZE by text); merchant_id is then NULL
   flag_id BIGINT REFERENCES flags,
   direction TEXT NOT NULL CHECK (direction IN ('out','in')),
   channel TEXT NOT NULL,

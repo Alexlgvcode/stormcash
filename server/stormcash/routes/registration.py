@@ -13,15 +13,16 @@ from ..protocol.crypto import ID_LEN, PUB_LEN
 router = APIRouter()
 
 
+class ContactIn(BaseModel):
+    channel: str
+    handle: str
+
+
 class ResidentIn(BaseModel):
     display_name: str
     holder_pub: str
     region_id: str | None = None
-
-
-class ContactIn(BaseModel):
-    channel: str
-    handle: str
+    contact: ContactIn | None = None  # [v4.13] the Photon handle that may text FREEZE (§17.2)
 
 
 class MerchantIn(BaseModel):
@@ -52,7 +53,8 @@ def register_resident(body: ResidentIn, request: Request, signer: bytes | None =
     holder_pub = b64_field(body.holder_pub, "holder_pub", PUB_LEN)
     _same_key(signer, holder_pub)
     resident_id, cert, _ = registry.register_resident(
-        request.app.state.deps, body.display_name, holder_pub, body.region_id
+        request.app.state.deps, body.display_name, holder_pub, body.region_id,
+        contact=body.contact.model_dump() if body.contact else None,
     )
     return {"resident_id": str(resident_id), "cert": cert.to_json()}
 
