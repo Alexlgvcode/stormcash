@@ -142,6 +142,7 @@ def fake_server():
         def do_POST(self):  # noqa: N802
             body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
             seen.append((self.path, self.headers["X-SC-Operator"], body))
+            state.get("on_post", lambda: None)()  # e.g. Droid writing its session files during the run
             data = json.dumps(state["run"]).encode()
             self.send_response(200)
             self.send_header("Content-Length", str(len(data)))
@@ -278,6 +279,7 @@ def test_an_incomplete_droid_run_is_not_a_stormdesk_column():
     refused = {**row("colluder", "merchant_silence", "hold_pool_payout", False, None), "output_error": "409"}
     s = summarize([good, refused])
     assert (s["runner"], s["complete"], s["table_column"]) == ("droid", False, None)
+    assert s["runner_label"].endswith("incomplete: 1 of 2 rows answered (not a score)")
     tripped = {"tripped": "credit cap reached", "audit": {"models_seen": ["m"]}}
     s = results.summarize([good], chalk={}, dataset={}, mode="chalk_task", git_sha=None, now=0, droid_audit=tripped)
     assert (s["complete"], s["table_column"]) == (False, None)
@@ -380,7 +382,6 @@ def run_one(jobs, seed=42, candidate_id=5):
     (["claude-sonnet-5-5"], 1000, 10**6, None),
     (["droid-core"], 1000, 10**6, "not claude-sonnet-5-5"),
     (["claude-sonnet-5-5"], 1000, 10**6, None),
-    (["claude-sonnet-5-5"], 2000, 1500, "credit cap reached"),
 ])
 def test_breaker_refuses_rows_after_a_model_change_or_the_cap(tmp_path, fake_server, models, credits, cap, trips):
     server_url, _, state = fake_server
@@ -435,3 +436,56 @@ def test_breaker_trips_on_a_fallback_or_a_missing_session(tmp_path, fake_server)
     state["run"] = {**RUN, "runner": "droid", "flag": {"agent_session_id": SID}}  # no session files
     run_one(jobs)
     assert "no session files" in jobs.tripped
+
+
+def test_a_row_is_admitted_only_if_it_fits_under_the_cap(tmp_path, fake_server):
+    server_url, _, state = fake_server
+    sessions = tmp_path / "-eval"
+    write_session(sessions, SID, ["m"], 30000)
+    state["run"] = {**RUN, "runner": "droid", "flag": {"agent_session_id": SID}}
+    jobs = gateway.Jobs({42: server_url}, "m", require_model="m", max_credits=100000, sessions_dir=str(sessions),
+                        sessions_root=str(tmp_path), row_estimate=40000)
+    jobs.started = 0
+    assert jobs.projected_credits(extra=1) == 30000 + 40000  # the session on disk + one row at the estimate
+    run_one(jobs)  # 30000 spent; rows now cost 1.25 x 30000 = 37500 each
+    assert jobs.tripped is None and jobs.projected_credits(extra=1) == 30000 + 37500
+    with pytest.raises(gateway.Refused):  # with one running, another projects 30000 + 2 x 37500 > 100000
+        jobs.start(42, 6), jobs.start(42, 7)
+    assert "credit cap: one more row projects" in jobs.tripped
+
+
+def test_breaker_trips_once_the_spend_reaches_the_cap(tmp_path, fake_server):
+    server_url, _, state = fake_server
+    sessions = tmp_path / "-eval"
+    state["run"] = {**RUN, "runner": "droid", "flag": {"agent_session_id": SID}}
+    state["on_post"] = lambda: write_session(sessions, SID, ["m"], 2000)  # the row's session appears mid-run
+    jobs = gateway.Jobs({42: server_url}, "m", require_model="m", max_credits=1500, sessions_dir=str(sessions),
+                        sessions_root=str(tmp_path))
+    jobs.started = 0
+    assert run_one(jobs)["status"] == "done"  # admitted: nothing spent yet
+    assert "credit cap reached: 2000 >= 1500" in jobs.tripped
+    with pytest.raises(gateway.Refused):
+        jobs.start(42, 6)
+
+
+def test_a_labelled_run_says_which_version_it_is():
+    dismiss = flag(kind="none", proposed_action="none")
+    s = results.summarize([row("trap_victim_shop", "none", "none", True, droid_out(dismiss))], chalk={}, dataset={},
+                          mode="chalk_task", git_sha=None, now=0, label="prompt v2", label_note="not a blind holdout")
+    assert s["runner_label"] == "StormDesk (Droid, m) · prompt v2" and s["label"] == "prompt v2"
+    assert s["label_note"] == "not a blind holdout" and s["table_column"] == "stormdesk"
+
+
+def test_every_row_must_come_from_the_expected_prompt_version():
+    dismiss = flag(kind="none", proposed_action="none")
+    v2 = row("trap_victim_shop", "none", "none", True, droid_out(dismiss, prompt_version=2))
+    v1 = row("trap_stockup", "none", "none", True, droid_out(dismiss, prompt_version=1))
+
+    def run(rows, expect=None):
+        return results.summarize(rows, chalk={}, dataset={}, mode="chalk_task", git_sha=None, now=0,
+                                 expect_prompt_version=expect)
+
+    assert run([v2], expect=2)["runner"] == "droid" and run([v2], expect=2)["prompt_versions_seen"] == [2]
+    assert run([v2, v1])["runner"] == "mixed"
+    assert run([v1], expect=2)["runner"] == "mixed"
+    assert json.loads(gateway.to_output({**RUN, "runner": "droid", "prompt_version": 2}))["_run"]["prompt_version"] == 2

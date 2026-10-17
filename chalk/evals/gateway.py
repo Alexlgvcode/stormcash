@@ -25,7 +25,9 @@ Droid guard (`--require-model`, `--max-credits`): the audit sums every Droid
 session the eval servers created since the gateway started (retries included).
 The breaker trips, and new rows are refused, as soon as any session used
 another model (Factory switches to "Droid Core" when usage runs out), a row
-fell back to the fake runner, or the credit cap is reached. Stdlib only.
+fell back to the fake runner, or the credit cap is reached. A row is only
+admitted if credits spent plus the running rows and itself, at the average row
+cost, still fit under the cap, so the cap holds with rows in flight. Stdlib only.
 """
 
 from __future__ import annotations
@@ -45,6 +47,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 OPERATOR = "chalk-eval"  # X-SC-Operator on every run (§14.6 operator header)
 RUN_TIMEOUT_S = 900
 JOB_TTL_S = 6 * 3600
+ROW_MARGIN = 1.25  # a row may cost more than the average so far
 
 
 SESSIONS_ROOT = os.path.expanduser("~/.factory/sessions")
@@ -109,6 +112,7 @@ def to_output(result: dict, model: str | None = None, session: dict | None = Non
         # From the server itself once it reports them (#81): the session's actual model and summed usage.
         "server_model": result.get("model") if droid else None,
         "server_usage": result.get("usage") if droid else None,
+        "prompt_version": result.get("prompt_version") if droid else None,
         "status": result.get("status"),
         "citations_valid": result.get("citations_valid"),
         "missing_citations": result.get("missing_citations") or [],
@@ -128,10 +132,11 @@ class Refused(Exception):
 class Jobs:
     def __init__(self, servers: dict[int, str], model: str | None, *, require_model: str | None = None,
                  max_credits: float | None = None, sessions_dir: str | None = None,
-                 sessions_root: str = SESSIONS_ROOT) -> None:
+                 sessions_root: str = SESSIONS_ROOT, row_estimate: float = 0.0) -> None:
         self.servers, self.model = servers, model
         self.require_model, self.max_credits, self.sessions_dir = require_model, max_credits, sessions_dir
         self.sessions_root = sessions_root
+        self.row_estimate = row_estimate
         self.started = time.time()
         self.tripped: str | None = None
         self.jobs: dict[str, dict] = {}
@@ -167,11 +172,27 @@ class Jobs:
                 self.tripped = self.tripped or reason
             print(f"gateway: BREAKER TRIPPED: {reason}", flush=True)
 
+    def projected_credits(self, extra: int = 0) -> float:
+        """Credits spent so far plus the rows still running and `extra` new ones, each at 1.25 x the average
+        done row (row_estimate until a row is done). In-flight sessions are counted in both: deliberately cautious."""
+        with self.lock:
+            done = [j["credits"] for j in self.jobs.values() if j.get("credits") is not None]
+            running = sum(1 for j in self.jobs.values() if j["status"] == "running")
+        per_row = ROW_MARGIN * sum(done) / len(done) if done else self.row_estimate
+        return audit(self.sessions_dir, self.started)["factory_credits"] + (running + extra) * per_row
+
     def start(self, seed: int, candidate_id: int) -> str:
         if seed not in self.servers:
             raise KeyError(f"no eval server for seed {seed}")
         if self.tripped:
             raise Refused(f"refusing new rows: {self.tripped}")
+        if self.max_credits and (projected := self.projected_credits(extra=1)) > self.max_credits:
+            # Admit a row only if it should still fit under the cap, so the cap holds with rows in flight.
+            reason = f"credit cap: one more row projects {projected:.0f} > {self.max_credits:.0f}"
+            with self.lock:
+                self.tripped = self.tripped or reason
+            print(f"gateway: BREAKER TRIPPED: {reason}", flush=True)
+            raise Refused(f"refusing new rows: {reason}")
         job_id = uuid.uuid4().hex
         with self.lock:
             now = time.time()
@@ -196,7 +217,8 @@ class Jobs:
                     # The audit follows the folder Droid actually wrote the eval servers' sessions to.
                     print(f"gateway: auditing Droid sessions in {session['folder']}", flush=True)
                     self.sessions_dir = session["folder"]
-            update = {"status": "done", "output": to_output(result, self.model, session)}
+            update = {"status": "done", "output": to_output(result, self.model, session),
+                      "credits": (session or {}).get("factory_credits")}
         except urllib.error.HTTPError as exc:
             update = {"status": "failed", "error": f"server answered {exc.code}: {exc.read()[:300].decode(errors='replace')}"}
         except Exception as exc:  # the server is down or timed out: the task reports it as a row error
@@ -273,7 +295,10 @@ def main() -> None:
     ap.add_argument("--server", action="append", default=[], help="SEED=URL of that seed's eval server")
     ap.add_argument("--model", default=None, help="the model the eval servers ask Droid for (recorded in _run)")
     ap.add_argument("--require-model", default=None, help="trip the breaker if any Droid session uses another model")
-    ap.add_argument("--max-credits", type=float, default=None, help="trip the breaker at this many Factory credits")
+    ap.add_argument("--max-credits", type=float, default=None,
+                    help="a hard cap: admit a row only while spent + running + this row (at the average row cost) fits")
+    ap.add_argument("--row-estimate", type=float, default=65000.0,
+                    help="credits per row assumed until rows are done (a triage took 16k-65k on claude-sonnet-5-5)")
     ap.add_argument("--sessions-dir", default=None,
                     help="the eval servers' Droid session folder (a hint: the first row's session sets it)")
     args = ap.parse_args()
@@ -281,7 +306,7 @@ def main() -> None:
     if len(token) < 24:
         raise SystemExit("set EVAL_GATEWAY_TOKEN (24+ characters)")
     jobs = Jobs(parse_servers(args.server), args.model, require_model=args.require_model,
-                max_credits=args.max_credits, sessions_dir=args.sessions_dir)
+                max_credits=args.max_credits, sessions_dir=args.sessions_dir, row_estimate=args.row_estimate)
     httpd = ThreadingHTTPServer(("127.0.0.1", args.port), make_handler(jobs, token))
     print(f"gateway: listening on 127.0.0.1:{args.port} for seeds {sorted(jobs.servers)}", flush=True)
     httpd.serve_forever()
