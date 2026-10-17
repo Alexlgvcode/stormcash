@@ -2,6 +2,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  appealSessionsText,
+  appealTurnText,
   builtinCalls,
   credits,
   duration,
@@ -87,4 +89,16 @@ test("a review's prompt is the reviewer's", () => {
   assert.equal(promptText(base), "prompt v2");
   assert.equal(promptText({ job: "review", prompt_version: 1 }), "reviewer prompt v1");
   assert.equal(promptText({ job: "triage", prompt_version: null }), null);
+});
+
+test("appeal conversations: turns in Droid sessions, resumed or restarted", () => {
+  assert.equal(appealSessionsText(undefined), null);
+  assert.equal(appealSessionsText({ sessions: 0, turns: 0, resumed: 0, restarted: 0, longest: 0 }), null);
+  assert.equal(appealSessionsText({ sessions: 1, turns: 3, resumed: 2, restarted: 0, longest: 3 }),
+    "3 turns in 1 Droid session (2 resumed)");
+  assert.equal(appealSessionsText({ sessions: 2, turns: 3, resumed: 1, restarted: 1, longest: 2 }),
+    "3 turns in 2 Droid sessions (1 resumed, 1 restarted from the stored thread)");
+  assert.equal(appealTurnText(null), null);
+  assert.equal(appealTurnText({ session: "resumed", turn: 2, session_id: "8c1f2a3b-0d4e", resume_error: null }),
+    "turn 2 of Droid session 8c1f2a3b (resumed: same session)");
 });

@@ -1,9 +1,11 @@
 // StormDesk on the dashboard (spec §18.3, §14.6, §14.7b, §14.8): flags with their
 // evidence, the agent's tool calls live or replayed, the reviewer's second
 // opinion, Approve / Reject with the operator's name, and the Photon thread for
-// merchant flags. A fake-runner result is labelled as such everywhere (§0 rule 3).
+// merchant flags, where each StormDesk reply says which turn of the appeal's Droid
+// session wrote it (§17.2). A fake-runner result is labelled as such everywhere (§0 rule 3).
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getJSON, operatorPost, type FlagDetail, type FlagRow, type Message, type Run, type Step, type Usage } from "../api";
+import { heldBack, sessionSummary, turnLabel, turnsByReply, type AppealTurn } from "../appeal";
 import { useEvents } from "../events";
 import { clockTime, dollars } from "../format";
 import { reviewVerdict, suggestion, type FlagReview } from "../review";
@@ -219,32 +221,60 @@ function Decision({ flag, onDone }: { flag: FlagRow; onDone: () => void }) {
 
 function PhotonThread({ merchantId }: { merchantId: string }) {
   const [messages, setMessages] = useState<Message[]>([]);
+  const [turns, setTurns] = useState<AppealTurn[]>([]);
   const load = useCallback(() => {
-    getJSON<{ messages: Message[] }>(`/v1/photon/messages?merchant_id=${merchantId}`)
-      .then((r) => setMessages(r.messages))
+    getJSON<{ messages: Message[]; turns?: AppealTurn[] }>(`/v1/photon/messages?merchant_id=${merchantId}`)
+      .then((r) => {
+        setMessages(r.messages);
+        setTurns(r.turns ?? []);
+      })
       .catch(() => setMessages([]));
   }, [merchantId]);
   useEffect(load, [load]);
   useEvents(["message"], (data) => {
     if ((data as Message).merchant_id === merchantId) setMessages((cur) => [...cur, data as Message]);
   });
+  useEvents(["appeal"], (data) => {
+    if ((data as { merchant_id?: string }).merchant_id === merchantId) load(); // the turn that just answered
+  });
+  const byReply = turnsByReply(turns);
+  const summary = sessionSummary(turns);
   return (
     <div className="rounded-xl border border-slate-800 bg-slate-950 p-4">
-      <h4 className="mb-2 text-base font-semibold text-slate-200">Photon thread</h4>
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <h4 className="text-base font-semibold text-slate-200">Photon thread</h4>
+        {summary && (
+          <span className="rounded-full bg-emerald-500/15 px-3 py-0.5 text-sm font-semibold text-emerald-300"
+            title="Every reply in this appeal is a turn of the same Droid session, resumed for each new text (spec §17.2).">
+            {summary}
+          </span>
+        )}
+      </div>
       {messages.length === 0 && <p className="text-slate-500">No messages with this shop.</p>}
       <ol className="space-y-2">
-        {messages.map((m) => (
-          <li key={m.message_id} className={`flex ${m.direction === "out" ? "justify-end" : "justify-start"}`}>
-            <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-base ${
-              m.direction === "out" ? "bg-sky-600/30 text-sky-50" : "bg-slate-800 text-slate-100"}`}>
-              {m.body}
-              <div className="mt-1 text-xs text-slate-400">
-                {m.direction === "out" ? "StormCash" : "Shop"} · {m.channel} · {clockTime(m.created_at)}
-                {m.delivered === false && " · not delivered"}
+        {messages.map((m) => {
+          const turn = m.direction === "out" ? byReply.get(m.message_id) : undefined;
+          const held = turn ? heldBack(turn) : null;
+          return (
+            <li key={m.message_id} className={`flex ${m.direction === "out" ? "justify-end" : "justify-start"}`}>
+              <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-base ${
+                m.direction === "out" ? "bg-sky-600/30 text-sky-50" : "bg-slate-800 text-slate-100"}`}>
+                {m.body}
+                <div className="mt-1 text-xs text-slate-400">
+                  {m.direction === "out" ? "StormCash" : "Shop"} · {m.channel} · {clockTime(m.created_at)}
+                  {m.delivered === false && " · not delivered"}
+                </div>
+                {turn && (
+                  <div className={`mt-1 text-xs font-medium ${
+                    turn.runner === "fake" ? "text-amber-300" : turn.session === "resumed" ? "text-emerald-300" : "text-sky-200"}`}>
+                    {turnLabel(turn)}
+                  </div>
+                )}
+                {held && <div className="mt-0.5 text-xs font-medium text-rose-300">{held}</div>}
               </div>
-            </div>
-          </li>
-        ))}
+            </li>
+          );
+        })}
       </ol>
     </div>
   );
