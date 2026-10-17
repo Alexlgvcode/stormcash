@@ -20,6 +20,7 @@
 > **v4.16 (Oct 17):** the reviewer Droid evaluated on held-out rows (§15.3, §14.7b): "v2 alone" vs "v2 + reviewer" as two Chalk Evaluations on run B's frozen outputs; a one-row-at-a-time driver that never sends a review twice. Marked **[v4.16]**.
 > **v4.17 (Oct 17):** live reconciliation of the ledger with Nessie's own records (§11.4a): `GET /v1/accounts/reconcile` and a "Reconciled with Capital One Nessie" panel on the Accounts tab (§12.1, §18.2). Balances and the check share one ≤ 10 s cache of each account's records. Marked **[v4.17]**.
 > **v4.18 (Oct 17):** a demo dry run (§21.6): `python -m stormcash.dryrun` plays the server side of the 2:30 script as three labelled test identities and prints ✓ or ✗ per beat, before every judge. StormDesk's worker skips dry-run identities and a demo reset removes them; `GET /v1/demo/dry-run` (§12.1, §14.7a). Marked **[v4.18]**.
+> **v4.19 (Oct 17):** every demo reset opens a fresh guarantee pool account under the same "StormCash Operator" customer, at `NESSIE_POOL_DOLLARS`, so the pool's Nessie records start clean and reconcile ✓; the old account stays in Nessie untouched. The current pool is the newest `nessie_pool_accounts` row, else `NESSIE_POOL_ACCOUNT_ID` (§6.3, §11.1, §11.4, §11.4a, §12.1). Migration `006_nessie_pool.sql`. Marked **[v4.19]**.
 > **Builds on:** "StormCash: The 10/10 Build" v3 (Oct 16, Alexandre Lugovoi, on Brian Maina's Oct 11 draft). Everything new since v3 is marked **[v4]**.
 
 ---
@@ -288,6 +289,7 @@ PUBLIC_BASE_URL=https://<cloudflared>.trycloudflare.com
 NWS_USER_AGENT=StormCash HackHarvard demo (team email)
 DEMO_MODE=1
 NESSIE_POOL_ACCOUNT_ID=...                        # [v4.3] guarantee pool; create once: python -m stormcash.nessie_setup
+NESSIE_POOL_DOLLARS=1000                          # [v4.19] what the pool is opened at (nessie_setup and every demo reset)
 NESSIE_DISABLED=0                                 # [v4.3] fallback: 1 = ledger-only, no Nessie calls
 API_SIG_REQUIRED=1                                # [v4.3] fallback: 0 = accept unsigned writes (§12)
 BACKGROUND_TASKS=1                                # [v4.3] Nessie replay (10 s) + escrow release (60 s)
@@ -911,6 +913,14 @@ CREATE TABLE nessie_moves (             -- [v4.3] one Nessie withdrawal + deposi
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE nessie_pool_accounts (     -- [v4.19] the guarantee pool's Nessie account: the newest row is the current pool (§11.4)
+  pool_id BIGSERIAL PRIMARY KEY,
+  account_id TEXT UNIQUE NOT NULL,      -- Nessie account id
+  customer_id TEXT,                     -- the "StormCash Operator" customer
+  opening_cents INT NOT NULL,           -- the balance it was opened at (whole dollars)
+  opened_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE TABLE policy_versions (
   policy_ver INT PRIMARY KEY,
   issued_at BIGINT NOT NULL,
@@ -1022,7 +1032,7 @@ Invariant test: for every `txn_id`, `sum(debit) == sum(credit)`. Show "Ledger ba
 
 **Balances.** `nessie_balance(account) = opening balance + Σ deposits − Σ withdrawals`, read live from Nessie (`GET /accounts/{id}`, `/deposits`, `/withdrawals`) and cached ≤ 10 s. The Accounts tab labels these "from Nessie transactions". Open escrow and merchant accounts at $0 and the pool at its full funding, so every later change is a visible Nessie record.
 
-**[v4.3] Guarantee pool account.** `python -m stormcash.nessie_setup [dollars]` creates the "StormCash Operator" customer and a "Guarantee Pool" account opened at its full funding (default $1000) and prints `NESSIE_POOL_ACCOUNT_ID=...` for `.env`. Without it, pool-funded payouts are `ledger_only`.
+**[v4.3] Guarantee pool account.** `python -m stormcash.nessie_setup [dollars]` creates the "StormCash Operator" customer and a "Guarantee Pool" account opened at its full funding (default $1000) and prints `NESSIE_POOL_ACCOUNT_ID=...` for `.env`. Without it, pool-funded payouts are `ledger_only`. **[v4.19]** The current pool is the newest `nessie_pool_accounts` row, else `NESSIE_POOL_ACCOUNT_ID` (`nessie.pool_account_id`); `nessie_setup` records the account it creates there. Every demo reset opens a fresh "Guarantee Pool" account under the current pool's customer at `NESSIE_POOL_DOLLARS` (default $1000), logs the open call in `nessie_calls` and records it as the current pool, so the pool's Nessie records start clean. The old account stays in Nessie untouched; nothing rewrites history. No pool configured means no pool is opened (pool money stays ledger only).
 
 **Whole dollars.** `cents_to_dollars(cents)` returns an `int` and raises if `cents % 100 != 0`; it never rounds. A real-merchant payout that isn't a whole dollar amount is recorded `ledger_only` with the summary "not whole dollars, ledger only". Demo payments use whole dollars ($12). Simulated money never touches Nessie, so it can use any cents.
 
@@ -1049,7 +1059,7 @@ Rules:
 `GET /v1/accounts/reconcile` proves the ledger and the bank agree, per real account that has a Nessie account (each real resident's checking and escrow, each real shop, the guarantee pool), in integer cents. Read-only: it never writes to the ledger or to Nessie.
 
 - **Nessie's side:** the account's fixed `balance` (its opening) + completed deposits − completed withdrawals, from the same ≤ 10 s cache as the balances (`NessieClient.account_records`). Records whose status isn't `completed` are listed, not counted.
-- **Our side:** the opening + Σ ledger movements on the ledger accounts the Nessie account mirrors (a resident's escrow covers all their certs), leaving out simulated money. The ledger books no opening entry, so the opening is compared on its own: ours is the logged "open account" call in `nessie_calls` (request `balance`), else StormCash's opening rule (checking $500, escrow and shops $0), else, for an account opened outside this database (the pool, by `nessie_setup`), Nessie's own value, said so.
+- **Our side:** the opening + Σ ledger movements on the ledger accounts the Nessie account mirrors (a resident's escrow covers all their certs), leaving out simulated money. The ledger books no opening entry, so the opening is compared on its own: ours is the logged "open account" call in `nessie_calls` (request `balance`), else StormCash's opening rule (checking $500, escrow and shops $0), else, for an account opened outside this database (a pool `nessie_setup` created against another database), Nessie's own value, said so. **[v4.19]** After a demo reset the pool's opening comes from the call log like every other account.
 - **Simulated money** (a txn whose other side is a simulated resident or shop, or a settlement whose payer is simulated) is shown per account as "ledger only, never sent to Nessie", never as a difference.
 - **A difference is split by txn** using the `SC <txn_id>` in each Nessie description, so the items add up to it exactly: `opening` (the two openings differ), `queued` (a `nessie_moves` row not executed yet), `half_pair` (one half recorded), `in_flight` (executed after Nessie was read), `pending_in_nessie`, `ledger_only` (not whole dollars, no pool account in Nessie, a `ledger_only` payout), `held` (an approved hold booked and reversed in the ledger), `not_in_ledger` (an `SC` record with no ledger txn; our call log says whether we made it and where its other half went), `unlinked` (a record with no `SC` id), and `unexplained` for anything else. Nessie is read before the database, so a txn posted in between shows as queued or in flight, not missing.
 - **Pairs:** every `SC <txn_id>` on the accounts read, and every move touching them, must be one completed withdrawal on the move's source and one completed deposit on its destination, both equal to the ledger amount. Problems are listed by kind.
@@ -1094,7 +1104,7 @@ All JSON. Byte fields base64url. Prefix `/v1`. Auth for demo: none on reads; res
 | `POST /v1/photon/resident-contact` **[v4.13]** | `{resident_id \| display_name, channel, handle}` | the resident and the saved handle. Operator header; `display_name` must match exactly one real (not simulated) resident, e.g. Maya | WS7 |
 | `GET /v1/photon/messages` **[v4.13]** | `?merchant_id=` or `?resident_id=` | `{messages}`: one shop's or resident's Photon thread, oldest first | WS7 |
 | `GET /v1/photon/freezes` **[v4.13]** | `?cert_id&limit` | certs whose owner texted FREEZE: `[{cert_id, status, frozen_at, owner_freeze_at, resident_id, display_name, policy_ver}]`, `policy_ver` = the first POLICY listing the cert | WS7 |
-| `POST /v1/demo/reset` | | clears real-device demo data, reissues Maya's cert, keeps the simulated town. **[v4.18]** Removes the dry run's identities first (§21.6) and returns `dry_run_removed` | WS2 |
+| `POST /v1/demo/reset` | | clears real-device demo data, reissues Maya's cert, keeps the simulated town. **[v4.18]** Removes the dry run's identities first (§21.6) and returns `dry_run_removed`. **[v4.19]** Opens a fresh guarantee pool account (§11.4) and returns it as `pool: {account_id, customer_id, opening_cents, replaced}` (null without a pool) | WS2 |
 |  |  | **[v4.3]** Operator header. Deletes what touches a real resident or shop (payments, tags, cases, candidates, logs, contacts, uploads, payouts, whole ledger transactions, queued moves), opens fresh Nessie accounts under the same customers (checking $500, escrow $0, shops $0; Nessie balances can't be edited), reissues each real resident a new cert (new `cert_id`, $20 locked), restores the shops' pool eligibility and publishes a POLICY without the old certs. The phone gets its new cert by registering again. Optional `{storm_cap_cents: 5000}` pre-stages Storm Mode. Measured live: under 1 s. |  |
 | `POST /v1/demo/seed-town` | `{seed}` | runs the simulator into the DB (§16) | WS4 |
 | `GET /v1/demo/dry-run` **[v4.18]** | | `{prefix, stormdesk_skips_dry_run, stormdesk_worker, stormdesk_runner, stormdesk_review}`: what the dry run checks before it writes anything (§21.6) | WS2 |

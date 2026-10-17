@@ -7,6 +7,7 @@ import uuid
 import pytest
 
 from stormcash import ledger, registry
+from stormcash.db import scalar
 from stormcash.protocol import crypto
 from stormcash.protocol.objects import Det, Pay, Tag, genesis
 
@@ -142,22 +143,43 @@ def test_nessie_records_we_do_not_have_are_listed(world, app_client, fake_nessie
     assert_items_add_up(result)
 
 
-def test_a_demo_reset_leaves_old_pool_records_explained_by_our_call_log(world, app_client, fake_nessie):
+def test_after_a_demo_reset_every_account_reconciles_on_fresh_accounts(world, app_client, fake_nessie):
     honest = world.pay("pharmacy", 1200)
     world.rollback()
     world.sync(PHARMACY, [honest])
     world.sync(GAS, [world.pay("gas_station", 1200)])  # $8 from escrow, $4 from the pool
-    assert by_label(check(app_client))["Guarantee Pool"]["status"] == "reconciled"
+    fake_nessie.records[fake_nessie.pool_id].append(  # a stray record, like the live pool's smoke test
+        {"_id": "w1", "type": "withdrawals", "amount": 4, "status": "completed", "transaction_date": "2026-10-16",
+         "description": f"SC {uuid.uuid4()} Guarantee pool → Smoke Gas", "medium": "balance"})
+    assert by_label(check(app_client))["Guarantee Pool"]["status"] == "difference"
 
-    assert app_client.post("/v1/demo/reset", headers=OPERATOR).status_code == 200
+    out = app_client.post("/v1/demo/reset", headers=OPERATOR).json()
     result = check(app_client)
+    assert result["ok"] and all(a["status"] == "reconciled" for a in result["accounts"])
     pool = by_label(result)["Guarantee Pool"]
-    assert kinds(pool) == {"not_in_ledger": -400}
+    assert pool["nessie_account_id"] == out["pool"]["account_id"] != fake_nessie.pool_id
+    # The fresh pool's opening is read from our own call log, not taken from Nessie.
+    assert pool["opening"]["source"] == "call_log" and pool["opening"]["cents"] == 100000
+    assert (pool["expected_cents"], pool["nessie_cents"], pool["items"]) == (100000, 100000, [])
+    assert result["pairs"]["problems"] == []
+
+
+def test_nessie_records_whose_ledger_txn_is_gone_are_explained_by_our_call_log(world, app_client, deps):
+    honest = world.pay("pharmacy", 1200)
+    world.rollback()
+    world.sync(PHARMACY, [honest])
+    world.sync(GAS, [world.pay("gas_station", 1200)])
+    with deps.pool.connection() as conn:  # the pool payout's ledger txn and move disappear; Nessie keeps the pair
+        txn = scalar(conn, "SELECT txn_id FROM ledger_entries WHERE account = 'pool'")
+        conn.execute("DELETE FROM ledger_entries WHERE txn_id = %s", (txn,))
+        conn.execute("DELETE FROM nessie_moves WHERE txn_id = %s", (txn,))
+    result = check(app_client)
+    pool, gas = by_label(result)["Guarantee Pool"], by_label(result)["Gas Station"]
+    assert kinds(pool) == {"not_in_ledger": -400} and kinds(gas) == {"not_in_ledger": 400}
     text = pool["items"][0]["text"]
     assert "\"Guarantee pool → Gas Station\"" in text and "our call log has the POST" in text
-    assert "its other half went to Nessie account …" in text and "(no longer a StormCash account)" in text
-    others = [a for a in result["accounts"] if a["label"] != "Guarantee Pool"]
-    assert all(a["status"] == "reconciled" for a in others)  # fresh accounts after the reset
+    assert "its other half went to Gas Station" in text
+    assert_items_add_up(result)
 
 
 def test_simulated_money_is_ledger_only_not_a_difference(world, app_client, deps):

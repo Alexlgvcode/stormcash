@@ -60,6 +60,13 @@ def is_whole_dollars(cents: int) -> bool:
     return cents % 100 == 0
 
 
+def pool_account_id(conn: psycopg.Connection, settings) -> str | None:
+    """The guarantee pool's current Nessie account (§11.4): the newest one a demo
+    reset opened, else NESSIE_POOL_ACCOUNT_ID, else None (pool money is ledger only)."""
+    row = conn.execute("SELECT account_id FROM nessie_pool_accounts ORDER BY pool_id DESC LIMIT 1").fetchone()
+    return row["account_id"] if row else (settings.nessie_pool_account_id or None)
+
+
 def description(txn_id: uuid.UUID, summary: str) -> str:
     return f"SC {txn_id} {summary}"
 

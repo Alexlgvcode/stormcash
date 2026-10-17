@@ -5,7 +5,10 @@ uploads, payouts, ledger and queued Nessie moves that touch a real entity),
 opens fresh Nessie accounts so the Accounts tab starts from known numbers
 (checking $500, escrow $0, shops $0), reissues each real resident a new
 certificate with the $20 lock, and publishes a POLICY without the old certs.
-The simulated town is untouched. The guarantee pool keeps its account.
+The simulated town is untouched. The guarantee pool gets a fresh account too
+(same "StormCash Operator" customer, NESSIE_POOL_DOLLARS), so its Nessie records
+start clean and the reconciliation shows it ✓; the old account stays in Nessie,
+untouched.
 
 The demo dry run (`python -m stormcash.dryrun`, §21.6) registers its own test
 identities, named with DRY_RUN_PREFIX. StormDesk's worker skips them, and a
@@ -20,7 +23,7 @@ import uuid
 from . import cases, ledger, registry
 from .db import all_rows, one
 from .deps import Deps
-from .nessie import NessieError
+from .nessie import NessieError, pool_account_id
 from .protocol import crypto
 from .protocol.objects import Cert
 from .settlement import _Ctx
@@ -40,6 +43,7 @@ def reset_demo(deps: Deps, storm_cap_cents: int | None = None, now: int | None =
     # Fresh Nessie accounts first (outside the DB transaction): balances can't be
     # edited in Nessie, so a clean table means new accounts under the same customers.
     fresh: dict = {}
+    pool = None
     if deps.nessie is not None:
         try:
             for r in residents:
@@ -55,6 +59,7 @@ def reset_demo(deps: Deps, storm_cap_cents: int | None = None, now: int | None =
                     customer = _customer_of(deps, m["nessie_account_id"])
                     if customer:
                         fresh[bytes(m["merchant_id"])] = deps.nessie.create_account(customer, m["display_name"], 0)
+            pool = _open_fresh_pool(deps)
         except NessieError as exc:
             raise registry.Unavailable(f"Nessie unavailable ({exc}); retry, or set NESSIE_DISABLED=1") from exc
 
@@ -114,6 +119,9 @@ def reset_demo(deps: Deps, storm_cap_cents: int | None = None, now: int | None =
             "UPDATE merchants SET pool_eligible = TRUE, per_payment_limit_cents = NULL WHERE merchant_id = ANY(%s)",
             (merchant_ids,),
         )
+        if pool:
+            conn.execute("INSERT INTO nessie_pool_accounts (account_id, customer_id, opening_cents) VALUES (%s, %s, %s)",
+                         (pool["account_id"], pool["customer_id"], pool["opening_cents"]))
         for m in merchants:
             new_account = fresh.get(bytes(m["merchant_id"]))
             if new_account:
@@ -159,9 +167,27 @@ def reset_demo(deps: Deps, storm_cap_cents: int | None = None, now: int | None =
         "residents": [{"display_name": r["display_name"], "cert": c.to_json()} for r, c in zip(residents, certs,
                                                                                              strict=True)],
         "merchants": [m["display_name"] for m in merchants],
-        "nessie_accounts_opened": sum(2 if isinstance(v, tuple) else 1 for v in fresh.values()),
+        "nessie_accounts_opened": sum(2 if isinstance(v, tuple) else 1 for v in fresh.values()) + (1 if pool else 0),
+        "pool": pool,
         "dry_run_removed": dry_run,
     }
+
+
+def _open_fresh_pool(deps: Deps) -> dict | None:
+    """Open a new guarantee pool account under the current pool's customer (the
+    "StormCash Operator", §11.4). None when there is no pool in Nessie, so pool
+    money stays ledger only. Nessie errors propagate: a reset never half-swaps."""
+    with deps.pool.connection() as conn:
+        current = pool_account_id(conn, deps.settings)
+        row = one(conn, "SELECT customer_id FROM nessie_pool_accounts WHERE account_id = %s", (current,))
+    if not current:
+        return None
+    customer = (row or {}).get("customer_id") or deps.nessie.get_account(current).get("customer_id")
+    if not customer:
+        customer = deps.nessie.create_customer("StormCash", "Operator")
+    dollars = deps.settings.nessie_pool_dollars
+    account = deps.nessie.create_account(customer, "Guarantee Pool", dollars)
+    return {"account_id": account, "customer_id": customer, "opening_cents": dollars * 100, "replaced": current}
 
 
 def _customer_of(deps: Deps, account_id: str) -> str | None:
