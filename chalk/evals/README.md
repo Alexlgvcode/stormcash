@@ -102,6 +102,7 @@ Every function scorer gives 0 to an output that isn't a Flag. `summary-quality` 
 
 - **v1** (`20261017T135917Z-droid.json`, Chalk run `a91828a0-342b-4030-b046-a926fe5ade9d`): StormDesk's prompt as of #81, the first real run.
 - **prompt v2** (`--label "prompt v2"`): one general prompt fix (#11), written **after reading v1's errors on this same dataset**. So v2 is not a blind holdout: its score on these rows is an optimistic estimate. Both files stay. The Evals tab shows the newest complete run and lists the older one with its Chalk run id.
+- **Discarded, Oct 17:** Chalk run `b30fd876-16e0-4002-b118-6bcfe116c0f7` (evaluation "… · prompt v2", 1,314,180 credits) was **not** prompt v2. The v1 stack's servers had survived `stack.py down` (uvicorn hung on SIGTERM after Droid runs), the new servers couldn't bind their ports, and the stale prompt-v1 servers answered every row. The `prompt_version` check caught it: no row reported version 2, so it was saved as `mixed` and never shown. Its file isn't committed. `stack.py` now refuses to start while any eval port is taken, checks every server it starts is still alive, and SIGKILLs a server that ignores SIGTERM.
 
 ```bash
 uv run python evals/run_eval.py stormdesk --label "prompt v2" --label-note "written after reading v1's errors on this dataset: not a blind holdout"
