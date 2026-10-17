@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
 
-from .. import ledger, registry
+from .. import chalk_features, ledger, registry
 from ..db import all_rows, one, scalar
 from ..protocol import rules
 from ..protocol.objects import Dlog, Tag
@@ -209,11 +209,20 @@ def get_merchant_payments(conn, merchant_id: str, since: int | None = None, unti
     return hexify({"merchant_id": mid, **shop, "payments": rows})
 
 
-def query_features(conn, entity: str, id: str, features: list[str] | None = None) -> dict:
-    """Feature lookup (§15.2). Until the Chalk client is wired (WS6), this is the
-    Postgres fallback (§22.4): the detectors' frozen features for this entity."""
+def query_features(conn, entity: str, id: str, features: list[str] | None = None, as_of: int | None = None,
+                   deps=None) -> dict:
+    """Feature lookup (§15.2): a Chalk online query, windows ending at `as_of`
+    (sim-clock seconds; default the server's latest sync). If Chalk is off or
+    can't answer, the Postgres fallback (§22.4): the detectors' frozen features
+    for this entity."""
     if entity not in ("merchant", "cert", "region"):
         raise ToolError("entity must be merchant, cert or region")
+    chalk_error = "Chalk is off (CHALK_DISABLED=1)"
+    if deps is not None and deps.settings.chalk_enabled:
+        try:
+            return chalk_features.query(deps.settings, entity, id, features, as_of)
+        except chalk_features.ChalkUnavailable as exc:
+            chalk_error = str(exc)
     row = one(
         conn,
         "SELECT kind, features, window_start, window_end FROM candidates WHERE subject_id = %s "
@@ -224,7 +233,7 @@ def query_features(conn, entity: str, id: str, features: list[str] | None = None
     if features:
         values = {k: values.get(k) for k in features}
     return {"source": "postgres_fallback", "entity": entity, "id": id, "features": values,
-            "window": None if row is None else [row["window_start"], row["window_end"]]}
+            "window": None if row is None else [row["window_start"], row["window_end"]], "chalk_error": chalk_error}
 
 
 def get_region_status(conn, region_id: str) -> dict:
@@ -296,7 +305,8 @@ TOOLS: tuple[ToolSpec, ...] = (
     ToolSpec("get_contacts", "Contacts a device was in, with paired flags and peers.", get_contacts),
     ToolSpec("get_merchant_payments", "A shop's payments with the escrow/pool split and cert status.",
              get_merchant_payments),
-    ToolSpec("query_features", "Features for a merchant, cert or region (Chalk; Postgres fallback).", query_features),
+    ToolSpec("query_features", "Features for a merchant, cert or region from Chalk (Postgres fallback); windows "
+             "end at as_of, sim-clock Unix seconds (default: the latest sync).", query_features),
     ToolSpec("get_region_status", "A region's active certs, expiries, last upload and alerts (live/replayed).",
              get_region_status),
     ToolSpec("get_nessie_balances", "Balances for a demo entity (Nessie for real ones, ledger for simulated).",
@@ -313,6 +323,6 @@ def call(deps, name: str, args: dict) -> dict:
         raise ToolError(f"unknown tool {name}")
     with deps.pool.connection() as conn:
         conn.execute("SET TRANSACTION READ ONLY")  # the database itself refuses any write
-        if name == "get_nessie_balances":
+        if name in ("get_nessie_balances", "query_features"):
             return spec.function(conn, deps=deps, **args)
         return spec.function(conn, **args)
