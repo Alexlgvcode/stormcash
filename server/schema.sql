@@ -173,7 +173,7 @@ CREATE TABLE flags (                    -- StormDesk output (one per candidate)
 
 CREATE TABLE stormdesk_runs (           -- [v4.3] every StormDesk run, for replay and audit (§14.7, §14.8)
   run_id BIGSERIAL PRIMARY KEY,
-  job TEXT NOT NULL CHECK (job IN ('investigate','triage','respond','review')), -- [v4.15] review (§14.7b)
+  job TEXT NOT NULL CHECK (job IN ('investigate','triage','respond','review','author')), -- [v4.15] review (§14.7b), [v4.22] author (§14.7d)
   case_id BIGINT REFERENCES cases,
   candidate_id BIGINT REFERENCES candidates,
   merchant_id BYTEA,

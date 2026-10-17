@@ -81,6 +81,12 @@ function HarnessStrip({ h, builtin }: { h: Harness; builtin: string | null }) {
       </span>
       <span className="rounded-full bg-slate-800 px-3 py-1">{h.builtin_tools_disabled} built-in tools switched off</span>
       <span className="rounded-full bg-slate-800 px-3 py-1">Worker {h.worker_on ? "on" : "off"}</span>
+      {h.author_on && (
+        <span className="rounded-full bg-violet-500/15 px-3 py-1 text-violet-200"
+          title="The author job (§14.7d): Droid writes two allowlisted files in a sandbox; our code opens a PR a person merges or not.">
+          Author job on · sandboxed writes, PR for a person
+        </span>
+      )}
       {builtin && (
         <span className="rounded-full bg-slate-800 px-3 py-1" title="Droid's ToolSearch still runs once per session to load our MCP tool schemas (spec §14.2).">
           Built-in still seen: {builtin}
@@ -213,10 +219,12 @@ function RunView({ run, live, version, onSelect }: {
           {usage?.input_tokens != null && ` · ${(usage.input_tokens + (usage.output_tokens ?? 0)).toLocaleString("en-US")} tokens in + out`}
         </Fact>
         <Fact label="Tool calls">
-          {run.tool_calls} read-only{run.tool_errors ? ` (${run.tool_errors} answered with an error)` : ""}{other ? ` + ${other}` : ""}
+          {run.tool_calls} {run.job === "author" ? "in the sandbox" : "read-only"}{run.tool_errors ? ` (${run.tool_errors} answered with an error)` : ""}{other ? ` + ${other}` : ""}
         </Fact>
-        <Fact label="Citations">
-          {run.citations_valid ? "every cited id found in the database ✓"
+        <Fact label={run.job === "author" ? "Re-run" : "Citations"}>
+          {run.job === "author" ? (run.outcome === "valid" ? "our server re-ran the tests and the eval: every claim matched ✓"
+            : run.outcome === "rerun_rejected" ? "our re-run didn't match Droid's claims: no pull request ✗" : "not checked")
+            : run.citations_valid ? "every cited id found in the database ✓"
             : run.missing_citations ? `${run.missing_citations} cited id(s) not in the database ✗` : "no output to check"}
         </Fact>
         {run.runner === "droid" && (
@@ -419,7 +427,9 @@ export function DroidTab() {
         <h2 className="text-3xl font-bold text-white">Droid in the running product</h2>
         <p className="text-lg text-slate-300">
           Every StormDesk run stored in the database: Factory's Droid SDK with read-only tools, structured outputs and a
-          citation check. A person approves anything it proposes. Fake-runner runs are labelled and never scored.
+          citation check. A person approves anything it proposes. The author job is the one that writes: two files in a
+          sandbox, re-checked by our server, then a pull request a person merges or not. Fake-runner runs are labelled and
+          never scored.
         </p>
         <HarnessStrip h={data.harness} builtin={builtin} />
       </div>
@@ -442,7 +452,7 @@ export function DroidTab() {
               tone={t.success_rate == null ? "text-slate-400" : "text-emerald-300"} />
             <Tile label="Factory credits" value={credits(t.credits_total)}
               sub={t.mean_credits != null ? `mean ${credits(t.mean_credits)} per run (${t.credits_runs} recorded)` : "none recorded"} />
-            <Tile label="Mean run time" value={duration(t.mean_duration_ms)} sub={`${t.tool_calls} read-only tool calls in all`} />
+            <Tile label="Mean run time" value={duration(t.mean_duration_ms)} sub={`${t.tool_calls} tool calls in all`} />
             <Tile label="Invalid citations rejected" value={invalid ? guardrailCount(invalid) : "—"}
               sub="stored invalid, never actionable" tone={invalid?.count ? "text-amber-300" : "text-white"} />
           </div>

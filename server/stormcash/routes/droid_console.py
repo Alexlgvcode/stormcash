@@ -25,12 +25,14 @@ from fastapi import APIRouter, Query, Request
 
 from ..db import all_rows
 from ..jsonutil import jsonable
-from ..stormdesk import prompt, runner, tools
+from ..stormdesk import prompt, runner, sandbox, tools
 from ..stormdesk.prompt import PROMPT_VERSION
 
 router = APIRouter()
 
-JOB_ORDER = ("investigate", "triage", "respond", "review")
+JOB_ORDER = ("investigate", "triage", "respond", "review", "author")
+# An author run (§14.7d) works through its sandbox read tools and the gated built-ins: those are its tool calls.
+AUTHOR_TOOLS = frozenset(sandbox.LAB_TOOL_NAMES) | sandbox.WRITE_TOOLS
 # What DroidRunner stores when the structured output failed on both attempts (§14.2).
 STRUCTURED_OUTPUT_ERRORS = ("error_structured_output", "output did not match")
 REVIEW_VERDICT = {"agree": "agrees", "disagree": "disagrees", "insufficient_evidence": "insufficient evidence"}
@@ -39,6 +41,7 @@ UNFINISHED_AFTER_S = 15 * 60  # a 'running' row this old never finished (e.g. th
 OUTCOME_LABEL = {
     "valid": "Valid",
     "invalid_citation": "Invalid citation",
+    "rerun_rejected": "Re-run rejected",
     "structured_output_failed": "Structured output failed after retry",
     "fallback": "Fake-runner fallback",
     "fake": "Fake runner",
@@ -82,7 +85,7 @@ def outcome(row: dict, now: float) -> str:
     if row["status"] == "succeeded":
         return "valid"
     if row["status"] == "invalid":
-        return "invalid_citation"
+        return "rerun_rejected" if row["job"] == "author" else "invalid_citation"
     if (row.get("error") or "").startswith(STRUCTURED_OUTPUT_ERRORS):
         return "structured_output_failed"
     return "failed"
@@ -132,6 +135,11 @@ def verdict(row: dict) -> str | None:
         return "escalated to a person" if out.get("escalate") else "answered"
     if row["job"] == "review":  # the second-opinion Droid's Review (§14.7b)
         return REVIEW_VERDICT.get(out.get("verdict"), out.get("verdict"))
+    if row["job"] == "author":  # a proposed detector (§14.7d): what happened to it
+        pr = (row.get("meta") or {}).get("pull_request") or {}
+        if row["status"] != "succeeded":
+            return f"{out.get('name')}: rejected by the re-run"
+        return f"{out.get('name')}: PR #{pr['number']} opened" if pr.get("number") else f"{out.get('name')}: re-run matched"
     return None
 
 
@@ -145,6 +153,8 @@ def subject(row: dict) -> str:
         name = row.get("subject_name") or f"merchant {row['merchant_id'][:8]}"
         turn = appeal_turn(row)
         return f"{name} · appeal turn {turn['turn']}" if turn else name
+    if row["job"] == "author":
+        return f"detector for {(row.get('meta') or {}).get('kind') or 'a gap'}"
     reviewed = reviewed_run_id(row)
     return f"run #{reviewed}" if reviewed is not None else "—"
 
@@ -184,8 +194,9 @@ def run_view(row: dict, now: float) -> dict:
     meta = row.get("meta") or {}
     result = outcome(row, now)
     steps = row.get("steps") or []
-    ours = [s for s in steps if s[0] in tools.TOOL_NAMES]
-    other = Counter(s[0] for s in steps if s[0] not in tools.TOOL_NAMES)
+    names = AUTHOR_TOOLS if row["job"] == "author" else tools.TOOL_NAMES
+    ours = [s for s in steps if s[0] in names]
+    other = Counter(s[0] for s in steps if s[0] not in names)
     usage = meta.get("usage") if row["runner"] == "droid" else meta.get("fallback_usage")
     denials = permission_denials(row)
     return {
@@ -265,6 +276,7 @@ def guardrails(runs: list[dict]) -> list[dict]:
 
     invalid = [_event(r, f"{r['missing_citations']} cited id(s) not in the database")
                for r in runs if r["outcome"] == "invalid_citation"]
+    rejected = [_event(r, r["error"]) for r in runs if r["outcome"] == "rerun_rejected"]
     failed_retry = [_event(r, r["error"]) for r in runs if r["outcome"] == "structured_output_failed"]
     retried = [_event(r, f"retried {r['structured_output_retries']}×, then: {r['outcome_label'].lower()}")
                for r in recorded_retries if r["structured_output_retries"]]
@@ -275,6 +287,10 @@ def guardrails(runs: list[dict]) -> list[dict]:
         {"key": "invalid_citation", "label": "Invalid citations rejected",
          "about": "An id Droid cited isn't in the database: the result is stored invalid, never actionable.",
          **counted(invalid, len(runs))},
+        {"key": "rerun_rejected", "label": "Proposed detectors rejected by the re-run",
+         "about": "The server re-ran the tests and the eval after an author run; a claim that didn't match "
+                  "was rejected and no pull request was opened.", **counted(rejected, sum(1 for r in runs
+                                                                                  if r["job"] == "author"))},
         {"key": "structured_output_retry", "label": "Structured output retried",
          "about": "A missing or malformed structured output is retried once; these runs got an output on the retry.",
          **(counted(retried, len(recorded_retries)) if recorded_retries
@@ -297,7 +313,7 @@ def console(rows: list[dict], now: float, limit: int) -> dict:
                                          key=lambda j: (JOB_ORDER.index(j) if j in JOB_ORDER else len(JOB_ORDER), j))
     builtin_seen = Counter()
     for r in runs:
-        if r["runner"] == "droid":
+        if r["runner"] == "droid" and r["job"] != "author":  # an author run's write tools are allowed, and gated
             builtin_seen.update({name: 1 for name in r["other_calls"]})
     # The reviewer Droid's verdicts on StormDesk's proposals: valid Droid reviews only (a fake review is rules only).
     verdicts = Counter((r["output"] or {}).get("verdict") for r in rows
@@ -330,6 +346,7 @@ def harness(request: Request) -> dict:
         "droid_available": runner.droid_available(deps),
         "model_setting": deps.settings.stormdesk_model or "auto",
         "worker_on": bool(deps.settings.stormdesk_auto and deps.settings.background_tasks),
+        "author_on": deps.settings.stormdesk_author,  # Droid may propose detectors as PRs (§14.7d)
         "cooldown_s": cooldown_s,
         "cooldown_reason": desk.droid_down_reason if desk and cooldown_s else None,
     }

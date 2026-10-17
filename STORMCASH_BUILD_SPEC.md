@@ -23,6 +23,7 @@
 > **v4.19 (Oct 17):** every demo reset opens a fresh guarantee pool account under the same "StormCash Operator" customer, at `NESSIE_POOL_DOLLARS`, so the pool's Nessie records start clean and reconcile ✓; the old account stays in Nessie untouched. The current pool is the newest `nessie_pool_accounts` row, else `NESSIE_POOL_ACCOUNT_ID` (§6.3, §11.1, §11.4, §11.4a, §12.1). Migration `006_nessie_pool.sql`. Marked **[v4.19]**.
 > **v4.20 (Oct 17):** the public proof page checks each proof a second time with our C++ verifier (`cpp/verify`) compiled to WebAssembly, next to WebCrypto; the two implementations share no code (§18.6). Marked **[v4.20]**.
 > **v4.21 (Oct 17):** a shop's appeal by text is one conversation (§17.2): each appeal thread (shop + flag) keeps one Droid session, resumed with `Session.resume` for every new text, with the same read-only tools, permission handler and citation check on every turn; a session that can't be resumed is replaced by a new one seeded with the thread from `messages`. `STORMDESK_APPEAL_SESSIONS` (§6.3, §12.1, §14.7c, §18.7, §22.4). No migration: each turn's run stores its session, turn and thread. Marked **[v4.21]**.
+> **v4.22 (Oct 17):** Droid proposes a new deterministic detector as a pull request (§14.7d): it writes a pure detector and its test in a throwaway worktree, under a permission handler and two macOS sandbox profiles; our server re-runs the tests and an evaluation on the simulator's labelled candidates and rejects any mismatch; then deterministic code opens a PR labelled for a person and never merges it. `STORMDESK_AUTHOR`, `POST /v1/stormdesk/author-detector`, `stormdesk_runs.job = 'author'`, `server/stormcash/detectors_proposed/` (§6.3, §11.1, §12.1, §14.1, §18.5, §18.7, §22.4). Migration `007_stormdesk_author.sql`. Marked **[v4.22]**.
 > **Builds on:** "StormCash: The 10/10 Build" v3 (Oct 16, Alexandre Lugovoi, on Brian Maina's Oct 11 draft). Everything new since v3 is marked **[v4]**.
 
 ---
@@ -300,6 +301,9 @@ STORMDESK_MODEL=                                  # [v4.3] empty = Droid picks
 STORMDESK_AUTO=1                                  # [v4.3] worker runs StormDesk on new cases and candidates
 STORMDESK_REVIEW=1                                # [v4.15] a reviewer Droid checks every triage (§14.7b); 0 = off
 STORMDESK_APPEAL_SESSIONS=1                       # [v4.21] a shop's appeal is one Droid session, resumed per text (§14.7c); 0 = one run per message
+STORMDESK_AUTHOR=0                                # [v4.22] 1 = Droid may propose detectors as PRs (§14.7d); off by default
+STORMDESK_AUTHOR_BASE=origin/main                 # [v4.22] the ref the author sandbox is a worktree of
+STORMDESK_AUTHOR_MAX_CREDITS=250000               # [v4.22] an author run stops at this many Factory credits
 ```
 
 The server's public key is compiled into the mobile app (`mobile/src/config.ts: SERVER_PUB`). Generate the server key once on Friday and do not rotate it.
@@ -836,7 +840,7 @@ CREATE TABLE flags (                    -- StormDesk output (one per candidate)
 
 CREATE TABLE stormdesk_runs (           -- [v4.3] every StormDesk run, for replay and audit (§14.7, §14.8)
   run_id BIGSERIAL PRIMARY KEY,
-  job TEXT NOT NULL CHECK (job IN ('investigate','triage','respond','review')), -- [v4.15] review (§14.7b)
+  job TEXT NOT NULL CHECK (job IN ('investigate','triage','respond','review','author')), -- [v4.15] review (§14.7b), [v4.22] author (§14.7d)
   case_id BIGINT REFERENCES cases,
   candidate_id BIGINT REFERENCES candidates,
   merchant_id BYTEA,
@@ -1097,6 +1101,8 @@ All JSON. Byte fields base64url. Prefix `/v1`. Auth for demo: none on reads; res
 | `POST /v1/flags/{id}/approve` / `reject` | `{note}` | executes actions (§14.6), returns approval. **[v4.3]** `X-SC-Operator` names the operator; `GET /v1/flags/{id}/approvals` lists decisions | WS5 |
 | `POST /v1/stormdesk/run` | `{candidate_id}` or `{case_id}` | `{flag}` or `{case_file_md}` (sync; used by evals) | WS5 |
 | `POST /v1/stormdesk/review` **[v4.15]** | `{flag_id}` or `{candidate_id}` (the stored flag), or `{candidate_id, proposal}` (a Flag to review, e.g. an eval's stored output; `flags` untouched) | the review run: `{output: Review, after_review: {status, agents_disagree, kind, proposed_action}, flag?, runner, model, usage, prompt_version, duration_s, …}` (sync, operator header). 409 for a decided or invalid flag, or a proposal whose citations don't hold (§14.7b) | WS5 |
+| `POST /v1/stormdesk/author-detector` **[v4.22]** | `{gap, examples?}`: `gap` names a candidate kind (or describes it); `examples` are dev row ids (`seed:candidate_id`) or `{row_id, note}`. Held-out rows are refused | 202 `{run_id, subject, status: "running", kind}`; steps stream as `stormdesk_step` (subject `author run #N`) and phases as `author` events; the result is the run (`GET /v1/stormdesk/runs/{id}`). 409 when the switch is off, Droid or the OS sandbox is missing, or a run is in progress (§14.7d) | WS5 |
+| `GET /v1/stormdesk/author-detector` **[v4.22]** | — | `{enabled, reasons, model, max_credits, base_ref, budget, running, runs}` | WS5 |
 | `GET /v1/stormdesk/runs` / `GET /v1/stormdesk/runs/{id}` **[v4.3]** | `?case_id&candidate_id` | stored runs; one run with its full transcript for replay (§14.8). `POST /v1/stormdesk/run` needs the operator header | WS5 |
 | `GET /v1/evals` **[v4.8]** | | the saved Chalk eval runs for the Evals tab: the newest file per comparison column (full), the others as summaries (§18.5) | WS3 |
 | `GET /v1/droid/console` **[v4.16]** | `?limit=200` | read-only aggregates of the stored StormDesk runs for the Droid tab: per-run outcome, totals per job, guardrail events, harness (§18.7) | WS3 |
@@ -1216,6 +1222,7 @@ The detectors are designed to fire on **traps** too (§16.4). A rules-only syste
 | A candidate is created | **Triage:** decide whether it's real, cite evidence, choose severity and action, or dismiss with a reason | `Flag` → `flags` |
 | A merchant appeals by message (§17) | **Respond:** compare the claim with the logs, reply with evidence, escalate or resolve | `AppealReply` → `messages` |
 | A triage stores an open or dismissed flag **[v4.15]** | **Review:** a second session tries to refute the Flag; it never acts (§14.7b) | `Review` → `flags.review` |
+| An operator asks for a detector for a gap **[v4.22]** | **Author:** write a pure detector and its test in a sandbox, prove it on labelled data; our code re-checks it and opens a PR for a person (§14.7d) | `DetectorProposal` → a pull request |
 
 Jobs run in a worker (`stormdesk/worker.py`): an asyncio queue, max 4 concurrent Droid sessions.
 
@@ -1412,6 +1419,27 @@ Reject = flag `rejected`, nothing executes. Every approval writes an `approvals`
   3. "I already explained what happened. Why is my payout still on hold?" Turn 3 (resumed; 3 tool calls, 13,118 credits, 21 s) answered from the conversation and escalated to a person: "First you said the shop was closed after the generator died around 2. Then you said the phone was off in a drawer the whole time."
   - Since that run, the opening prompt no longer names the flag's number and says to cite only records retrieved with the tools. The one allowed retry's first turn (run 94, new session, 4 tool calls, 61,428 credits, 38 s) cited 11 records, all of which exist, and its reply was sent. The credit guard stopped the retry there, because another turn could have passed the 200,000-credit cap. Total: 129,559 credits.
   - Afterwards the proof's messages and its test handle were removed from `messages` and `merchant_contacts`, so the table demo starts a new conversation. Runs 91–94 are kept.
+### 14.7d Droid proposes a detector as a pull request [v4.22]
+
+The one job where Droid writes code. It never runs in the money path: a proposed detector is a module and a test in a pull request, and nothing imports it until a person merges a follow-up that wires it into `detectors.run_incremental` (§0 rule 2).
+
+- **Trigger.** "Ask Droid to write a detector" on the Evals tab, or `POST /v1/stormdesk/author-detector {gap, examples}` (§12.1). The tab's gap comes from the stored eval runs; the first is `region_dark` (StormDesk v2 caught 3 of 5 dark regions on dev rows and 0 of 2 on held-out rows; rules-only flags every quiet region too). Examples are dev rows StormDesk got wrong. Held-out rows are refused.
+- **Sandbox** (`stormdesk/sandbox.py`). Each layer confines Droid on its own:
+  1. A throwaway `git worktree` of `STORMDESK_AUTHOR_BASE` (`origin/main`, fetched first) in a temp directory outside every checkout; one with an env file is refused. Droid's session runs there.
+  2. The permission handler (`AuthorGuard`) allows Create, Edit and ApplyPatch only on `server/stormcash/detectors_proposed/<name>.py` and `server/tests/test_proposed_<name>.py`, for one `<name>` fixed by the first allowed edit, ≤ 20 kB each, plus our MCP tools. Everything else is refused and recorded in `permission_denials`. A refusal ends Droid's turn ("cancelled by user"), so up to two follow-up turns in the same session tell it what was refused.
+  3. Built-in tools: only Create, Edit and ApplyPatch are on (Create and Edit are off by default in SDK sessions; `enabled_tools`). The rest, from `list_tools()` at run time, are off, the shell included. **Checked live Oct 17 (droid 0.244.0):** the CLI auto-runs a command it rates read-only (`ls`, rule `builtin/directory-list-allow`) without asking the permission handler, and it never asks before reads. So Droid reads through MCP tools confined to the worktree (`read_file`, `list_dir`, `search`; never held-out rows, `chalk/evals/results`, `.git`, env files or keys), and the two allowlisted commands are MCP tools, `run_tests(name)` (pytest on the test file) and `run_eval(name)` (the evaluation script), with a budget of 6 and 3 runs.
+  4. The `droid` CLI runs under `sandbox-exec` with a scrubbed environment (PATH, HOME, TMPDIR and the Factory variables only): writes only inside the sandbox, `~/.factory` and temp; no reads of env files, `~/.ssh`, `~/.config/gh`, `~/.aws`, `~/.netrc` or held-out data. The login keychain stays readable: the CLI's own login is there.
+  5. `run_tests` and `run_eval` run in our server, outside Droid's profile, in a second profile: no network (so no database), writes only to the sandbox's tmp, a scrubbed environment, 120 s. The tests can't read held-out data either.
+  6. macOS only: without `sandbox-exec` the job refuses to run.
+- **Evaluation** (`stormdesk/detector_eval.py`, deterministic, offline). A detector is `KIND`, `NAME`, `fires(features) -> bool` over one candidate's frozen snapshot. Before import it must pass a purity check (imports only `math`, `statistics`, `typing`, `dataclasses`, `collections`; no `open`, `print`, `eval`, `getattr`, dunder or `_` attributes, global state). It runs over the Chalk eval datasets' candidates of that kind (§15.3), dev seeds 42, 7, 13, 99, 2026 and held-out seeds 1, 2, 3, and reports TP/FP/FN/TN, precision and recall next to the rules-only §13 detector (which raised every row, so it fires on all of them). Labelled subjects no detector raised count as missed by both. Held-out rows are only ever aggregates, and errors never name one.
+- **Output** `DetectorProposal {name, kind, rationale, files_changed, tests_passed, metrics: {dev, heldout: {proposed, rules_only}}, caveats}`.
+- **Our checks** (`author.verify`, after the session closed): only the two files changed (`git status`), the detector is pure, no secret value from the server's settings or environment is in either file, then our re-run of the tests and the eval. Droid's name, kind, files, `tests_passed` and every number must equal the re-run, or the run is stored `invalid` ("Re-run rejected" on the Droid tab) and no PR opens.
+- **Hand-off** (`author.open_pr`, deterministic, Droid runs only). Commit the two files on the worktree's detached HEAD as the repo owner (`git config user.name/email`), push `droid/detector-<name>-run<N>`, open "Detector proposed by Droid: <name>" against `main` with the rationale, our re-run's metrics, data and detector hashes, caveats, run id, session, model and credits, labelled `droid-proposal`. Never merged by code. The worktree is removed whatever happens.
+- **Recording.** A `stormdesk_runs` row with `job = 'author'` (migration `007`): runner, model, `usage` (the credits are the CLI's own session record, `tokenUsage.factoryCredits`, with the SDK's sum beside it), attempts, permission denials, steps, lab runs, operator, the checks, the files Droid wrote and the PR. A run stops at `STORMDESK_AUTHOR_MAX_CREDITS` (the stream's usage events are checked live). The Droid tab counts author tool calls as "in the sandbox", not read-only.
+- **Switch.** `STORMDESK_AUTHOR=1` turns it on (bare `Settings` in tests: off). It needs Droid (`STORMDESK_RUNNER=droid` uses the CLI's login, or `auto` with `FACTORY_API_KEY`); a fake runner never opens a PR.
+- **Probes while building it** (scratch sessions, not stored runs; 25,715 credits in all, `claude-sonnet-5-5`): the CLI's login works inside the profile; `ls` was auto-run without a permission request (and killed by the profile); a Create on `server/stormcash/detectors.py` was refused, recorded and left the file untouched, while a Create on the allowlisted path was asked, allowed and written.
+- **First live run, Oct 17** (run #95, operator "Claude for Alex", `claude-sonnet-5-5`, 21,186 credits, 36 s, 5 tool calls: ToolSearch, Create × 2, `run_tests`, `run_eval`; first attempt, 0 permission denials). Droid proposed `region_dark_alert_gate`: the two §13 thresholds plus at least one active weather alert. Our re-run matched every claim. Dev: precision 1.00, recall 1.00 (TP 5, FP 0, TN 4) vs rules-only 0.56 / 1.00; held-out: 1.00 / 1.00 (TP 3, FP 0, TN 3) vs 0.50 / 1.00. It opened Alexlgvcode/stormcash#122, labelled for a person and left open. Droid's caveats, which we share: the simulator plants an alert on every dark region and none on quiet-region traps, so the score shows the rule fits the simulator; a region that goes dark before any warning would be missed; 15 rows is a small sample.
+- **Not built:** Linux sandboxing (bubblewrap), wiring a merged detector in automatically (by design), other gaps from the dashboard (the endpoint takes any kind).
 
 ### 14.8 Demo replay
 
@@ -1720,6 +1748,8 @@ Title, "Demo mode", connection dot, **Reset demo** button (calls `/v1/demo/reset
 - Empty state: "No eval run yet." Never placeholder numbers.
 - **[v4.8] As built (#38).** `GET /v1/evals` reads `chalk/evals/results/*.json` (`EVALS_RESULTS_DIR` overrides) on every request, so a new run shows up without a restart (the tab also re-fetches every 60 s). The server re-checks each file before it fills a column: rules-only needs runner `rules_only`; StormDesk needs runner `droid`, `is_agent_result`, every row answered by Droid and no fallback to the fake runner. Every other run (fake, mixed, older) is listed by time, run id and the reason it isn't scored, never with its numbers. Until a Droid run exists the StormDesk column says "No StormDesk run yet" and the trap list waits for it. The Chalk run is identified by its run id and "Evaluations → StormCash → <evaluation>"; it is a link only if the results file carries `chalk.dashboard_url` (the dashboard URL format isn't verified). Planted subjects the detectors never raised are listed, not counted.
 
+- **[v4.22]** "Ask Droid to write a detector" (§14.7d) under the eval sections: the gap from the stored StormDesk runs (dark regions caught on dev and held-out rows) and the dev rows Droid is shown, the operator's name, the button (off with the reasons when the server can't run it), the live tool calls (`StepList`), then a result card: the verdict, the Droid badge with model and credits, the PR link, the rationale, our re-run's metrics table, each check ✓/✗, Droid's caveats, what the sandbox refused, the code Droid wrote and the replayable steps.
+
 ### 18.6 Public proof page `/proof/:caseId`
 
 Mobile-friendly, no login. Shows the two tags, the rule, and a **Verify** button that runs WebCrypto ECDSA verification in the judge's browser against the holder key and the server-signed certificate. Explains in two sentences why this proves cheating.
@@ -1740,6 +1770,8 @@ What Droid does in the running product, at the table in seconds, from stored run
 - **Reviews (§14.7b):** verdict counts of valid Droid reviews; `transcript.reviewed.run_id` links a review to the run it checked.
 - **Appeals (§14.7c) [v4.21]:** respond runs that are turns of an appeal's Droid session: turns, sessions, how many turns resumed a session and how many restarted from the stored thread. Each such run is labelled "appeal turn N".
 - **Harness:** the 11 read-only tools, the built-in tools switched off, prompt versions, the runner new jobs get now, and Droid's cool-down if one is on.
+
+- **[v4.22] Author runs (§14.7d):** job `author`, subject "detector for <kind>", verdict "<name>: PR #N opened" / "re-run matched" / "rejected by the re-run", outcome `rerun_rejected` ("Re-run rejected") when our re-run didn't match, and a guardrail "Proposed detectors rejected by the re-run". Their tool calls (sandbox reads, Create/Edit, `run_tests`, `run_eval`) count "in the sandbox", not read-only, and never as built-ins "still seen". The harness says `author_on`.
 
 The tab (`#droid`): summary tiles, Droid's runs (fake-runner runs behind a toggle, badged), a run view with its tool calls replayed step by step (the Cases tab's `StepList`), the guardrail events with links to their runs, totals per job, and runs in progress live from `stormdesk_step`. Empty state: "No StormDesk runs yet."
 
@@ -1974,6 +2006,7 @@ If judging slots are < 3 min, drop the Town beat from the core and show StormDes
 | Droid slow or failing | replay stored transcripts | dashboard toggle |
 | Reviewer slow, failing or too costly **[v4.15]** | triage alone: the flag as StormDesk proposed it | `STORMDESK_REVIEW=0` |
 | Appeal sessions misbehave **[v4.21]** | one fresh Droid run per message | `STORMDESK_APPEAL_SESSIONS=0` |
+| Author job misbehaving or too costly **[v4.22]** | no author runs; the stored run and its PR stay on the Droid tab | `STORMDESK_AUTHOR=0` (the default) |
 | Chalk eval task can't reach tunnel | run agent locally, upload outputs, score in Chalk | `chalk/evals/run_local.py` |
 | Photon webhook issues | outbound notice only; show the thread from the DB | config |
 | Venue Wi-Fi blocks server | phone hotspot for Mac 2 and the gas station | — |

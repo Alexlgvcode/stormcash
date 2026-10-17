@@ -4,6 +4,7 @@
 // checks without their numbers, and nothing is ever a placeholder (§0 rule 3).
 import { useCallback, useEffect, useState } from "react";
 import { getJSON } from "../api";
+import { AuthorPanel } from "../components/AuthorDetector";
 import {
   METRICS,
   SCENARIO_LABEL,
@@ -299,6 +300,8 @@ export function EvalsTab() {
       )}
 
       {data.heldout && <HeldOut section={data.heldout} />}
+
+      <AuthorPanel dev={desk} heldout={data.heldout?.columns.stormdesk ?? null} />
 
       {[...data.other_runs, ...(data.heldout?.other_runs ?? [])].length > 0 && (
         <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">

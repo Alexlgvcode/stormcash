@@ -6,6 +6,7 @@
 export type Outcome =
   | "valid"
   | "invalid_citation"
+  | "rerun_rejected"
   | "structured_output_failed"
   | "fallback"
   | "fake"
@@ -113,6 +114,7 @@ export interface Harness {
   droid_available: boolean;
   model_setting: string;
   worker_on: boolean;
+  author_on?: boolean; // Droid may propose detectors as PRs (§14.7d)
   cooldown_s: number;
   cooldown_reason: string | null;
 }
@@ -155,11 +157,13 @@ export const JOB_LABEL: Record<string, string> = {
   triage: "Triage",
   respond: "Respond",
   review: "Review",
+  author: "Author",
 };
 
 export const OUTCOME_STYLE: Record<Outcome, string> = {
   valid: "bg-emerald-500/15 text-emerald-300",
   invalid_citation: "bg-rose-500/15 text-rose-300",
+  rerun_rejected: "bg-rose-500/15 text-rose-300",
   structured_output_failed: "bg-rose-500/15 text-rose-300",
   failed: "bg-rose-500/15 text-rose-300",
   fallback: "bg-amber-500/15 text-amber-300",
@@ -251,7 +255,7 @@ export function appealTurnText(a: AppealTurnInfo | null | undefined): string | n
 /** What a run's structured output says, for the run view: a summary, a case file, a reply or a review's reasons. */
 export function outputText(out: Record<string, unknown> | null): string | null {
   if (!out) return null;
-  for (const key of ["summary", "summary_md", "reply"]) {
+  for (const key of ["summary", "summary_md", "reply", "rationale"]) {
     if (typeof out[key] === "string" && out[key]) return out[key] as string;
   }
   if (Array.isArray(out.reasons) && out.reasons.length) return out.reasons.map((r) => `• ${String(r)}`).join("\n");
@@ -261,5 +265,6 @@ export function outputText(out: Record<string, unknown> | null): string | null {
 /** "prompt v2", or "reviewer prompt v1" for the second-opinion Droid; null when the run didn't record it. */
 export function promptText(run: Pick<ConsoleRun, "job" | "prompt_version">): string | null {
   if (run.prompt_version == null) return null;
-  return `${run.job === "review" ? "reviewer prompt" : "prompt"} v${run.prompt_version}`;
+  const which = run.job === "review" ? "reviewer prompt" : run.job === "author" ? "author prompt" : "prompt";
+  return `${which} v${run.prompt_version}`;
 }

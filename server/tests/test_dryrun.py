@@ -214,7 +214,8 @@ def test_schema_check_names_what_a_migration_would_add(clean_db, deps):
     with deps.pool.connection() as conn:
         assert schema_problems(conn, schema) == []
         newer = schema.replace("agents_disagree BOOLEAN", "second_look TEXT,\n  agents_disagree BOOLEAN").replace(
-            "('investigate','triage','respond','review')", "('investigate','triage','respond','review','appeal')")
+            "('investigate','triage','respond','review','author')",
+            "('investigate','triage','respond','review','author','appeal')")
         assert schema_problems(conn, newer) == ["flags.second_look", "stormdesk_runs.job CHECK without appeal"]
 
 
