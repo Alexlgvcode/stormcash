@@ -7,6 +7,12 @@ is stored as `invalid` and never shown as actionable. Triage writes one
 `flags` row per candidate; an investigation writes `cases.case_file_md` only
 when its citations hold.
 
+A shop's appeal (§17.2) is one conversation: with STORMDESK_APPEAL_SESSIONS on,
+each appeal thread (merchant + flag) keeps one Droid session, resumed for every
+new text. The thread's session is the one its latest Droid turn ran in (each
+turn's run stores its session id, turn and thread under `transcript.appeal`),
+as long as that turn's message is still on the thread.
+
 A review (§14.7b) is a second Droid session that tries to refute a triage
 Flag with the same read-only tools. It is stored on the flag. Only a valid
 review by an agent counts, and all it can do is put the flag in front of a
@@ -22,16 +28,17 @@ import time
 from psycopg.types.json import Jsonb
 from pydantic import ValidationError
 
-from ..db import one, scalar
+from ..db import all_rows, one, scalar
 from ..jsonutil import jsonable
 from .citations import citations_valid
-from .prompt import (PROMPT_VERSION, REVIEW_PROMPT_VERSION, investigate_prompt, respond_prompt, review_prompt,
-                     triage_prompt)
+from .prompt import (APPEAL_PROMPT_VERSION, PROMPT_VERSION, REVIEW_PROMPT_VERSION, appeal_open_prompt,
+                     appeal_turn_prompt, investigate_prompt, respond_prompt, review_prompt, triage_prompt)
 from .runner import FakeRunner, Job, RunOutcome, Steps, make_runner
 from .schemas import Flag
 
 DROID_COOLDOWN_S = 300  # after Droid couldn't run, use the fake runner this long before trying again
 REVIEWABLE = ("open", "dismissed")  # a valid proposal a person may see; invalid ones never reach anyone
+THREAD_HISTORY = 30  # messages of an appeal thread a new Droid session is seeded with
 
 
 class StormDeskError(ValueError):
@@ -66,6 +73,8 @@ def _prepare(deps, job: Job) -> tuple[str, int]:
         elif job.kind == "review":
             kind = scalar(conn, "SELECT kind FROM candidates WHERE candidate_id = %s", (job.candidate_id,))
             prompt = review_prompt(job.candidate_id, kind, job.proposal or {})
+        elif (job.appeal or {}).get("mode") == "session":
+            prompt = _appeal_prompt(conn, job)
         else:
             prompt = respond_prompt(job.merchant_id or "", job.message or "")
         run_id = scalar(
@@ -76,6 +85,95 @@ def _prepare(deps, job: Job) -> tuple[str, int]:
              "pending"),
         )
     return prompt, run_id
+
+
+def appeal_session(conn, merchant_id: bytes, flag_id: int | None) -> dict | None:
+    """The appeal thread's Droid session: the one its latest Droid turn ran in, while that turn's message is still
+    on the thread (a cleared thread starts a new conversation). With how many turns it has had, and whether the
+    last one's reply reached the shop."""
+    return one(
+        conn,
+        """SELECT r.run_id, r.session_id, r.status, r.output, r.transcript->'appeal' AS appeal,
+                  r.transcript->'missing_citations' AS missing,
+                  (SELECT count(*) FROM stormdesk_runs t WHERE t.job = 'respond' AND t.runner = 'droid'
+                   AND t.session_id = r.session_id) AS turns
+           FROM stormdesk_runs r
+           JOIN messages m ON m.message_id = (r.transcript->'appeal'->>'in_message_id')::bigint
+           WHERE r.job = 'respond' AND r.runner = 'droid' AND r.merchant_id = %s AND r.session_id IS NOT NULL
+             AND r.transcript->'appeal'->>'mode' = 'session'
+             AND m.merchant_id = r.merchant_id AND m.flag_id IS NOT DISTINCT FROM %s
+           ORDER BY r.run_id DESC LIMIT 1""",
+        (merchant_id, flag_id),
+    )
+
+
+def _not_sent(last: dict) -> str | None:
+    """Why the session's previous reply didn't reach the shop (photon/appeal.pick_reply), or None if it did."""
+    appeal = last["appeal"] or {}
+    if appeal.get("reply_sent") is not False:
+        return None
+    if last["status"] == "invalid":
+        return f"it cited records that aren't in the database ({', '.join(last['missing'] or [])})."
+    if last["status"] == "failed":
+        return "there was no valid AppealReply."
+    return "it cited no records. Every reply must cite the shop's records it relies on."
+
+
+def _appeal_prompt(conn, job: Job) -> str:
+    """The turn's prompt. With a session to resume, only the new text (and what the session didn't see); without
+    one, the opening prompt. Either way job.appeal gets the opening prompt seeded with the stored thread, used if
+    the session can't be resumed."""
+    appeal = job.appeal
+    merchant_id = bytes.fromhex(job.merchant_id or "")
+    flag_id, in_id = appeal.get("flag_id"), appeal.get("in_message_id")
+    thread = all_rows(
+        conn,
+        """SELECT * FROM (SELECT message_id, direction, body FROM messages
+                          WHERE merchant_id = %s AND flag_id IS NOT DISTINCT FROM %s AND message_id < %s
+                          ORDER BY message_id DESC LIMIT %s) m ORDER BY message_id""",
+        (merchant_id, flag_id, in_id if in_id is not None else 2**62, THREAD_HISTORY),
+    )
+    name = scalar(conn, "SELECT display_name FROM merchants WHERE merchant_id = %s", (merchant_id,))
+    flag = one(conn, "SELECT flag_id, kind, proposed_action, status, summary FROM flags WHERE flag_id = %s",
+               (flag_id,)) if flag_id is not None else None
+    opening = appeal_open_prompt(job.merchant_id or "", name, flag, thread, job.message or "")
+    last = appeal_session(conn, merchant_id, flag_id)
+    if last is None:
+        return opening
+    since = (last["appeal"] or {}).get("out_message_id") if (last["appeal"] or {}).get("reply_sent") \
+        else (last["appeal"] or {}).get("in_message_id")
+    missed = [m for m in thread if since is not None and m["message_id"] > since]
+    appeal.update(resume_session_id=last["session_id"], turn=last["turns"] + 1, seeded_messages=len(thread),
+                  restart_prompt=appeal_open_prompt(job.merchant_id or "", name, flag, thread, job.message or "",
+                                                    restarted=True))
+    return appeal_turn_prompt(job.message or "", missed, _not_sent(last))
+
+
+def appeal_record(job: Job, outcome: RunOutcome, fallback: RunOutcome | None) -> dict:
+    """What a respond run stores about its appeal thread (`transcript.appeal`)."""
+    appeal = job.appeal or {}
+    record = {"mode": appeal.get("mode"), "flag_id": appeal.get("flag_id"), "in_message_id": appeal.get("in_message_id")}
+    if appeal.get("mode") != "session":
+        return record
+    record["prompt_version"] = APPEAL_PROMPT_VERSION
+    if outcome.runner == "droid" and outcome.appeal:
+        record.update(outcome.appeal)  # session: started | resumed | restarted, and the turn in that session
+    else:  # the labelled fake runner answered: no Droid session this turn
+        record["session"] = None
+        if fallback is not None and fallback.appeal:
+            record["droid_attempt"] = fallback.appeal
+    return record
+
+
+def appeal_reply_sent(deps, run_id: int, message_id: int | None, sent: bool) -> None:
+    """After photon/appeal sends: which message went out, and whether it was the agent's reply (the next turn of
+    the session is told when it wasn't)."""
+    with deps.pool.connection() as conn:
+        conn.execute(
+            """UPDATE stormdesk_runs SET transcript = jsonb_set(transcript, '{appeal}',
+                      COALESCE(transcript->'appeal', '{}'::jsonb) || %s) WHERE run_id = %s""",
+            (Jsonb({"out_message_id": message_id, "reply_sent": sent}), run_id),
+        )
 
 
 def review_job(deps, flag_id: int | None = None, candidate_id: int | None = None,
@@ -145,6 +243,8 @@ def _store(deps, job: Job, run_id: int, outcome: RunOutcome, steps: Steps, fallb
                            ("fallback_permission_denials", fallback.permission_denials if fallback else None)):
             if value is not None:
                 transcript[key] = value
+        if job.kind == "respond" and job.appeal is not None:
+            transcript["appeal"] = appeal_record(job, outcome, fallback)
         if job.kind == "review":
             transcript["reviewed"] = {"flag_id": job.flag_id, "run_id": job.reviewed_run_id, "proposal": job.proposal}
         run = one(
@@ -161,6 +261,8 @@ def _store(deps, job: Job, run_id: int, outcome: RunOutcome, steps: Steps, fallb
                   "prompt_version": transcript["prompt_version"], "duration_s": duration_s,
                   "session_id": outcome.session_id, "job": job.kind,
                   "output": output.model_dump() if output else None}
+        if "appeal" in transcript:
+            result["appeal"] = transcript["appeal"]
         if job.kind == "triage":
             result["flag"] = _save_flag(conn, job, output, valid, outcome, run, transcript)
         elif job.kind == "review":

@@ -89,6 +89,56 @@ def respond_prompt(merchant_id: str, message: str) -> str:
     )
 
 
+# Appeals as one conversation (§17.2, STORMDESK_APPEAL_SESSIONS=1): the respond job's instructions when each
+# appeal thread keeps one Droid session. The opening turn sets the conversation up; later turns only bring the
+# shop's new text. Versioned on their own; the system prompt is StormDesk's (PROMPT_VERSION).
+APPEAL_PROMPT_VERSION = 1
+APPEAL_TASK = (
+    "Compare what the shop says with its own signed logs (get_device_log, get_contacts, get_merchant_payments, "
+    "get_messages). Return an AppealReply: a short, plain reply to text back (times and amounts are fine; no ids "
+    "or hashes in it), whether the claim matches the logs, the ids you cite, and whether a person must review it. "
+    "Cite in evidence_ids only ids of records you retrieved with the tools (payments, log entries, contacts, the "
+    "shop's merchant id), never a flag or message number. You can't change the decision: a person decides."
+)
+
+
+def _thread_lines(messages: list[dict]) -> list[str]:
+    return [f"- {'StormCash' if m['direction'] == 'out' else 'Shop'}: {m['body']!r}" for m in messages]
+
+
+def appeal_open_prompt(merchant_id: str, name: str | None, flag: dict | None, history: list[dict], message: str,
+                       restarted: bool = False) -> str:
+    """The first turn of an appeal's Droid session: who is appealing what, the thread so far, the new text.
+    `restarted`: the thread's earlier session couldn't be reopened, so this one starts from the stored thread."""
+    lines = [
+        f"{name or 'A shop'} (merchant {merchant_id}) is appealing by text message. This is one conversation: each "
+        "new text from the shop will reach you as a new turn in this same session, so keep track of what the shop "
+        "has claimed and what you have checked.",
+    ]
+    if flag:
+        lines.append(f"The decision being appealed: {flag['kind']}, proposed action {flag['proposed_action']} "
+                     f"({flag['status']}). Its summary: {flag['summary']}")
+    if restarted:
+        lines.append("Your earlier session for this appeal couldn't be reopened, so the whole thread so far is below.")
+    if history:
+        lines += ["The thread so far, oldest first:", *_thread_lines(history)]
+    lines += [f"The shop's new message: {message!r}", APPEAL_TASK]
+    return "\n".join(lines)
+
+
+def appeal_turn_prompt(message: str, missed: list[dict], unsent: str | None) -> str:
+    """A later turn in the same Droid session: the shop's new text, and anything the session didn't see
+    (a reply of yours that wasn't sent, messages answered while Droid couldn't run)."""
+    lines = [f"The shop wrote again: {message!r}"]
+    if unsent:
+        lines.append(f"Your previous reply was not sent: {unsent}")
+    if missed:
+        lines += ["Since your last turn the thread also has:", *_thread_lines(missed)]
+    lines.append("Weigh it against what the shop told you earlier in this conversation and against its logs; check "
+                 "anything new with the tools. Return an AppealReply as before.")
+    return "\n".join(lines)
+
+
 def review_prompt(candidate_id: int, kind: str, proposal: dict) -> str:
     """The reviewer gets the candidate and StormDesk's structured output, nothing else from its run."""
     return (

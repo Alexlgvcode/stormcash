@@ -8,7 +8,7 @@ Photon messaging agent (spec §17): hold and settled notices to merchants, appea
 | `client.py` | `send(channel, handle, text)` via the bridge; `send_to_merchant` records a `messages` row and a `message` SSE event, delivered or not; `reply` answers the handle that wrote in |
 | `freeze.py` | Resident FREEZE (§17.2): a text that is exactly `FREEZE` (trimmed, any case) from a resident's handle freezes their cert with `cases.freeze_cert` (new POLICY), sets `cert_status.owner_freeze_at` (cap_drain's `owner_freeze_request`) and confirms by text. No agent. Idempotent; texting can't unfreeze; an unknown handle gets a neutral reply |
 | `notices.py` | `hold_notice(deps, settings, flag_id)`: the agent's draft only if every number in it is in the flag's evidence, else a template. `settled_notice(deps, settings, payout_id)` |
-| `appeal.py` | Inbound reply → StormDesk `respond` job → reply sent only if it cites ids that exist; otherwise a neutral acknowledgement. SSE `appeal` |
+| `appeal.py` | Inbound reply → StormDesk `respond` job → reply sent only if it cites ids that exist; otherwise a neutral acknowledgement. SSE `appeal`. With `STORMDESK_APPEAL_SESSIONS=1` (default) each appeal thread (shop + flag) is one Droid session, resumed for every text, one turn at a time (spec §14.7c); `0` = one run per message |
 | `bridge/` | Node process that owns the `spectrum-ts` SDK (sending is TypeScript-only) |
 
 ## Wiring (WS2)
@@ -38,4 +38,4 @@ curl -X POST "$BASE/v1/photon/resident-contact" -H 'X-SC-Operator: alex' -H 'con
   -d '{"display_name": "Maya", "channel": "telegram", "handle": "<Telegram user id>"}'
 ```
 
-Fallbacks (§22.4): `PHOTON_DISABLED=1` records every message on the dashboard thread and sends nothing; a FREEZE still freezes. A failed send is recorded with `delivered: false`.
+Fallbacks (§22.4): `PHOTON_DISABLED=1` records every message on the dashboard thread and sends nothing; a FREEZE still freezes. A failed send is recorded with `delivered: false`. `STORMDESK_APPEAL_SESSIONS=0` answers each appeal text with its own fresh run.
