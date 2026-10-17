@@ -6,7 +6,8 @@ import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 export type Hex = string;
 
 const HEX_RE = /^(?:[0-9a-f]{2})*$/;
-const ENUM_RE = /^[A-Z0-9_]+$/;
+const ENUM_RE = /^[A-Z][A-Z0-9_]*$/;
+export const MAX_STRING_CHARS = 48;
 
 export class EncodingError extends Error {}
 
@@ -24,27 +25,40 @@ export function bytes(h: Hex, len?: number): string {
 }
 
 export function str(s: string): string {
+  if (typeof s !== 'string') throw new EncodingError('string expected');
   const n = s.normalize('NFC');
   if (/[|,\n]/.test(n)) throw new EncodingError(`string contains a reserved character: ${s}`);
-  if ([...n].length > 48) throw new EncodingError(`string longer than 48 chars: ${s}`);
+  // Length counts code points, not UTF-16 units.
+  if ([...n].length > MAX_STRING_CHARS) throw new EncodingError(`string longer than 48 code points: ${s}`);
   return n;
 }
 
 export function bytesList(list: Hex[], len?: number): string {
+  if (!Array.isArray(list)) throw new EncodingError('list of bytes expected');
   return list.map((h) => bytes(h, len)).sort().join(',');
 }
 
-// merchant_limits is a sorted list of plain strings ("<merchant_id_hex>:<cents>").
+const utf8Compare = (a: string, b: string): number => {
+  const x = utf8ToBytes(a);
+  const y = utf8ToBytes(b);
+  for (let i = 0; i < Math.min(x.length, y.length); i++) if (x[i] !== y[i]) return x[i] - y[i];
+  return x.length - y.length;
+};
+
+// List of strings: each rendered as a string, sorted by UTF-8 bytes (= code point order).
 export function strList(list: string[]): string {
-  return list.map(str).sort().join(',');
+  if (!Array.isArray(list)) throw new EncodingError('list of strings expected');
+  return list.map(str).sort(utf8Compare).join(',');
 }
 
-export function enumToken(t: string): string {
-  if (!ENUM_RE.test(t)) throw new EncodingError(`invalid enum token: ${t}`);
+export function enumToken(t: string, allowed?: readonly string[]): string {
+  if (typeof t !== 'string' || !ENUM_RE.test(t)) throw new EncodingError(`invalid enum token: ${t}`);
+  if (allowed && !allowed.includes(t)) throw new EncodingError(`enum token not allowed: ${t}`);
   return t;
 }
 
 export function canonical(type: string, fields: string[]): string {
+  enumToken(type);
   return ['SC1', type, ...fields].join('|');
 }
 
@@ -72,8 +86,9 @@ export function hexToB64u(h: Hex): string {
   return out;
 }
 
+/** Strict base64url without padding; rejects non-canonical encodings (§7.3). */
 export function b64uToHex(s: string): Hex {
-  if (!/^[A-Za-z0-9_-]*$/.test(s) || s.length % 4 === 1) {
+  if (typeof s !== 'string' || !/^[A-Za-z0-9_-]*$/.test(s) || s.length % 4 === 1) {
     throw new EncodingError(`invalid base64url: ${s}`);
   }
   const out: number[] = [];
@@ -84,7 +99,9 @@ export function b64uToHex(s: string): Hex {
     const nBytes = chunk.length - 1;
     for (let j = 0; j < nBytes; j++) out.push((n >> (16 - 8 * j)) & 255);
   }
-  return bytesToHex(Uint8Array.from(out));
+  const hex = bytesToHex(Uint8Array.from(out));
+  if (hexToB64u(hex) !== s) throw new EncodingError(`non-canonical base64url: ${s}`);
+  return hex;
 }
 
 export { bytesToHex, hexToBytes };

@@ -26,7 +26,8 @@ export function signDigest(digest: Hex, priv: Hex): Hex {
 /** Accepts both low-S and high-S signatures. Never throws. */
 export function verifyDigest(sig: Hex, digest: Hex, pub: Hex): boolean {
   try {
-    if (sig.length !== 128) return false;
+    if (sig.length !== 128 || digest.length !== 64) return false;
+    if (pub.length !== 66 || !(pub.startsWith('02') || pub.startsWith('03'))) return false;
     return p256.verify(hexToBytes(sig), hexToBytes(digest), hexToBytes(pub), {
       prehash: false,
       lowS: false,
@@ -43,7 +44,7 @@ export function normalizeLowS(sig: Hex): Hex {
   return r.toString(16).padStart(64, '0') + s.toString(16).padStart(64, '0');
 }
 
-/** DER (from Secure Enclave or Python `cryptography`) → raw low-S r||s. */
+/** DER (from Secure Enclave or Python `cryptography`) → raw r||s. Does not normalize S. */
 export function derToRaw(der: Hex): Hex {
   const b = hexToBytes(der);
   let i = 0;
@@ -67,5 +68,19 @@ export function derToRaw(der: Hex): Hex {
   readLen();
   const r = readInt();
   const s = readInt();
-  return normalizeLowS(r.toString(16).padStart(64, '0') + s.toString(16).padStart(64, '0'));
+  if (!(r > 0n && r < N && s > 0n && s < N)) throw new Error('DER: scalar out of range');
+  return r.toString(16).padStart(64, '0') + s.toString(16).padStart(64, '0');
 }
+
+/** raw r||s → DER (minimal positive INTEGERs). */
+export function rawToDer(sig: Hex): Hex {
+  const int = (h: string) => {
+    let v = h.replace(/^(00)+/, '') || '00';
+    if (parseInt(v.slice(0, 2), 16) & 0x80) v = '00' + v;
+    return '02' + (v.length / 2).toString(16).padStart(2, '0') + v;
+  };
+  const body = int(sig.slice(0, 64)) + int(sig.slice(64));
+  return '30' + (body.length / 2).toString(16).padStart(2, '0') + body;
+}
+
+export const isLowS = (sig: Hex): boolean => BigInt('0x' + sig.slice(64)) <= N / 2n;

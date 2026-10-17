@@ -1,6 +1,7 @@
 // Protocol objects (§7.4, §9.2, §10.2): canonical field order, hashes, signing, JSON codec.
 // Inside the app every byte field is a lowercase hex string; JSON on the wire uses base64url.
 import {
+  EncodingError,
   b64uToHex,
   bytes,
   bytesList,
@@ -18,10 +19,16 @@ import { signDigest, verifyDigest } from './crypto';
 type Kind =
   | 'int'
   | 'str'
-  | 'enum'
   | 'strlist'
+  | { enum: readonly string[] }
   | { b: number }
   | { blist: number };
+
+export const DLOG_KINDS = ['ACCEPT', 'REFUSE', 'CONTACT'] as const;
+export const CHECKS = ['C1', 'C2', 'C3', 'C4', 'C5', 'C6'] as const;
+export const PROOF_RULES = ['SAME_COUNTER', 'BROKEN_LINK', 'TOTAL_BACKWARDS'] as const;
+export const CONTACT_IDS_CAP = 200;
+const MERCHANT_LIMIT_RE = /^([0-9a-f]{32}):(0|[1-9][0-9]*)$/;
 
 type Field = readonly [name: string, key: string, kind: Kind];
 
@@ -90,7 +97,7 @@ const DLOG_HEAD: readonly Field[] = [
   ['seq', 'q', 'int'],
   ['prev_hash', 'ph', B32],
   ['ts', 'ts', 'int'],
-  ['kind', 'kd', 'enum'],
+  ['kind', 'kd', { enum: DLOG_KINDS }],
 ];
 
 const DLOG_BODIES: Record<DlogKind, readonly Field[]> = {
@@ -102,7 +109,7 @@ const DLOG_BODIES: Record<DlogKind, readonly Field[]> = {
   REFUSE: [
     ['tag_hash', 'th', B32],
     ['cert_id', 'ci', B16],
-    ['check', 'ck', 'enum'],
+    ['check', 'ck', { enum: CHECKS }],
   ],
   CONTACT: [
     ['contact_id', 'cid', B32],
@@ -158,10 +165,38 @@ export type SchemaType = keyof typeof SCHEMAS;
 function render(kind: Kind, v: unknown): string {
   if (kind === 'int') return int(v as number);
   if (kind === 'str') return str(v as string);
-  if (kind === 'enum') return enumToken(v as string);
   if (kind === 'strlist') return strList(v as string[]);
+  if ('enum' in kind) return enumToken(v as string, kind.enum);
   if ('b' in kind) return bytes(v as Hex, kind.b);
   return bytesList(v as Hex[], kind.blist);
+}
+
+/** Extra validation beyond field rendering (mirrors objects.py validate()). */
+function validate(type: SchemaType | 'DLOG', obj: Record<string, unknown>): void {
+  if (typeof obj.sig === 'string') bytes(obj.sig, 64);
+  if (type === 'POLICY') {
+    const seen = new Set<string>();
+    for (const e of obj.merchant_limits as string[]) {
+      const m = MERCHANT_LIMIT_RE.exec(e);
+      if (!m) throw new EncodingError(`invalid merchant limit ${e}`);
+      int(Number(m[2]));
+      if (seen.has(m[1])) throw new EncodingError(`duplicate merchant limit for ${m[1]}`);
+      seen.add(m[1]);
+    }
+  }
+  if (type === 'DLOG') {
+    const e = obj as unknown as Dlog;
+    const used = new Set(DLOG_BODIES[e.kind].map(([n]) => n));
+    for (const n of DLOG_BODY_NAMES) {
+      if (!used.has(n) && obj[n] !== undefined && obj[n] !== null) {
+        throw new EncodingError(`DLOG ${e.kind} must not set ${n}`);
+      }
+    }
+    if (e.kind === 'CONTACT' && (e.sent_ids.length > CONTACT_IDS_CAP || e.recv_ids.length > CONTACT_IDS_CAP)) {
+      throw new EncodingError('CONTACT id lists are capped at 200');
+    }
+    if (e.seq < 1) throw new EncodingError('DLOG seq starts at 1');
+  }
 }
 
 function renderFields(fields: readonly Field[], obj: Record<string, unknown>): string[] {
@@ -171,9 +206,11 @@ function renderFields(fields: readonly Field[], obj: Record<string, unknown>): s
   });
 }
 
-function dlogFields(e: Dlog): readonly Field[] {
-  const body = DLOG_BODIES[e.kind];
-  if (!body) throw new Error(`unknown DLOG kind ${e.kind}`);
+const DLOG_BODY_NAMES = [...new Set(Object.values(DLOG_BODIES).flatMap((f) => f.map(([n]) => n)))];
+
+function dlogFields(e: { kind: string }): readonly Field[] {
+  const body = (DLOG_BODIES as Record<string, readonly Field[]>)[e.kind];
+  if (!body) throw new EncodingError(`unknown DLOG kind ${e.kind}`);
   return [...DLOG_HEAD, ...body];
 }
 
@@ -181,7 +218,9 @@ export function canonicalOf(type: SchemaType, obj: object): string;
 export function canonicalOf(type: 'DLOG', obj: Dlog): string;
 export function canonicalOf(type: SchemaType | 'DLOG', obj: object): string {
   const fields = type === 'DLOG' ? dlogFields(obj as Dlog) : SCHEMAS[type];
-  return canonical(type, renderFields(fields, obj as Record<string, unknown>));
+  const s = canonical(type, renderFields(fields, obj as Record<string, unknown>));
+  validate(type, obj as Record<string, unknown>);
+  return s;
 }
 
 export const digest = (type: SchemaType, obj: object): Hex => digestOf(canonicalOf(type, obj));
@@ -189,15 +228,26 @@ export const dlogHash = (e: Dlog): Hex => digestOf(canonicalOf('DLOG', e));
 
 export const tagHash = (t: Tag): Hex => digest('TAG', t);
 export const detailsHash = (d: Det): Hex => digest('DET', d);
-export const genesis = (certId: Hex): Hex => digestOf(canonical('GEN', [bytes(certId, 16)]));
-export const dlogGenesis = (devicePub: Hex): Hex => digestOf(canonical('DGEN', [bytes(devicePub, 33)]));
+export const genCanonical = (certId: Hex): string => canonical('GEN', [bytes(certId, 16)]);
+export const genesis = (certId: Hex): Hex => digestOf(genCanonical(certId));
+export const dgenCanonical = (devicePub: Hex): string => canonical('DGEN', [bytes(devicePub, 33)]);
+export const dlogGenesis = (devicePub: Hex): Hex => digestOf(dgenCanonical(devicePub));
+
+/** canonical(CONTACT, pub_low, pub_high, nonce_low, nonce_high); either side, any order (§9.2). */
+export function contactCanonical(pubA: Hex, nonceA: Hex, pubB: Hex, nonceB: Hex): string {
+  if (pubA === pubB) throw new EncodingError('a contact needs two different devices');
+  const [lo, hi] = pubA < pubB ? [[pubA, nonceA], [pubB, nonceB]] : [[pubB, nonceB], [pubA, nonceA]];
+  return canonical('CONTACT', [bytes(lo[0], 33), bytes(hi[0], 33), bytes(lo[1], 16), bytes(hi[1], 16)]);
+}
 
 /** Both sides of a sync session compute the same id (§9.2). */
-export function contactId(pubA: Hex, nonceA: Hex, pubB: Hex, nonceB: Hex): Hex {
-  const [lo, hi] = pubA < pubB ? [[pubA, nonceA], [pubB, nonceB]] : [[pubB, nonceB], [pubA, nonceA]];
-  return digestOf(
-    canonical('CONTACT', [bytes(lo[0], 33), bytes(hi[0], 33), bytes(lo[1], 16), bytes(hi[1], 16)]),
-  );
+export const contactId = (pubA: Hex, nonceA: Hex, pubB: Hex, nonceB: Hex): Hex =>
+  digestOf(contactCanonical(pubA, nonceA, pubB, nonceB));
+
+/** canonical(PRF, tag_hash, tag_hash) with the two hashes sorted (§10.2). */
+export function proofCanonical(hashA: Hex, hashB: Hex): string {
+  const [lo, hi] = [hashA, hashB].sort();
+  return canonical('PRF', [bytes(lo, 32), bytes(hi, 32)]);
 }
 
 // ---- Signing ----
@@ -233,23 +283,32 @@ export function verifyDlog(e: Dlog): boolean {
 type Json = Record<string, unknown>;
 
 function encodeValue(kind: Kind, v: unknown): unknown {
-  if (typeof kind === 'object') {
-    return 'b' in kind ? hexToB64u(v as Hex) : (v as Hex[]).map(hexToB64u);
-  }
+  if (typeof kind === 'object' && 'b' in kind) return hexToB64u(v as Hex);
+  if (typeof kind === 'object' && 'blist' in kind) return (v as Hex[]).map(hexToB64u);
   return v;
 }
 
 function decodeValue(kind: Kind, v: unknown): unknown {
-  if (typeof kind === 'object') {
-    if ('b' in kind) return b64uToHex(v as string);
-    if (!Array.isArray(v)) throw new Error('expected list');
+  if (typeof kind === 'object' && 'b' in kind) return b64uToHex(v as string);
+  if (typeof kind === 'object' && 'blist' in kind) {
+    if (!Array.isArray(v)) throw new EncodingError('expected list');
     return v.map((x) => b64uToHex(x as string));
   }
-  if (kind === 'int' && typeof v !== 'number') throw new Error('expected integer');
-  if ((kind === 'str' || kind === 'enum') && typeof v !== 'string') throw new Error('expected string');
-  if (kind === 'strlist' && !Array.isArray(v)) throw new Error('expected list');
+  if (kind === 'strlist' && !Array.isArray(v)) throw new EncodingError('expected list');
   return v;
 }
+
+function checkKeys(data: Json, allowed: Set<string>, required: Set<string>, type: string): void {
+  if (typeof data !== 'object' || data === null || Array.isArray(data)) throw new EncodingError(`${type}: object expected`);
+  const keys = Object.keys(data);
+  const missing = [...required].filter((k) => !(k in data));
+  const extra = keys.filter((k) => !allowed.has(k));
+  if (missing.length || extra.length) {
+    throw new EncodingError(`${type}: missing keys ${missing}, unknown keys ${extra}`);
+  }
+}
+
+const SIGNED = new Set(['CERT', 'MCERT', 'REQ', 'TAG', 'POLICY', 'RENEW', 'RCPT', 'DLOG']);
 
 function encodeFields(fields: readonly Field[], obj: Json): Json {
   const out: Json = {};
@@ -258,13 +317,13 @@ function encodeFields(fields: readonly Field[], obj: Json): Json {
   return out;
 }
 
-function decodeFields(fields: readonly Field[], json: Json): Json {
+function decodeFields(type: SchemaType | 'DLOG', fields: readonly Field[], json: Json): Json {
+  const keys = new Set(fields.map(([, k]) => k));
+  checkKeys(json, SIGNED.has(type) ? new Set([...keys, 'sig']) : keys, keys, type);
   const out: Json = {};
-  for (const [name, key, kind] of fields) {
-    if (!(key in json)) throw new Error(`missing key ${key}`);
-    out[name] = decodeValue(kind, json[key]);
-  }
-  if (typeof json.sig === 'string') out.sig = b64uToHex(json.sig);
+  for (const [name, key, kind] of fields) out[name] = decodeValue(kind, json[key]);
+  if ('sig' in json) out.sig = b64uToHex(json.sig as string);
+  canonicalOf(type as SchemaType, out); // validates every field
   return out;
 }
 
@@ -273,7 +332,23 @@ export function toWire(type: SchemaType, obj: object): Json {
 }
 
 export function fromWire<T>(type: SchemaType, json: Json): T {
-  return decodeFields(SCHEMAS[type], json) as T;
+  return decodeFields(type, SCHEMAS[type], json) as T;
+}
+
+/** Vector form (spec/vectors.json): long field names, lowercase hex. */
+export function fromFields<T>(type: SchemaType | 'DLOG', fields: Json, sig: Hex | null): T {
+  const specs = type === 'DLOG' ? dlogFields(fields as { kind: string }) : SCHEMAS[type];
+  const names = new Set(specs.map(([n]) => n));
+  checkKeys(fields, names, names, type);
+  for (const [name, , kind] of specs) {
+    const v = fields[name];
+    if (typeof kind === 'object' && 'b' in kind) bytes(v as Hex);
+    if (typeof kind === 'object' && 'blist' in kind) (v as Hex[]).forEach((x) => bytes(x));
+  }
+  const out: Json = { ...fields };
+  if (SIGNED.has(type) && sig !== null) out.sig = sig;
+  canonicalOf(type as SchemaType, out);
+  return out as T;
 }
 
 export function dlogToWire(e: Dlog): Json {
@@ -281,15 +356,13 @@ export function dlogToWire(e: Dlog): Json {
 }
 
 export function dlogFromWire(json: Json): Dlog {
-  const kind = json.kd as DlogKind;
-  const fields = dlogFields({ kind } as Dlog);
-  return decodeFields(fields, json) as unknown as Dlog;
+  return decodeFields('DLOG', dlogFields({ kind: json.kd as string }), json) as unknown as Dlog;
 }
 
 export const payToWire = (p: Pay): Json => ({
   c: toWire('CERT', p.c), t: toWire('TAG', p.t), d: toWire('DET', p.d),
 });
-export const payFromWire = (j: Json): Pay => ({
+export const payFromWire = (j: Json): Pay => (checkKeys(j, new Set(['c', 't', 'd']), new Set(['c', 't', 'd']), 'PAY'), {
   c: fromWire<Cert>('CERT', j.c as Json),
   t: fromWire<Tag>('TAG', j.t as Json),
   d: fromWire<Det>('DET', j.d as Json),
@@ -306,11 +379,13 @@ export const requestFromWire = (j: Json): PaymentRequest => ({
 export const proofToWire = (p: Proof): Json => ({
   a: toWire('TAG', p.a), b: toWire('TAG', p.b), rule: p.rule,
 });
-export const proofFromWire = (j: Json): Proof => ({
-  a: fromWire<Tag>('TAG', j.a as Json),
-  b: fromWire<Tag>('TAG', j.b as Json),
-  rule: j.rule as EquivocationRule,
-});
+export function proofFromWire(j: Json): Proof {
+  checkKeys(j, new Set(['a', 'b', 'rule']), new Set(['a', 'b', 'rule']), 'PROOF');
+  if (!(PROOF_RULES as readonly string[]).includes(j.rule as string)) {
+    throw new EncodingError(`unknown proof rule ${j.rule as string}`);
+  }
+  return { a: fromWire<Tag>('TAG', j.a as Json), b: fromWire<Tag>('TAG', j.b as Json), rule: j.rule as EquivocationRule };
+}
 
 // QR payloads: "SC1:" + JSON (§7.3)
 export const QR_PREFIX = 'SC1:';
@@ -334,8 +409,7 @@ export function itemId(kind: ItemKind, body: ItemBody): Hex {
   switch (kind) {
     case 'PROOF': {
       const p = body as Proof;
-      const [x, y] = [tagHash(p.a), tagHash(p.b)].sort();
-      return digestOf(canonical('PRF', [x, y]));
+      return digestOf(proofCanonical(tagHash(p.a), tagHash(p.b)));
     }
     case 'POLICY': return digest('POLICY', body);
     case 'RCPT': return digest('RCPT', body);
@@ -348,6 +422,9 @@ export function itemId(kind: ItemKind, body: ItemBody): Hex {
 }
 
 export const id8 = (id: Hex): Hex => id.slice(0, 16);
+
+/** First 4 bytes of a device pub as hex (incl. the 02/03 prefix); only for `path` display. */
+export const deviceShortId = (devicePub: Hex): string => devicePub.slice(0, 8);
 
 export function itemBodyToWire(kind: ItemKind, body: ItemBody): Json {
   switch (kind) {
