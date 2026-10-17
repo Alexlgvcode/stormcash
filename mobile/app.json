@@ -12,13 +12,17 @@
       "bundleIdentifier": "edu.bu.stormcash.bm",
       "infoPlist": {
         "NSLocalNetworkUsageDescription": "StormCash talks to nearby phones to share payment records when there is no internet.",
-        "NSBonjourServices": ["_stormcash._tcp", "_stormcash._udp"],
+        "NSBonjourServices": [
+          "_stormcash._tcp",
+          "_stormcash._udp"
+        ],
         "NSBluetoothAlwaysUsageDescription": "StormCash uses Bluetooth to reach nearby phones when there is no internet.",
         "NSCameraUsageDescription": "Scan payment QR codes.",
         "NSFaceIDUsageDescription": "Confirm payments with Face ID."
       }
     },
     "plugins": [
+      "./plugins/with-stormcash-bonjour.js",
       "expo-dev-client",
       "expo-sqlite",
       "expo-secure-store",
@@ -34,6 +38,14 @@
         "expo-local-authentication",
         {
           "faceIDPermission": "Confirm payments with Face ID."
+        }
+      ],
+      [
+        "expo-nearby-connections",
+        {
+          "bonjourServicesName": "stormcash",
+          "localNetworkUsagePermissionText": "StormCash talks to nearby phones to share payment records when there is no internet.",
+          "bluetoothUsagePermissionText": "StormCash uses Bluetooth to reach nearby phones when there is no internet."
         }
       ]
     ]

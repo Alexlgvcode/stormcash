@@ -20,4 +20,8 @@ class Db {
 }
 
 export type SQLiteDatabase = Db;
-export const openDatabaseSync = (_name: string): Db => new Db();
+const open = new Map<string, Db>();
+export const openDatabaseSync = (name: string): Db => {
+  if (!open.has(name)) open.set(name, new Db());
+  return open.get(name)!;
+};

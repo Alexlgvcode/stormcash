@@ -1,5 +1,6 @@
 // Syncable items (§10.2, §10.4): everything this phone carries until a receipt covers it.
 import {
+  deviceShortId,
   id8,
   itemId,
   ITEM_PRIORITY,
@@ -59,8 +60,8 @@ export function putItem(kind: ItemKind, body: ItemBody, path: PathHop[] = [], no
   if (existing) {
     // PAY and TAG share an id; a PAY supersedes the bare TAG.
     if (existing.kind === 'TAG' && kind === 'PAY') {
-      db.runSync('UPDATE items SET kind = ?, body_json = ?, priority = ? WHERE item_id = ?',
-        kind, JSON.stringify(body), ITEM_PRIORITY[kind], id);
+      db.runSync('UPDATE items SET kind = ?, body_json = ?, priority = ?, path_json = ? WHERE item_id = ?',
+        kind, JSON.stringify(body), ITEM_PRIORITY[kind], JSON.stringify(path), id);
     }
     return { id, isNew: false };
   }
@@ -94,6 +95,10 @@ export function inventory(cap = 5000): Hex[] {
   return getDb()
     .getAllSync<{ id8: string }>('SELECT id8 FROM items ORDER BY priority, received_at LIMIT ?', cap)
     .map((r) => r.id8);
+}
+
+export function inventoryOfKind(kind: ItemKind): Hex[] {
+  return getDb().getAllSync<{ id8: string }>('SELECT id8 FROM items WHERE kind = ?', kind).map((r) => r.id8);
 }
 
 export function itemsById8(ids8: Hex[]): StoredItem[] {
@@ -159,3 +164,6 @@ function evict(now: number): void {
 }
 
 export const nowS = (): number => Math.floor(Date.now() / 1000);
+
+/** First hop for an item this device creates: [first 4 bytes of the device pub, ts] (§10.2). */
+export const originHop = (devicePub: Hex, ts: number): PathHop[] => [[deviceShortId(devicePub), ts]];

@@ -2,6 +2,13 @@
 import { openDatabaseSync, type SQLiteDatabase } from 'expo-sqlite';
 
 let db: SQLiteDatabase | null = null;
+let dbName = 'stormcash.db';
+
+/** Tests only: switch which database the stores use (one per simulated phone). */
+export function __useDatabase(name: string): void {
+  dbName = name;
+  db = null;
+}
 
 const SCHEMA = `
 PRAGMA journal_mode = WAL;
@@ -82,7 +89,7 @@ CREATE TABLE IF NOT EXISTS policy (
 
 export function getDb(): SQLiteDatabase {
   if (!db) {
-    db = openDatabaseSync('stormcash.db');
+    db = openDatabaseSync(dbName);
     db.execSync(SCHEMA);
   }
   return db;
