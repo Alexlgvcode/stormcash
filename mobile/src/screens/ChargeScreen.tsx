@@ -1,4 +1,5 @@
 // Merchant charges (§19.2): keypad → REQ QR with a 2-minute countdown → scan the customer's code.
+// Demo payments are whole dollars (Nessie moves whole dollars, §11.4), so the keypad enters dollars.
 import { useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { QrCode } from '../components/QrCode';
@@ -15,19 +16,21 @@ import { merchantCert, setOpenRequest } from '../store/merchant';
 
 type Step = { s: 'amount' } | { s: 'request'; request: PaymentRequest; qr: string } | { s: 'scan' };
 
-const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '00', '0', '⌫'];
+const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'C', '0', '⌫'];
+const MAX_DOLLARS = 999;
 
 export function ChargeScreen() {
   const nav = useNav();
-  const [cents, setCents] = useState(0);
+  const [amount, setAmount] = useState(0); // whole dollars
   const [step, setStep] = useState<Step>({ s: 'amount' });
   const now = Math.floor(useTick(1000) / 1000);
   const mc = merchantCert();
   if (!mc) return null;
 
   const press = (k: string) => {
-    if (k === '⌫') setCents(Math.floor(cents / 10));
-    else setCents(Math.min(99999, Number(String(cents) + k)));
+    if (k === '⌫') setAmount(Math.floor(amount / 10));
+    else if (k === 'C') setAmount(0);
+    else setAmount(Math.min(MAX_DOLLARS, Number(String(amount) + k)));
   };
 
   const cancel = () => {
@@ -48,7 +51,7 @@ export function ChargeScreen() {
     return (
       <Screen>
         <Title>Charge</Title>
-        <Big>{dollars(cents)}</Big>
+        <Big>${amount}</Big>
         <View style={styles.pad}>
           {KEYS.map((k) => (
             <Pressable key={k} style={styles.key} onPress={() => press(k)}>
@@ -58,9 +61,9 @@ export function ChargeScreen() {
         </View>
         <Button
           title="Show code"
-          disabled={cents === 0}
+          disabled={amount === 0}
           onPress={() => {
-            const request = createRequest(mc, cents, deviceKey(), nowS());
+            const request = createRequest(mc, amount * 100, deviceKey(), nowS());
             setStep({ s: 'request', request, qr: requestQr(request) });
           }}
         />
