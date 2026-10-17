@@ -33,7 +33,7 @@ from decimal import Decimal
 from . import ledger, registry
 from .db import all_rows
 from .deps import Deps
-from .nessie import NessieError, is_whole_dollars
+from .nessie import NessieError, is_whole_dollars, pool_account_id
 
 SC_DESCRIPTION = re.compile(r"^SC ([0-9a-fA-F-]{36})(?:\s|$)")
 MAX_ITEMS = 50  # per account; the totals by kind always cover every item
@@ -109,7 +109,7 @@ def real_accounts(conn, deps: Deps) -> list[dict]:
         out.append({"key": key, "label": m["display_name"], "kind": "merchant",
                     "nessie_account_id": m["nessie_account_id"], "ledger": [key]})
     out.append({"key": ledger.POOL, "label": "Guarantee Pool", "kind": "pool",
-                "nessie_account_id": deps.settings.nessie_pool_account_id or None, "ledger": [ledger.POOL]})
+                "nessie_account_id": pool_account_id(conn, deps.settings), "ledger": [ledger.POOL]})
     return out
 
 
@@ -161,7 +161,7 @@ def reconcile(deps: Deps) -> dict:
         if snapshot is None:
             rows.append({**_base(a), "status": "error", "error": error})
             continue
-        rows.append(_account(a, snapshot, facts, deps))
+        rows.append(_account(a, snapshot, facts))
 
     errors = [r["error"] for r in rows if r["status"] == "error"]
     return {
@@ -190,6 +190,7 @@ class _Facts:
         f = cls()
         f.read_records = {backed[k]["nessie_account_id"]: _records(r) for k, r in reads.items()}
         f.label_of_nessie = {a["nessie_account_id"]: a["label"] for a in accounts if a["nessie_account_id"]}
+        f.pool_account_id = next((a["nessie_account_id"] for a in accounts if a["kind"] == "pool"), None)
         f.key_of_ledger = {acct: a["key"] for a in accounts for acct in a["ledger"]}
         ledger_accounts = list(f.key_of_ledger)
 
@@ -334,7 +335,7 @@ def _records(snapshot: dict) -> list[dict]:
     return out
 
 
-def _account(a: dict, snapshot: dict, f: _Facts, deps: Deps) -> dict:
+def _account(a: dict, snapshot: dict, f: _Facts) -> dict:
     own = a["ledger"]
     account_id = a["nessie_account_id"]
     fetched_at = snapshot["fetched_at"]
@@ -405,7 +406,7 @@ def _account(a: dict, snapshot: dict, f: _Facts, deps: Deps) -> dict:
         d = nessie_delta.get(txn_id, 0) - expected_delta.get(txn_id, 0)
         if d:
             kind, text = _explain(txn_id, a, f, own, expected_delta.get(txn_id, 0), nessie_delta.get(txn_id, 0),
-                                  not_completed.get(txn_id), fetched_at, deps)
+                                  not_completed.get(txn_id), fetched_at)
             items.append({"kind": kind, "cents": d, "txn_id": str(txn_id), "text": text})
     rest = difference - sum(i["cents"] for i in items)
     if rest:  # can't happen by construction; never hide it if it does
@@ -440,7 +441,7 @@ def _account(a: dict, snapshot: dict, f: _Facts, deps: Deps) -> dict:
 
 
 def _explain(txn_id, a: dict, f: _Facts, own: list[str], ledger_d: int, nessie_d: int,
-             pending: list[dict] | None, fetched_at: int, deps: Deps) -> tuple[str, str]:
+             pending: list[dict] | None, fetched_at: int) -> tuple[str, str]:
     """Why this txn's Nessie records and ledger entries differ on this account."""
     tag = f"SC {short(txn_id)}…"
     move = f.moves.get(txn_id)
@@ -503,7 +504,7 @@ def _explain(txn_id, a: dict, f: _Facts, own: list[str], ledger_d: int, nessie_d
     if (payout and payout["status"] == "held") or ref == "pool payout held":
         return "held", (f"{tag} {ref} {money(amount)} with {with_whom} at {when}: a pool payout held by an "
                         f"approved hold_pool_payout is booked and reversed in the ledger, never sent to Nessie.")
-    if payout and payout["source"] == "pool" and not deps.settings.nessie_pool_account_id:
+    if payout and payout["source"] == "pool" and not f.pool_account_id:
         return "ledger_only", (f"{tag} {ref} {money(amount)} with {with_whom} at {when}: "
                                f"no guarantee pool account in Nessie, ledger only.")
     if payout and payout["status"] == "ledger_only":

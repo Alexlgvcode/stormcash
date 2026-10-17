@@ -253,6 +253,14 @@ CREATE TABLE nessie_moves (             -- [v4.3] one Nessie withdrawal + deposi
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE nessie_pool_accounts (     -- [v4.19] the guarantee pool's Nessie account: the newest row is the current pool (§11.4)
+  pool_id BIGSERIAL PRIMARY KEY,
+  account_id TEXT UNIQUE NOT NULL,      -- Nessie account id
+  customer_id TEXT,                     -- the "StormCash Operator" customer
+  opening_cents INT NOT NULL,           -- the balance it was opened at (whole dollars)
+  opened_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE TABLE policy_versions (
   policy_ver INT PRIMARY KEY,
   issued_at BIGINT NOT NULL,

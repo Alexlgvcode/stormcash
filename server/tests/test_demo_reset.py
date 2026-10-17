@@ -47,7 +47,7 @@ def test_reset_clears_the_table_and_keeps_the_town(world, app_client, deps, fake
         assert scalar(conn, "SELECT count(*) FROM cases") == 1
 
     out = app_client.post("/v1/demo/reset", headers=OPERATOR).json()
-    assert out["ok"] and out["nessie_accounts_opened"] == 4  # Maya checking + escrow, 2 shops
+    assert out["ok"] and out["nessie_accounts_opened"] == 5  # Maya checking + escrow, 2 shops, the pool
 
     new_cert = Cert.from_json(out["residents"][0]["cert"])
     assert new_cert.verify(crypto.public_key_bytes(SERVER_KEY))
@@ -92,3 +92,54 @@ def test_reset_can_prestage_storm_mode_and_needs_an_operator(world, app_client):
     out = app_client.post("/v1/demo/reset", json={"storm_cap_cents": 5000}, headers=OPERATOR).json()
     cert = Cert.from_json(out["residents"][0]["cert"])
     assert (cert.cert_ver, cert.cap_cents) == (2, 5000)
+
+
+def test_reset_opens_a_fresh_guarantee_pool(world, app_client, deps, fake_nessie):
+    """The pool's Nessie records start clean after every reset; the old account is left alone."""
+    honest = world.pay("pharmacy", 1200)
+    world.rollback()
+    world.sync(PHARMACY, [honest])
+    world.sync(GAS, [world.pay("gas_station", 1200)])  # $4 of it from the pool
+    old_pool = fake_nessie.pool_id
+    assert fake_nessie.balance_dollars(old_pool) == 996
+
+    first = app_client.post("/v1/demo/reset", headers=OPERATOR).json()["pool"]
+    assert first["replaced"] == old_pool and first["opening_cents"] == 100000
+    new_pool = first["account_id"]
+    assert new_pool != old_pool and fake_nessie.balance_dollars(new_pool) == 1000
+    assert fake_nessie.balance_dollars(old_pool) == 996  # untouched: nothing rewrites history
+    assert fake_nessie.customers[first["customer_id"]]["first_name"] == "StormCash"
+    pool_card = next(a for a in app_client.get("/v1/accounts").json()["accounts"] if a["kind"] == "pool")
+    assert (pool_card["nessie_account_id"], pool_card["nessie_cents"]) == (new_pool, 100000)
+    with deps.pool.connection() as conn:
+        opened = one(conn, """SELECT request, summary FROM nessie_calls WHERE method = 'POST'
+                              AND response->'objectCreated'->>'_id' = %s""", (new_pool,))
+    assert opened["request"]["balance"] == 1000 and opened["summary"] == "Open account Guarantee Pool, $1000"
+
+    # Pool money now comes out of the new account.
+    world2 = World(app_client)  # Maya registers again and gets the new cert
+    honest = world2.pay("pharmacy", 1200)
+    world2.rollback()
+    world2.sync(PHARMACY, [honest])
+    world2.sync(GAS, [world2.pay("gas_station", 1200)])
+    assert fake_nessie.balance_dollars(new_pool) == 996 and fake_nessie.balance_dollars(old_pool) == 996
+
+    # The next reset reuses the operator customer.
+    second = app_client.post("/v1/demo/reset", headers=OPERATOR).json()["pool"]
+    assert second["replaced"] == new_pool and second["customer_id"] == first["customer_id"]
+
+
+def test_reset_without_a_pool_account_keeps_pool_money_ledger_only(clean_db, fake_nessie):
+    from fastapi.testclient import TestClient
+
+    from stormcash.app import create_app
+    from stormcash.photon.config import PhotonSettings
+
+    from .conftest import make_settings
+
+    app = create_app(make_settings(clean_db), nessie_transport=fake_nessie.transport(),
+                     photon=PhotonSettings(disabled=True))
+    with TestClient(app) as client:
+        World(client)
+        out = client.post("/v1/demo/reset", headers=OPERATOR).json()
+    assert out["pool"] is None and out["nessie_accounts_opened"] == 4

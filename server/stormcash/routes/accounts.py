@@ -17,7 +17,7 @@ from .. import ledger, reconcile
 from ..db import all_rows, scalar
 from ..deps import Deps
 from ..jsonutil import jsonable
-from ..nessie import NessieError
+from ..nessie import NessieError, pool_account_id
 from ..protocol.objects import b64u_encode
 
 router = APIRouter()
@@ -44,6 +44,7 @@ def accounts_snapshot(deps: Deps) -> dict:
         balances = _ledger_balances(conn)
         unbalanced = ledger.unbalanced_txns(conn)
         queued = scalar(conn, "SELECT count(*) FROM nessie_moves WHERE status = 'queued'")
+        pool_account = pool_account_id(conn, deps.settings)
 
     cards = []
     for r in residents:
@@ -57,7 +58,7 @@ def accounts_snapshot(deps: Deps) -> dict:
         cards.append({"key": ledger.merchant(bytes(m["merchant_id"])), "label": m["display_name"], "kind": "merchant",
                       "nessie_account_id": m["nessie_account_id"]})
     cards.append({"key": ledger.POOL, "label": "Guarantee Pool", "kind": "pool",
-                  "nessie_account_id": deps.settings.nessie_pool_account_id or None})
+                  "nessie_account_id": pool_account})
 
     def nessie_balance(card: dict) -> tuple[int | None, str | None]:
         if deps.nessie is None or not card["nessie_account_id"]:

@@ -28,7 +28,7 @@ from psycopg.types.json import Jsonb
 from . import cases, detectors, ledger, registry
 from .db import all_rows, one, pipelined, scalar
 from .deps import Deps
-from .nessie import MoneyMover, is_whole_dollars
+from .nessie import MoneyMover, is_whole_dollars, pool_account_id
 from .protocol import rules
 from .protocol.encoding import EncodingError
 from .protocol.objects import Cert, Dlog, Item, Pay, Policy, Proof, Rcpt, Renew, Tag, b64u_encode
@@ -432,7 +432,7 @@ def fund_payment(
             ledger.post(conn, ledger.fraud_receivable(cert_id), ledger.POOL_RECOVERIES, cents, "pool receivable")
         nessie_from = (
             resident["escrow_account_id"] if source == "escrow" and resident_real
-            else settings.nessie_pool_account_id if source == "pool" else None
+            else pool_account_id(conn, settings) if source == "pool" and merchant_real and resident_real else None
         )
         # Simulated money never touches Nessie (§11.4), even when paid to a real shop.
         use_nessie = bool(merchant_real and resident_real and nessie_from and is_whole_dollars(cents))
