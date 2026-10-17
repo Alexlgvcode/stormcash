@@ -3,7 +3,7 @@
 // operator's name, and the Photon thread for merchant flags. A fake-runner
 // result is labelled as such everywhere (§0 rule 3).
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getJSON, operatorPost, type FlagDetail, type FlagRow, type Message, type Run, type Step } from "../api";
+import { getJSON, operatorPost, type FlagDetail, type FlagRow, type Message, type Run, type Step, type Usage } from "../api";
 import { useEvents } from "../events";
 import { clockTime, dollars } from "../format";
 
@@ -30,7 +30,11 @@ const STATUS_STYLE: Record<string, string> = {
   invalid: "bg-rose-500/15 text-rose-300",
 };
 
-export function RunnerBadge({ runner }: { runner: string | null | undefined }) {
+export function RunnerBadge({ runner, model, usage }: {
+  runner: string | null | undefined;
+  model?: string | null;
+  usage?: Usage | null;
+}) {
   if (runner === "fake") {
     return (
       <span className="rounded-full bg-amber-500/15 px-3 py-1 text-sm font-semibold text-amber-300"
@@ -40,7 +44,15 @@ export function RunnerBadge({ runner }: { runner: string | null | undefined }) {
     );
   }
   if (runner === "droid") {
-    return <span className="rounded-full bg-violet-500/15 px-3 py-1 text-sm font-semibold text-violet-300">Droid</span>;
+    const tokens = usage ? (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0) : null;
+    const parts = ["Droid", model && model !== "auto" ? model : null,
+      usage?.factory_credits != null ? `${Math.round(usage.factory_credits).toLocaleString("en-US")} credits` : null];
+    return (
+      <span className="rounded-full bg-violet-500/15 px-3 py-1 text-sm font-semibold text-violet-300"
+        title={tokens != null ? `${tokens.toLocaleString("en-US")} tokens in + out (cache reads ${(usage?.cache_read_tokens ?? 0).toLocaleString("en-US")})` : undefined}>
+        {parts.filter(Boolean).join(" · ")}
+      </span>
+    );
   }
   return null;
 }
@@ -260,7 +272,7 @@ function FlagView({ flagId, onChanged }: { flagId: number; onChanged: () => void
         <h2 className="text-3xl font-bold text-white">{KIND_TITLE[flag.kind] ?? flag.kind}</h2>
         <span className={`rounded-full px-3 py-1 text-sm font-semibold ${STATUS_STYLE[flag.status]}`}>{flag.status}</span>
         <span className="rounded-full bg-slate-800 px-3 py-1 text-sm text-slate-300">{flag.severity}</span>
-        <RunnerBadge runner={flag.runner} />
+        <RunnerBadge runner={flag.runner} model={agent?.model} usage={agent?.usage} />
       </div>
       <p className="text-lg text-slate-200">
         {flag.subject_name ?? flag.subject_id}: {flag.summary}
@@ -378,7 +390,7 @@ export function CaseStormDesk({ caseId, onFiled }: { caseId: number; onFiled: ()
     <div className="space-y-3 rounded-2xl border border-slate-800 bg-slate-900 p-4">
       <div className="flex flex-wrap items-center gap-3">
         <h3 className="text-lg font-semibold text-white">StormDesk</h3>
-        <RunnerBadge runner={run?.runner} />
+        <RunnerBadge runner={run?.runner} model={run?.transcript?.model} usage={run?.transcript?.usage} />
         {run && <span className="text-sm text-slate-400">last run {clockTime(run.started_at)} · {run.status}</span>}
         <button disabled={busy} onClick={start}
           className="ml-auto rounded-lg bg-slate-800 px-4 py-2 text-base text-white hover:bg-slate-700 disabled:opacity-50">

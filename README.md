@@ -43,7 +43,8 @@ flowchart LR
 - iPhones only exchange data while the app is open.
 - Phones share pseudonymous certificate ids, amounts and running totals, never names. Payments relayed for settlement name the shop they paid; production would encrypt relayed bundles to the server's key.
 - The 40-shop town around our 3 phones is **simulated** and labelled "simulated" everywhere; its money never touches Nessie. Weather alerts we replay are labelled "replayed".
-- **StormDesk without Factory access:** until our Factory account is set up, the same pipeline runs with a deterministic stand-in that applies the rules-only baseline. It is labelled "Fake runner · rules only" on every screen and in every stored record, and is never presented as an agent's judgement.
+- **StormDesk costs Factory credits.** On the seeded town a hard-case investigation took 12,000 to 17,000 credits and a shop triage 63,000 (`claude-sonnet-5-5`). Each run stores its model, tokens and credits, shown next to the Droid badge. We run Droid on the cases an operator opens (`STORMDESK_RUNNER=droid STORMDESK_AUTO=0`). Everything else, and any run Droid can't make (no credits, no CLI), goes through a deterministic stand-in that applies the rules-only baseline. It is labelled "Fake runner · rules only" on every screen and in every stored record, and is never presented as an agent's judgement.
+- **Droid disagreed with our planted label.** On seed 42 it dismissed the Corner Store, which the simulator planted as a colluder. In the 6 h window the shop took a single pool-funded payment, and the hard case had already caught that cheat. We show its answer as it is.
 
 ## Run it
 
@@ -136,16 +137,18 @@ StormDesk is the back office of the running product, in [`server/stormcash/storm
   - **Respond** to a shop's appeal arriving through Photon, by comparing the claim with the shop's own signed logs.
 - **Eleven read-only tools** (`tools.py`) served to Droid as an in-process MCP server: `get_case`, `get_candidate`, `get_cert_chain`, `verify_tags`, `get_device_log`, `get_contacts`, `get_merchant_payments`, `query_features`, `get_region_status`, `get_nessie_balances`, `get_messages`. They run in a read-only database transaction. **There is no write tool.**
 - **Structured outputs** (`schemas.py`): `Flag`, `CaseFile` and `AppealReply` are Pydantic models passed as `output=` to `Session.stream`. A failed structured output is retried once and otherwise stored as invalid.
-- **Permission handler** (`runner.permission_handler`): allows only our own MCP tools and cancels everything else (shell, file edits, network). Droid's built-in tools are also switched off in `SessionConfig`; that list of tool ids gets checked on the first live run.
+- **Permission handler** (`runner.permission_handler`): allows only our own MCP tools and cancels everything else (shell, file edits, network). All 34 built-in tools (ids from `list_tools()` on droid 0.244.0) are also switched off in `SessionConfig`. One exception shows up in every live transcript: Droid's `ToolSearch` still runs once, to load our MCP tools' schemas.
 - **Citation check** (`citations.py`): every id the agent cites must exist in the database, or the result is stored as invalid and never shown as actionable.
-- **Every run is stored** with its transcript (`stormdesk_runs`). Each tool call streams live to the dashboard (`stormdesk_step` events) and can be replayed step by step.
+- **Every run is stored** with its transcript, model, tokens and Factory credits (`stormdesk_runs`). Each tool call streams live to the dashboard (`stormdesk_step` events). A stored run can be replayed step by step ("Replay of run at …").
 - **A person decides.** Approve or Reject on the dashboard runs deterministic code (`approvals.py`): hold a shop's pool payouts, lower its limit, freeze a certificate, or dispatch a relay. Hard rules never go through the agent.
 
-_Screenshot of the live step stream: added after the first live Droid run (see Honest limits)._
+![Live tool calls from a real Droid run](docs/images/stormdesk-live-steps.png)
+
+_A live Droid run (`claude-sonnet-5-5`) triaging the Corner Store candidate on the seeded town: 14 read-only tool calls streamed to the dashboard, 63,437 Factory credits. It dismissed the candidate (see Honest limits)._
 
 ## How we use Chalk
 
-- **Features for the agent.** StormDesk's `query_features` tool asks for a shop's, certificate's or region's features: contact rates against nearby shops, pool-funded share, drain speed, upload gaps, active weather alerts. The Chalk feature set (#28) builds them from our Postgres data, Nessie balances and the National Weather Service alerts API. Until the Chalk client lands, the tool answers from the detectors' own frozen features and says so (`source: "postgres_fallback"`).
+- **Features for the agent.** StormDesk's `query_features` tool asks for a shop's, certificate's or region's features: contact rates against nearby shops, pool-funded share, drain speed, upload gaps, active weather alerts. The Chalk feature set (#28) builds them from our Postgres data, Nessie balances and the National Weather Service alerts API. If Chalk is off or can't answer, the tool answers from the detectors' own frozen features and says so (`source: "postgres_fallback"`).
 - **Evaluations.** The simulator writes ground truth for every seeded town (`sim/out/<seed>/labels.json`), including deliberate traps: a remote shop, a victim shop, an honest resident stocking up, a drifting clock and a quiet region. Chalk Evaluations compares the rules-only baseline with StormDesk on those labels (#33). The Evals tab shows only numbers from a real run.
 
 ## How we use Capital One Nessie

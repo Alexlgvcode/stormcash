@@ -66,7 +66,8 @@ def _prepare(deps, job: Job) -> tuple[str, int]:
     return prompt, run_id
 
 
-def _store(deps, job: Job, run_id: int, outcome: RunOutcome, steps: Steps, fallback: str | None = None) -> dict:
+def _store(deps, job: Job, run_id: int, outcome: RunOutcome, steps: Steps, fallback: str | None = None,
+           fallback_usage: dict | None = None) -> dict:
     output = outcome.output
     with deps.pool.connection() as conn:
         missing: list[str] = []
@@ -76,7 +77,8 @@ def _store(deps, job: Job, run_id: int, outcome: RunOutcome, steps: Steps, fallb
             valid, missing = citations_valid(conn, list(output.evidence_ids), required=needs_ids)
         status = "succeeded" if output is not None and valid else "invalid" if output is not None else "failed"
         transcript = {"runner": outcome.runner, "steps": steps.transcript, "missing_citations": missing,
-                      "error": outcome.error, "fallback_from_droid": fallback}
+                      "error": outcome.error, "fallback_from_droid": fallback, "model": outcome.model,
+                      "usage": outcome.usage, "fallback_usage": fallback_usage}
         run = one(
             conn,
             """UPDATE stormdesk_runs SET runner = %s, status = %s, output = %s, citations_valid = %s, transcript = %s,
@@ -86,6 +88,7 @@ def _store(deps, job: Job, run_id: int, outcome: RunOutcome, steps: Steps, fallb
         )
         result = {"run_id": run_id, "runner": outcome.runner, "status": status, "citations_valid": valid,
                   "missing_citations": missing, "error": outcome.error, "fallback_from_droid": fallback,
+                  "model": outcome.model, "usage": outcome.usage,
                   "output": output.model_dump() if output else None}
         if job.kind == "triage":
             result["flag"] = _save_flag(conn, job, output, valid, outcome, run, transcript)
@@ -163,7 +166,7 @@ class StormDesk:
             })
 
         steps = Steps(on_step=on_step)
-        fallback = None
+        fallback, fallback_usage = None, None
         async with self.slots:
             try:
                 outcome = await runner.run(job, prompt, steps)
@@ -173,13 +176,13 @@ class StormDesk:
             if outcome.unavailable and runner.name == "droid":
                 # Droid couldn't run at all (no credits, CLI gone): answer with the labelled fake runner
                 # now, skip Droid for a while, and record why.
-                fallback = outcome.error
+                fallback, fallback_usage = outcome.error, outcome.usage
                 self.droid_down_until = time.monotonic() + DROID_COOLDOWN_S
                 self.droid_down_reason = fallback
                 runner = FakeRunner(self.deps)
                 steps = Steps(on_step=on_step)
                 outcome = await runner.run(job, prompt, steps)
-        result = await asyncio.to_thread(_store, self.deps, job, run_id, outcome, steps, fallback)
+        result = await asyncio.to_thread(_store, self.deps, job, run_id, outcome, steps, fallback, fallback_usage)
         self.deps.events.publish("stormdesk_step", {"run_id": run_id, "job": job.kind, "subject": subject,
                                                     "runner": runner.name, "done": True, "status": result["status"]})
         if result.get("flag"):

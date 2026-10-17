@@ -76,6 +76,24 @@ class RunOutcome:
     session_id: str | None = None
     error: str | None = None
     unavailable: bool = False  # the runner couldn't run at all (no credits, no CLI): try another
+    usage: dict | None = None  # Droid only: tokens and Factory credits, summed over attempts
+    model: str | None = None
+
+
+USAGE_FIELDS = ("input_tokens", "output_tokens", "cache_creation_tokens", "cache_read_tokens", "thinking_tokens",
+                "factory_credits")
+
+
+def add_usage(total: dict | None, usage) -> dict | None:
+    """Sum a droid_sdk Usage into a plain dict (what the run cost, kept with its transcript)."""
+    if usage is None:
+        return total
+    total = dict(total or {})
+    for name in USAGE_FIELDS:
+        value = getattr(usage, name, None)
+        if value is not None:
+            total[name] = (total.get(name) or 0) + value
+    return total
 
 
 @dataclass
@@ -282,7 +300,8 @@ class DroidRunner:
 
         config = session_config(self.deps)
         handlers = InteractionHandlers(on_permission=permission_handler)
-        error, session_id = None, None
+        error, session_id, usage = None, None, None
+        model = self.model or "auto"
         for attempt in (1, 2):  # a structured-output failure is a value: retry once (§14.2)
             async with Session(model=self.model, config=config, interactions=handlers, api_key=self.api_key) as s:
                 stream = s.stream(prompt, output=job.output_model, timeout=RUN_TIMEOUT_S)
@@ -293,20 +312,23 @@ class DroidRunner:
                         steps.result(event.tool_use_id, not event.is_error)
                 result = stream.result
             session_id = result.session_id
+            usage = add_usage(usage, result.usage)
+            log.info("StormDesk %s attempt %s on %s: %s", job.kind, attempt, model, usage)
             if result.success and result.structured_output is not None:
                 try:
                     return RunOutcome(self.name, job.output_model.model_validate(_thaw(result.structured_output)),
-                                      session_id)
+                                      session_id, usage=usage, model=model)
                 except ValidationError as exc:
                     error = f"output did not match {job.output_model.__name__}: {exc.error_count()} errors"
             elif result.subtype == "error_during_execution":
                 # The agent couldn't run (e.g. "model_usage_exhausted"): retrying won't help.
                 message = getattr(result.error, "message", None) or result.text or "no output"
-                return RunOutcome(self.name, None, session_id, f"error_during_execution: {message}", unavailable=True)
+                return RunOutcome(self.name, None, session_id, f"error_during_execution: {message}", unavailable=True,
+                                  usage=usage, model=model)
             else:
                 error = f"{result.subtype}: {result.structured_output_error or 'no output'}"
             log.warning("StormDesk attempt %s failed: %s", attempt, error)
-        return RunOutcome(self.name, None, session_id, error)
+        return RunOutcome(self.name, None, session_id, error, usage=usage, model=model)
 
 
 def _thaw(value: Any) -> Any:

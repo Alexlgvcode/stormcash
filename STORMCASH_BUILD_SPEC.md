@@ -10,6 +10,7 @@
 > **v4.6 (Oct 16):** Chalk verified and built (#28, §15.1, §15.2): sim-time windows are an `as_of` feature (no Postgres views needed), SQL resolvers read the Neon integration `neon_stormcash`, the NWS resolver labels live vs replayed, and `query_features` calls Chalk with fallback switch `CHALK_DISABLED` (§6.3, §14.7a, §22.4). Marked **[v4.6]**.
 > **v4.7 (Oct 17):** Chalk Evaluations built (#33, §15.3): 48-row dataset from 5 seeds in local per-seed databases, a token-gated gateway behind one tunnel for the StormDesk task, a rules-only baseline task, the `run_local.py` fallback, and results files that never show a fake-runner run as StormDesk. Marked **[v4.7]**.
 > **v4.8 (Oct 17):** Evals tab built (#38, §18.5): `GET /v1/evals` serves the saved Chalk runs, and only a verified Droid run fills the StormDesk column. Marked **[v4.8]**.
+> **v4.9 (Oct 17):** first live Droid runs (#27): run cost recorded per run, the citation check accepts a hard case's `proof_item_id`, the prompt says evidence ids name records, not field values (§14.2, §14.4, §14.7). Marked **[v4.9]**.
 > **Builds on:** "StormCash: The 10/10 Build" v3 (Oct 16, Alexandre Lugovoi, on Brian Maina's Oct 11 draft). Everything new since v3 is marked **[v4]**.
 
 ---
@@ -1183,6 +1184,7 @@ config = SessionConfig(
 - Use `run(prompt, output=Flag)` (or `Session.stream`) with **structured output** (Pydantic). Missing or invalid output = `RunFailure` with `error_structured_output`: retry once, then store the flag as `invalid`.
 - Stream messages; for each `ToolCall` / `ToolResult`, emit SSE `stormdesk_step` and append to `agent_transcript`.
 - **Verified Oct 16** with droid CLI 0.244.0: the built-in tool ids to disable (`list_tools()`; the full list is `runner.BUILTIN_TOOLS`) and the MCP tool id format (`mcp__stormdesk__<tool>`). Structured output is still to be seen working on a live run.
+- **[v4.9] First live runs (Oct 17, droid 0.244.0, `claude-sonnet-5-5`).** Structured output works through `Session.stream`. Droid's `ToolSearch` runs once per session even though it is in `disabled_tools`: it loads our MCP tool schemas (`mcp__stormdesk__*`) and reads nothing else, and it shows up as a step. Each run stores `model` and `usage` (tokens and `factory_credits`, summed over attempts) in its transcript, and the dashboard shows the credits on the Droid badge. Measured cost: an investigation took 12k–17k credits, a merchant triage with 14 tool calls 63k.
 - **Droid can't run** (`RunFailure` `error_during_execution`, e.g. "model_usage_exhausted" when the account is out of credits, or the CLI/process fails): not retried. The job is answered by the labelled fake runner instead, the run records `fallback_from_droid` with the reason, and Droid is skipped for 5 minutes before it is tried again.
 - Model: let Droid pick (`model="auto"`) unless a Claude model is selectable; prefer Claude.
 
@@ -1220,6 +1222,9 @@ Facts you must respect:
 - You cannot move money or freeze anything. You propose; a human operator decides.
 - Every claim must cite ids you actually retrieved from tools (tag hashes, log entry hashes,
   contact ids, payment ids, alert ids). Never invent an id. Uncited claims are discarded.
+- **[v4.9]** evidence_ids name records: tag hashes, device-log entry hashes, contact ids, cert ids,
+  merchant ids, alert ids and a case's proof_item_id. Field values (prev_hash, details
+  hashes, signatures, keys) are not ids: mention them in the text, not in evidence_ids.
 - Prefer dismissing with a clear reason over flagging when the evidence is weak.
 - Be brief. The operator reads your summary in 10 seconds.
 ```
@@ -1277,7 +1282,7 @@ Reject = flag `rejected`, nothing executes. Every approval writes an `approvals`
 
 ### 14.7 Guardrails
 
-- **Citation check:** before saving, the server checks every `evidence_ids` entry exists in the DB (tags, payments, device_log entry hashes, contacts, alerts). Any miss → `citations_valid=false`, flag status `invalid`, never shown as actionable. Counted in evals.
+- **Citation check:** before saving, the server checks every `evidence_ids` entry exists in the DB (tags, payments, device_log entry hashes, contacts, alerts; **[v4.9]** also cert and merchant ids and a hard case's `proof_item_id`, which `get_case` returns). Any miss → `citations_valid=false`, flag status `invalid`, never shown as actionable. Counted in evals.
 - No write tools; permission handler denies everything except our MCP tools.
 - Hard rules are never routed through the agent for a decision.
 - Every run's transcript is stored for replay and audit.

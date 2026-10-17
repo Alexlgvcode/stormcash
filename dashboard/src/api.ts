@@ -200,6 +200,16 @@ export interface FlagRow {
   created_at: number;
 }
 
+/** What a Droid run cost (droid-sdk Usage), stored with its transcript. */
+export interface Usage {
+  input_tokens?: number;
+  output_tokens?: number;
+  cache_read_tokens?: number;
+  cache_creation_tokens?: number;
+  thinking_tokens?: number;
+  factory_credits?: number;
+}
+
 export interface Step {
   index: number;
   tool: string;
@@ -219,6 +229,8 @@ export interface FlagDetail {
     merchant_notice: string | null;
     missing_citations: string[];
     error: string | null;
+    model?: string | null;
+    usage?: Usage | null;
   } | null;
 }
 
@@ -231,7 +243,14 @@ export interface Run {
   started_at: number;
   finished_at: number | null;
   error: string | null;
-  transcript?: { runner: string; steps: Step[]; missing_citations: string[]; error: string | null };
+  transcript?: {
+    runner: string;
+    steps: Step[];
+    missing_citations: string[];
+    error: string | null;
+    model?: string | null;
+    usage?: Usage | null;
+  };
 }
 
 export interface Message {
