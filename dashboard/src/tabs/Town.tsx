@@ -1,12 +1,32 @@
-// Town tab (spec §18.4, §16.6): the 40-shop simulated town around the three
-// real phones, relay paths, and sliders that re-run a quick in-memory model.
+// Town tab (spec §18.4, §16.6): the 40-shop simulated town around the real
+// phones, relay paths, and sliders that re-run a quick in-memory model.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getJSON, type Quick, type QuickResult, type RelayPath, type Town } from "../api";
+import { Note, PageHeader, Pill, Section, Strip, Table, Tabs, Td, Th } from "../components/ui";
 import { useEvents } from "../events";
 import { dollars } from "../format";
 
+const VIEWS = [
+  { id: "map", label: "Map" },
+  { id: "relay", label: "Relay paths" },
+  { id: "whatif", label: "What-if" },
+] as const;
+type View = (typeof VIEWS)[number]["id"];
+
 const CELL = 22;
-const REGION_FILL = ["#0c4a6e", "#1e3a8a", "#134e4a", "#3f3f46"];
+// The map in the bank style of the "Capital One" mockup: deep navy text, bank blue
+// for real shops, a soft blue tint, rounded corners. No logo or brand red.
+const B = {
+  navy: "#0B3B5C",
+  blue: "#0B5D8C",
+  tint: "#E6F0F6",
+  grey: "#F4F5F7",
+  hatch: "#D9D9D9",
+  red: "#B0261B",
+  warn: "#9A5300",
+  ok: "#1E6B35",
+  sim: "#9A9A9A",
+};
 
 interface Pulse {
   id: number;
@@ -14,98 +34,185 @@ interface Pulse {
   y: number;
 }
 
-function TownMap({ town, pulses }: { town: Town; pulses: Pulse[] }) {
+type Shop = Town["merchants"][number];
+
+/** Relay legs between shops on the map, from the latest uploads that real phones carried (the town's own would be noise). */
+function relayLegs(town: Town, paths: RelayPath[]): [Shop, Shop][] {
+  const byName = new Map(town.merchants.map((m) => [m.display_name, m]));
+  const seen = new Set<string>();
+  const legs: [Shop, Shop][] = [];
+  for (const p of paths.slice(0, 10)) {
+    if (p.path.every((hop) => hop.simulated !== false)) continue;
+    const stops = p.path.filter((hop) => hop.kind === "merchant").map((hop) => byName.get(hop.name))
+      .filter((m): m is Shop => !!m);
+    for (let i = 0; i + 1 < stops.length; i++) {
+      const key = `${stops[i].merchant_id}>${stops[i + 1].merchant_id}`;
+      if (stops[i] === stops[i + 1] || seen.has(key)) continue;
+      seen.add(key);
+      legs.push([stops[i], stops[i + 1]]);
+    }
+  }
+  return legs;
+}
+
+function TownMap({ town, pulses, paths }: { town: Town; pulses: Pulse[]; paths: RelayPath[] }) {
   const { w, h } = town.grid;
+  const W = w * CELL;
+  const H = h * CELL;
   const alertsByRegion = new Map<string, Town["alerts"]>();
   for (const a of town.alerts) {
     if (a.region_id) alertsByRegion.set(a.region_id, [...(alertsByRegion.get(a.region_id) ?? []), a]);
   }
+  // Areas along the top edge get their name, status and alerts in a header row above the map,
+  // where no shop can cover them; any other area is labelled inside.
+  const header = town.regions.filter((r) => r.y === 0).sort((x, y) => x.x - y.x);
+  const inside = town.regions.filter((r) => r.y !== 0);
+  const at = (m: Shop) => [(m.x + 0.5) * CELL, (m.y + 0.5) * CELL] as const;
+  const labelled = town.merchants.filter((m) => !m.simulated || !m.pool_eligible);
   return (
-    <svg viewBox={`0 0 ${w * CELL} ${h * CELL}`} className="w-full rounded-2xl border border-slate-800 bg-slate-950">
-      <defs>
-        <pattern id="hatch" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-          <line x1="0" y1="0" x2="0" y2="10" stroke="#f43f5e" strokeWidth="3" strokeOpacity="0.45" />
-        </pattern>
-      </defs>
-      {town.regions.map((r, i) => (
-        <g key={r.region_id}>
-          <rect x={r.x * CELL} y={r.y * CELL} width={r.w * CELL} height={r.h * CELL} fill={REGION_FILL[i % 4]}
-            fillOpacity={0.35} stroke="#334155" />
-          {town.dark_regions.includes(r.region_id) && (
-            <rect x={r.x * CELL} y={r.y * CELL} width={r.w * CELL} height={r.h * CELL} fill="url(#hatch)" />
-          )}
-          <text x={r.x * CELL + 8} y={r.y * CELL + 22} fill="#e2e8f0" fontSize="16" fontWeight="600">
-            {r.display_name}
-            {town.dark_regions.includes(r.region_id) ? " · dark" : ""}
-          </text>
-          {(alertsByRegion.get(r.region_id) ?? []).map((a, j) => (
-            <text key={a.alert_id} x={r.x * CELL + 8} y={r.y * CELL + 42 + j * 18} fill="#fbbf24" fontSize="13">
-              ⚠ {a.event} ({a.source})
+    <div className="w-full max-w-3xl">
+      <div className="mb-2 grid" style={{ gridTemplateColumns: header.map((r) => `${r.w}fr`).join(" ") }}>
+        {header.map((r) => {
+          const dark = town.dark_regions.includes(r.region_id);
+          return (
+            <div key={r.region_id} className="min-w-0 px-2">
+              <div className="font-semibold leading-snug" style={{ color: B.navy }}>{r.display_name}</div>
+              {dark && <div className="text-th" style={{ color: B.warn }}>Dark: no uploads</div>}
+              {(alertsByRegion.get(r.region_id) ?? []).map((a) => (
+                <div key={a.alert_id} className="text-th" style={{ color: B.warn }}>⚠ {a.event} ({a.source})</div>
+              ))}
+            </div>
+          );
+        })}
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="block w-full" role="img" aria-label="Map of the simulated town">
+        <defs>
+          <pattern id="hatch" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+            <line x1="0" y1="0" x2="0" y2="10" stroke={B.hatch} strokeWidth="3" />
+          </pattern>
+          <clipPath id="town-clip">
+            <rect width={W} height={H} rx="16" />
+          </clipPath>
+        </defs>
+        <g clipPath="url(#town-clip)">
+          {town.regions.map((r, i) => {
+            const dark = town.dark_regions.includes(r.region_id);
+            return (
+              <g key={r.region_id}>
+                <rect x={r.x * CELL} y={r.y * CELL} width={r.w * CELL} height={r.h * CELL}
+                  fill={dark || i % 2 ? B.grey : B.tint} stroke="#FFFFFF" strokeWidth="4" />
+                {dark && <rect x={r.x * CELL} y={r.y * CELL} width={r.w * CELL} height={r.h * CELL} fill="url(#hatch)" />}
+              </g>
+            );
+          })}
+          {inside.map((r) => (
+            <text key={r.region_id} x={r.x * CELL + 10} y={r.y * CELL + 26} fill={B.navy} fontSize="18" fontWeight="600"
+              stroke="#FFFFFF" strokeWidth="5" paintOrder="stroke">
+              {r.display_name}
+              {town.dark_regions.includes(r.region_id) ? " · dark" : ""}
             </text>
           ))}
+          {relayLegs(town, paths).map(([from, to]) => {
+            const [x1, y1] = at(from);
+            const [x2, y2] = at(to);
+            return (
+              <path key={`${from.merchant_id}>${to.merchant_id}`}
+                d={`M ${x1} ${y1} Q ${(x1 + x2) / 2} ${Math.min(y1, y2) - Math.min(40, Math.hypot(x2 - x1, y2 - y1) / 4)} ${x2} ${y2}`}
+                fill="none" stroke={B.blue} strokeWidth="3" strokeDasharray="6 5" />
+            );
+          })}
+          {town.merchants.map((m) => {
+            const [cx, cy] = at(m);
+            const held = m.simulated && !m.pool_eligible;
+            return (
+              <circle key={m.merchant_id} cx={cx} cy={cy} r={m.simulated ? (held ? 8 : 6) : 11}
+                fill={m.simulated ? (held ? B.red : B.sim) : B.blue} stroke="#FFFFFF" strokeWidth="2">
+                <title>
+                  {m.display_name}
+                  {m.simulated ? " (simulated)" : ""}
+                  {m.pool_eligible ? "" : " · pool payouts held"}
+                </title>
+              </circle>
+            );
+          })}
+          {pulses.map((p) => (
+            <circle key={p.id} cx={(p.x + 0.5) * CELL} cy={(p.y + 0.5) * CELL} r="6" fill="none" stroke={B.ok}
+              strokeWidth="3">
+              <animate attributeName="r" from="6" to="34" dur="1.6s" fill="freeze" />
+              <animate attributeName="opacity" from="1" to="0" dur="1.6s" fill="freeze" />
+            </circle>
+          ))}
+          {/* Labels last, over every dot, with a white halo; near the right edge they read leftwards. */}
+          {labelled.map((m) => {
+            const [cx, cy] = at(m);
+            const left = cx > W - 230;
+            return (
+              <text key={m.merchant_id} x={left ? cx - 14 : cx + 14} y={cy + 6} textAnchor={left ? "end" : "start"}
+                fill={m.simulated ? B.red : B.navy} fontSize="18" fontWeight="600" stroke="#FFFFFF" strokeWidth="6"
+                paintOrder="stroke">
+                {m.display_name}
+              </text>
+            );
+          })}
         </g>
-      ))}
-      {town.merchants.map((m) => (
-        <g key={m.merchant_id}>
-          <circle cx={(m.x + 0.5) * CELL} cy={(m.y + 0.5) * CELL} r={m.simulated ? 5 : 10}
-            fill={m.simulated ? (m.pool_eligible ? "#94a3b8" : "#f59e0b") : "#38bdf8"}
-            stroke={m.simulated ? "none" : "#e0f2fe"} strokeWidth="2">
-            <title>
-              {m.display_name}
-              {m.simulated ? " (simulated)" : ""}
-              {m.pool_eligible ? "" : " · pool payouts suspended"}
-            </title>
-          </circle>
-          {!m.simulated && (
-            <text x={(m.x + 0.5) * CELL + 14} y={(m.y + 0.5) * CELL + 5} fill="#e0f2fe" fontSize="15" fontWeight="700">
-              {m.display_name}
-            </text>
-          )}
-        </g>
-      ))}
-      {pulses.map((p) => (
-        <circle key={p.id} cx={(p.x + 0.5) * CELL} cy={(p.y + 0.5) * CELL} r="6" fill="none" stroke="#34d399"
-          strokeWidth="3">
-          <animate attributeName="r" from="6" to="34" dur="1.6s" fill="freeze" />
-          <animate attributeName="opacity" from="1" to="0" dur="1.6s" fill="freeze" />
-        </circle>
-      ))}
-    </svg>
-  );
-}
-
-function Legend() {
-  return (
-    <div className="flex flex-wrap gap-4 text-sm text-slate-300">
-      <span className="flex items-center gap-2"><span className="h-4 w-4 rounded-full bg-sky-400" /> real phone</span>
-      <span className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-slate-400" /> simulated shop</span>
-      <span className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-amber-500" /> simulated, pool payouts suspended</span>
-      <span className="flex items-center gap-2"><span className="h-3 w-5 bg-rose-500/40" /> dark region (no uploads)</span>
-      <span className="flex items-center gap-2"><span className="h-3 w-3 rounded-full border-2 border-emerald-400" /> payment</span>
+      </svg>
     </div>
   );
 }
 
-function RelayPanel({ paths }: { paths: RelayPath[] }) {
+function Legend() {
+  const dot = (color: string, size: number) => (
+    <span className="inline-block shrink-0 rounded-full" style={{ background: color, width: size, height: size }} />
+  );
   return (
-    <section className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
-      <h2 className="mb-3 text-xl font-semibold text-white">Relay paths</h2>
-      {paths.length === 0 && <p className="text-slate-400">No relayed payments yet.</p>}
-      <ol className="max-h-80 space-y-2 overflow-y-auto">
+    <div className="flex max-w-3xl flex-wrap gap-x-6 gap-y-2 py-3 text-th text-secondary">
+      <span className="flex items-center gap-2">{dot(B.blue, 13)} real shop (a phone)</span>
+      <span className="flex items-center gap-2">{dot(B.sim, 9)} simulated shop</span>
+      <span className="flex items-center gap-2">{dot(B.red, 11)} simulated, pool payouts held</span>
+      <span className="flex items-center gap-2">
+        <span className="inline-block h-3 w-5 rounded-sm"
+          style={{ background: `repeating-linear-gradient(45deg, ${B.hatch} 0 3px, ${B.grey} 3px 7px)` }} />
+        dark area (no uploads)
+      </span>
+      <span className="flex items-center gap-2">
+        <span className="inline-block w-6 border-t-2 border-dashed" style={{ borderColor: B.blue }} /> recent relay
+      </span>
+      <span className="flex items-center gap-2">
+        <span className="inline-block h-3 w-3 rounded-full border-2" style={{ borderColor: B.ok }} /> payment
+      </span>
+      <span className="flex items-center gap-2"><span style={{ color: B.warn }}>⚠</span> weather alert (live or replayed)</span>
+    </div>
+  );
+}
+
+function RelayTable({ paths }: { paths: RelayPath[] }) {
+  if (paths.length === 0) return <p className="py-2.5 text-secondary">No relayed payments yet.</p>;
+  return (
+    <Table>
+      <thead>
+        <tr>
+          <Th>Path</Th>
+          <Th>Payment</Th>
+          <Th>Hops</Th>
+          <Th num>To the server</Th>
+        </tr>
+      </thead>
+      <tbody>
         {paths.map((p) => (
-          <li key={p.tag_hash} className="text-base">
-            <span className="text-slate-100">
-              {p.path.map((h) => h.name).join(" → ")} → server
-            </span>
-            <span className="block text-sm text-slate-400">
-              {dollars(p.amount_cents)} at {p.merchant}
-              {p.simulated ? " (simulated)" : ""} · {p.hops} {p.hops === 1 ? "hop" : "hops"} ·{" "}
-              {Math.max(0, Math.round(p.latency_s / 60))} min
-            </span>
-          </li>
+          <tr key={p.tag_hash}>
+            <Td className="text-heading">{p.path.map((h) => h.name).join(" → ")} → server</Td>
+            <Td className="text-ink">
+              <span className="tabular-nums">{dollars(p.amount_cents)}</span> at {p.merchant}
+              {p.simulated && <span className="text-secondary"> (simulated)</span>}
+            </Td>
+            <Td className="whitespace-nowrap text-secondary">
+              {p.hops} {p.hops === 1 ? "hop" : "hops"}
+            </Td>
+            <Td num className="text-secondary">{Math.max(0, Math.round(p.latency_s / 60))} min</Td>
+          </tr>
         ))}
-      </ol>
-    </section>
+      </tbody>
+    </Table>
   );
 }
 
@@ -116,30 +223,46 @@ const METRICS: { key: keyof QuickResult; label: string; show: (v: number) => str
   { key: "median_hours_to_settlement", label: "Median hours to settlement", show: (v) => `${v.toFixed(1)} h`, max: (a, b) => Math.max(a, b, 0.1) },
 ];
 
+function Bar({ value, max, color }: { value: number; max: number; color: string }) {
+  return (
+    <span className="flex items-center justify-end gap-3">
+      <span className="h-1.5 w-32 overflow-hidden rounded-full bg-rule">
+        <span className="block h-1.5 rounded-full transition-all duration-500"
+          style={{ width: `${Math.min(100, (value / max) * 100)}%`, background: color }} />
+      </span>
+    </span>
+  );
+}
+
 function Bars({ base, cur }: { base: QuickResult; cur: QuickResult }) {
   return (
-    <div className="grid gap-4 sm:grid-cols-2">
-      {METRICS.map((m) => {
-        const b = (base[m.key] as number | null) ?? 0;
-        const c = (cur[m.key] as number | null) ?? 0;
-        const max = m.max(b, c);
-        return (
-          <div key={m.key} className="rounded-xl bg-slate-950 p-4">
-            <div className="mb-2 text-base font-medium text-slate-200">{m.label}</div>
-            {[["Default town", b, "bg-slate-500"], ["Your settings", c, "bg-sky-400"]].map(([label, v, color]) => (
-              <div key={label as string} className="mb-1 flex items-center gap-2">
-                <span className="w-28 shrink-0 text-sm text-slate-400">{label}</span>
-                <div className="h-5 flex-1 rounded bg-slate-800">
-                  <div className={`h-5 rounded ${color} transition-all duration-500`}
-                    style={{ width: `${Math.min(100, ((v as number) / max) * 100)}%` }} />
-                </div>
-                <span className="w-16 text-right font-mono text-sm text-slate-100">{m.show(v as number)}</span>
-              </div>
-            ))}
-          </div>
-        );
-      })}
-    </div>
+    <Table>
+      <thead>
+        <tr>
+          <Th>Metric</Th>
+          <Th num>Default town</Th>
+          <Th />
+          <Th num>Your settings</Th>
+          <Th />
+        </tr>
+      </thead>
+      <tbody>
+        {METRICS.map((m) => {
+          const b = (base[m.key] as number | null) ?? 0;
+          const c = (cur[m.key] as number | null) ?? 0;
+          const max = m.max(b, c);
+          return (
+            <tr key={m.key}>
+              <Td className="text-heading">{m.label}</Td>
+              <Td num>{m.show(b)}</Td>
+              <Td><Bar value={b} max={max} color="#9AA3AF" /></Td>
+              <Td num className="font-medium text-heading">{m.show(c)}</Td>
+              <Td><Bar value={c} max={max} color="#2B3A9E" /></Td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </Table>
   );
 }
 
@@ -168,38 +291,40 @@ function Sliders() {
   const slider = (label: string, value: number, set: (v: number) => void, min: number, max: number, step: number,
     show: (v: number) => string) => (
     <label className="block">
-      <span className="flex justify-between text-base text-slate-200">
-        {label} <span className="font-mono">{show(value)}</span>
+      <span className="flex justify-between gap-3 text-ink">
+        {label} <span className="font-medium tabular-nums text-heading">{show(value)}</span>
       </span>
       <input type="range" min={min} max={max} step={step} value={value}
-        onChange={(e) => set(Number(e.target.value))} className="w-full accent-sky-400" />
+        onChange={(e) => set(Number(e.target.value))} className="mt-1 w-full accent-accent" />
     </label>
   );
 
   return (
-    <section className="space-y-4 rounded-2xl border border-slate-800 bg-slate-900 p-5">
-      <div className="flex items-baseline justify-between gap-2">
-        <h2 className="text-xl font-semibold text-white">How often does this work?</h2>
-        <span className="text-sm text-slate-400">
+    <div className="space-y-8">
+      <div className="flex flex-wrap items-baseline justify-between gap-3">
+        <p className="max-w-[80ch] text-secondary">
+          Simulated: a quick in-memory model of the town (5 seeded runs, {quick?.current.double_spend_attempts ?? "…"}{" "}
+          double-spend attempts), not live data.
+        </p>
+        <span className="text-th text-secondary">
           {busy ? "re-simulating…" : quick ? `simulated in ${quick.seconds}s` : ""}
         </span>
       </div>
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-8 md:grid-cols-3">
         {slider("Adoption", adoption, setAdoption, 0.1, 1, 0.05, (v) => `${Math.round(v * 100)}%`)}
-        {slider("Foot traffic (p_link)", pLink, setPLink, 0.05, 1, 0.05, (v) => v.toFixed(2))}
-        {slider("Relay density (uplink/h)", pUplink, setPUplink, 0.005, 0.2, 0.005, (v) => v.toFixed(3))}
+        {slider("Foot traffic (chance two phones meet)", pLink, setPLink, 0.05, 1, 0.05, (v) => v.toFixed(2))}
+        {slider("Phones finding a signal (per hour)", pUplink, setPUplink, 0.005, 0.2, 0.005, (v) => v.toFixed(3))}
       </div>
-      {error && <p className="text-rose-300">{error}</p>}
+      {error && <p className="text-danger">{error}</p>}
       {quick && <Bars base={quick.baseline} cur={quick.current} />}
-      <p className="text-sm text-slate-400">
-        Simulated: a quick in-memory model of the town (5 seeded runs, {quick?.current.double_spend_attempts ?? "…"}{" "}
-        double-spend attempts), not live data.
-      </p>
-    </section>
+    </div>
   );
 }
 
+const pct = (v: number | null) => (v == null ? "—" : `${(v * 100).toFixed(1)}%`);
+
 export function TownTab() {
+  const [view, setView] = useState<View>("map");
   const [town, setTown] = useState<Town | null>(null);
   const [paths, setPaths] = useState<RelayPath[]>([]);
   const [pulses, setPulses] = useState<Pulse[]>([]);
@@ -220,30 +345,57 @@ export function TownTab() {
     setTimeout(() => setPulses((cur) => cur.filter((q) => q.id !== id)), 1800);
   });
 
-  if (!town) return <p className="p-8 text-xl text-slate-300">Loading…</p>;
-  const s = town.town_stats;
+  const simulated = town?.merchants.filter((m) => m.simulated).length ?? 0;
+  const real = (town?.merchants.length ?? 0) - simulated;
+  const s = town?.town_stats;
+  const share = (v: number | null) => (v == null ? null : `${Math.round(v * 100)}%`);
+  const takeaway = town && [
+    `${simulated} simulated shops${real ? ` around ${real} real ${real === 1 ? "shop" : "shops"}` : ""}.`,
+    s && share(s.double_spends.share_refused_offline) && share(s.double_spends.share_caught_at_settlement)
+      ? `In the seeded town, ${share(s.double_spends.share_refused_offline)} of double spends were refused offline and ${
+        share(s.double_spends.share_caught_at_settlement)} caught at settlement.`
+      : null,
+  ].filter(Boolean).join(" ");
   return (
-    <div className="grid gap-6 p-6 xl:grid-cols-[3fr_2fr]">
-      <div className="space-y-4">
-        <p className="text-lg text-slate-300">
-          Your 3 phones are part of a {town.merchants.length}-shop town. Every shop but the real ones is{" "}
-          <span className="font-semibold text-slate-100">simulated</span>, checked by the same code as the phones.
-        </p>
-        <TownMap town={town} pulses={pulses} />
-        <Legend />
-        {s && (
-          <p className="text-base text-slate-300">
-            Seeded town (seed {s.seed}, simulated): {s.double_spends.attempts} double-spend attempts,{" "}
-            {Math.round((s.double_spends.share_refused_offline ?? 0) * 100)}% refused offline,{" "}
-            {Math.round((s.double_spends.share_caught_at_settlement ?? 0) * 100)}% caught at settlement, pool loss{" "}
-            {dollars(s.mean_loss_per_cheater_cents ?? 0)} per cheater, median {s.median_hours_to_settlement} h to settle.
+    <div className="pb-12">
+      <PageHeader title="Town"
+        subtitle={town ? `${simulated} simulated shops in Buncombe County, NC, plus the real phones` : undefined}
+        takeaway={takeaway || undefined}>
+        <Tabs tabs={VIEWS} value={view} onChange={setView} />
+      </PageHeader>
+      {!town ? (
+        <Note>Loading…</Note>
+      ) : view === "map" ? (
+        <div className="space-y-4">
+          {s ? (
+            <Strip items={[
+              { label: "Refused offline", value: <span className="tabular-nums">{pct(s.double_spends.share_refused_offline)}</span> },
+              { label: "Caught at settlement", value: <span className="tabular-nums">{pct(s.double_spends.share_caught_at_settlement)}</span> },
+              { label: "Loss per cheater", value: <span className="tabular-nums">{s.mean_loss_per_cheater_cents == null ? "—" : dollars(s.mean_loss_per_cheater_cents)}</span> },
+              { label: "Median to settlement", value: <span className="tabular-nums">{s.median_hours_to_settlement == null ? "—" : `${s.median_hours_to_settlement} h`}</span> },
+              { label: "Double-spend attempts", value: <span className="tabular-nums">{s.double_spends.attempts}</span> },
+              { label: "Data", value: <Pill tone="neutral">Simulated · seed {s.seed}</Pill> },
+            ]} />
+          ) : (
+            <p className="border-y border-rule py-3 text-secondary">No seeded town stats yet.</p>
+          )}
+          <p className="text-secondary">
+            Every shop but the real ones is <span className="font-medium text-heading">simulated</span>, checked by the
+            same code as the phones.
           </p>
-        )}
-      </div>
-      <div className="space-y-6">
+          <TownMap town={town} pulses={pulses} paths={paths} />
+          <Legend />
+          <div className="pt-6">
+            <Section title="Recent relay paths">
+              <RelayTable paths={paths.slice(0, 5)} />
+            </Section>
+          </div>
+        </div>
+      ) : view === "relay" ? (
+        <RelayTable paths={paths} />
+      ) : (
         <Sliders />
-        <RelayPanel paths={paths} />
-      </div>
+      )}
     </div>
   );
 }

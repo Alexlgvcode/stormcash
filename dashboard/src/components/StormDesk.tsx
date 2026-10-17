@@ -1,42 +1,42 @@
-// StormDesk on the dashboard (spec §18.3, §14.6, §14.7b, §14.8): flags with their
-// evidence, the agent's tool calls live or replayed, the reviewer's second
-// opinion, Approve / Reject with the operator's name, and the Photon thread for
-// merchant flags, where each StormDesk reply says which turn of the appeal's Droid
-// session wrote it (§17.2). A fake-runner result is labelled as such everywhere (§0 rule 3).
+// StormDesk on the dashboard (spec §18.3, §14.6, §14.7b, §14.8): the review
+// queue of flags with their evidence, the agent's tool calls live or replayed,
+// the reviewer's second opinion, Approve / Reject with the operator's name, and
+// the Photon thread for merchant flags, where each StormDesk reply says which
+// turn of the appeal's Droid session wrote it (§17.2). A fake-runner result is
+// labelled as such everywhere (§0 rule 3).
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getJSON, operatorPost, type FlagDetail, type FlagRow, type Message, type Run, type Step, type Usage } from "../api";
 import { heldBack, sessionSummary, turnLabel, turnsByReply, type AppealTurn } from "../appeal";
 import { useEvents } from "../events";
 import { clockTime, dollars } from "../format";
+import { ACTION_PLAIN, KIND_PLAIN, SEVERITY_PLAIN, toolPlain } from "../plain";
 import { reviewVerdict, suggestion, type FlagReview } from "../review";
 import { OwnerFreezeNote } from "./OwnerFreeze";
+import { Button, Eyebrow, Note, Pill, Section, Table, Td, TextInput, Th, type Tone } from "./ui";
 
-const KIND_TITLE: Record<string, string> = {
-  merchant_silence: "Shop went quiet",
-  cap_drain: "Certificate drained fast",
-  region_dark: "Region went dark",
-  none: "Dismissed",
-};
+const KIND_TITLE = KIND_PLAIN;
+const ACTION_TITLE = ACTION_PLAIN;
 
-const ACTION_TITLE: Record<string, string> = {
-  hold_pool_payout: "Hold guarantee-pool payouts",
-  lower_merchant_limit: "Lower the shop's per-payment limit",
-  freeze_cert: "Freeze the certificate",
-  dispatch_relay: "Send a relay",
-  none: "No action",
-};
+const SEVERITY_TONE: Record<string, Tone> = { urgent: "danger", review: "warning", info: "neutral" };
 
-const STATUS_STYLE: Record<string, string> = {
-  open: "bg-sky-500/15 text-sky-300",
-  approved: "bg-emerald-500/15 text-emerald-300",
-  rejected: "bg-slate-500/20 text-slate-300",
-  dismissed: "bg-slate-500/20 text-slate-300",
-  invalid: "bg-rose-500/15 text-rose-300",
-};
+/** The queue's status column: what a person has to do with this flag. */
+function flagStatus(f: FlagRow): { tone: Tone; text: string } {
+  if (f.status === "open" && f.agents_disagree) return { tone: "agents", text: "Agents disagree" };
+  switch (f.status) {
+    case "open":
+      return { tone: "warning", text: "Needs a person" };
+    case "approved":
+      return { tone: "success", text: "Approved" };
+    case "invalid":
+      return { tone: "danger", text: "Invalid" };
+    default:
+      return { tone: "neutral", text: f.status === "rejected" ? "Rejected" : "Dismissed" };
+  }
+}
 
 /** "Replay of run at 09:23:23 · Droid, claude-sonnet-5-5": a replay always says what produced it. */
 export function replayTitle(startedAt: number, runner: string | null | undefined, model?: string | null): string {
-  const by = runner === "fake" ? "fake runner, rules only" : runner === "droid" ? `Droid, ${model ?? "model not recorded"}` : runner;
+  const by = runner === "fake" ? "rules-only stand-in" : runner === "droid" ? `Droid, ${model ?? "model not recorded"}` : runner;
   return `Replay of run at ${clockTime(startedAt)}${by ? ` · ${by}` : ""}`;
 }
 
@@ -48,10 +48,9 @@ export function RunnerBadge({ runner, model, modelRequested, usage }: {
 }) {
   if (runner === "fake") {
     return (
-      <span className="rounded-full bg-amber-500/15 px-3 py-1 text-sm font-semibold text-amber-300"
-        title="No Factory access yet: a deterministic rules-only stand-in, not an agent's judgement.">
-        Fake runner · rules only
-      </span>
+      <Pill tone="warning" title="A deterministic rules-only stand-in answered, not an agent's judgement.">
+        Rules-only stand-in
+      </Pill>
     );
   }
   if (runner === "droid") {
@@ -60,10 +59,10 @@ export function RunnerBadge({ runner, model, modelRequested, usage }: {
     const parts = ["Droid", model && model !== "auto" ? model : null, switched ? `asked for ${modelRequested}` : null,
       usage?.factory_credits != null ? `${Math.round(usage.factory_credits).toLocaleString("en-US")} credits` : null];
     return (
-      <span className="rounded-full bg-violet-500/15 px-3 py-1 text-sm font-semibold text-violet-300"
+      <Pill tone="neutral"
         title={tokens != null ? `${tokens.toLocaleString("en-US")} tokens in + out (cache reads ${(usage?.cache_read_tokens ?? 0).toLocaleString("en-US")})` : undefined}>
         {parts.filter(Boolean).join(" · ")}
-      </span>
+      </Pill>
     );
   }
   return null;
@@ -91,26 +90,27 @@ export function StepList({ steps, live, replayLabel }: { steps: Step[]; live?: b
   }
 
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-950 p-4">
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <span className="text-base font-semibold text-slate-200">
-          {live ? "Live tool calls" : shown < steps.length || replayLabel ? (replayLabel ?? "Tool calls") : "Tool calls"}
+    <div>
+      <div className="flex items-center justify-between gap-3 py-1.5">
+        <span className="flex items-center gap-2 text-th text-secondary">
+          {live && <span className="h-2 w-2 animate-pulse rounded-full bg-accent" />}
+          {live ? "Live tool calls" : (replayLabel ?? "Tool calls")}
         </span>
         {!live && steps.length > 0 && (
-          <button onClick={replay} className="rounded-lg bg-slate-800 px-3 py-1 text-sm text-slate-200 hover:bg-slate-700">
+          <Button small onClick={replay}>
             Replay
-          </button>
+          </Button>
         )}
       </div>
-      {steps.length === 0 && <p className="text-slate-500">No tool calls.</p>}
-      <ol className="space-y-1 font-mono text-sm">
+      {steps.length === 0 && <p className="border-t border-rule py-2.5 text-secondary">No tool calls.</p>}
+      <ol className="border-t border-rule">
         {steps.slice(0, shown).map((s) => (
-          <li key={s.index} className="flex gap-2">
-            <span className={s.ok === null ? "text-slate-400" : s.ok ? "text-emerald-400" : "text-rose-400"}>
+          <li key={s.index} title={`${s.tool} ${s.input_summary}`}
+            className="grid grid-cols-[1.25rem_minmax(0,1fr)] items-baseline gap-3 border-b border-rule py-2">
+            <span className={s.ok === null ? "text-secondary" : s.ok ? "text-success" : "text-danger"}>
               {s.ok === null ? "…" : s.ok ? "✓" : "✗"}
             </span>
-            <span className="text-sky-300">{s.tool}</span>
-            <span className="truncate text-slate-500">{s.input_summary}</span>
+            <span className="text-ink">{toolPlain(s.tool)}</span>
           </li>
         ))}
       </ol>
@@ -148,74 +148,25 @@ function operatorName(): string {
   }
 }
 
-function Decision({ flag, onDone }: { flag: FlagRow; onDone: () => void }) {
-  const [operator, setOperator] = useState(operatorName);
-  const [note, setNote] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<string | null>(null);
-  const actionable = flag.status === "open" && flag.citations_valid;
-
-  async function decide(verb: "approve" | "reject") {
-    if (!operator.trim()) {
-      setResult("Type your name first: every decision is signed by a person.");
-      return;
-    }
-    try {
-      localStorage.setItem("sc-operator", operator.trim());
-    } catch {
-      // private window: fine
-    }
-    setBusy(true);
-    try {
-      const body = await operatorPost<{ executed_actions: Record<string, unknown> }>(
-        `/v1/flags/${flag.flag_id}/${verb}`, { note: note || null }, operator.trim());
-      setResult(verb === "approve" ? `Approved: ${JSON.stringify(body.executed_actions)}` : "Rejected: nothing ran.");
-      onDone();
-    } catch (e) {
-      setResult(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-
+/** Evidence ids, each marked as found in the database or not. */
+function CitedIds({ ids, missing }: { ids: string[]; missing: string[] }) {
+  if (ids.length === 0) return <p className="py-2.5 text-secondary">None cited.</p>;
   return (
-    <div className="space-y-3 rounded-xl border border-slate-700 bg-slate-900 p-4">
-      <div className="text-base text-slate-300">
-        Proposed: <span className="font-semibold text-white">{ACTION_TITLE[flag.proposed_action] ?? flag.proposed_action}</span>
-      </div>
-      {flag.agents_disagree && actionable && (
-        <p className="text-base text-amber-200">
-          StormDesk and its reviewer disagree. Read both, then decide: Approve runs StormDesk's proposal and
-          nothing else. The reviewer can't act.
-        </p>
-      )}
-      {actionable ? (
-        <>
-          <div className="grid gap-2 sm:grid-cols-2">
-            <input value={operator} onChange={(e) => setOperator(e.target.value)} placeholder="Operator name"
-              className="rounded-lg bg-slate-800 px-3 py-2 text-base text-white placeholder:text-slate-500" />
-            <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (optional)"
-              className="rounded-lg bg-slate-800 px-3 py-2 text-base text-white placeholder:text-slate-500" />
-          </div>
-          <div className="flex gap-3">
-            <button disabled={busy} onClick={() => decide("approve")}
-              className="flex-1 rounded-xl bg-emerald-500 py-3 text-lg font-bold text-slate-950 hover:bg-emerald-400 disabled:opacity-50">
-              Approve
-            </button>
-            <button disabled={busy} onClick={() => decide("reject")}
-              className="flex-1 rounded-xl bg-slate-700 py-3 text-lg font-bold text-white hover:bg-slate-600 disabled:opacity-50">
-              Reject
-            </button>
-          </div>
-        </>
-      ) : (
-        <p className="text-slate-400">
-          {flag.status === "invalid" ? "Not actionable: a cited id doesn't exist or there was no valid output."
-            : `This flag is ${flag.status}.`}
-        </p>
-      )}
-      {result && <p className="break-all font-mono text-sm text-slate-300">{result}</p>}
-    </div>
+    <ul>
+      {ids.map((e) => {
+        const bad = missing.includes(e);
+        return (
+          <li key={e} className="flex items-baseline justify-between gap-4 border-b border-rule py-2">
+            <span className="min-w-0 truncate font-mono text-th text-ink" title={e}>
+              {e.length > 28 ? `${e.slice(0, 24)}…` : e}
+            </span>
+            <span className={`whitespace-nowrap text-th ${bad ? "text-danger" : "text-success"}`}>
+              {bad ? "not in the database ✗" : "checked ✓"}
+            </span>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
@@ -240,51 +191,52 @@ function PhotonThread({ merchantId }: { merchantId: string }) {
   const byReply = turnsByReply(turns);
   const summary = sessionSummary(turns);
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-950 p-4">
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <h4 className="text-base font-semibold text-slate-200">Photon thread</h4>
-        {summary && (
-          <span className="rounded-full bg-emerald-500/15 px-3 py-0.5 text-sm font-semibold text-emerald-300"
-            title="Every reply in this appeal is a turn of the same Droid session, resumed for each new text (spec §17.2).">
-            {summary}
+    <Section
+      title="Photon thread"
+      right={
+        summary && (
+          <span title="Every reply in this appeal is a turn of the same Droid conversation, picked up again for each new text.">
+            <Pill tone="success">{summary}</Pill>
           </span>
-        )}
-      </div>
-      {messages.length === 0 && <p className="text-slate-500">No messages with this shop.</p>}
-      <ol className="space-y-2">
+        )
+      }
+    >
+      {messages.length === 0 && <p className="py-2.5 text-secondary">No messages with this shop.</p>}
+      <ol>
         {messages.map((m) => {
           const turn = m.direction === "out" ? byReply.get(m.message_id) : undefined;
           const held = turn ? heldBack(turn) : null;
+          const out = m.direction === "out";
           return (
-            <li key={m.message_id} className={`flex ${m.direction === "out" ? "justify-end" : "justify-start"}`}>
-              <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-base ${
-                m.direction === "out" ? "bg-sky-600/30 text-sky-50" : "bg-slate-800 text-slate-100"}`}>
-                {m.body}
-                <div className="mt-1 text-xs text-slate-400">
-                  {m.direction === "out" ? "StormCash" : "Shop"} · {m.channel} · {clockTime(m.created_at)}
-                  {m.delivered === false && " · not delivered"}
-                </div>
-                {turn && (
-                  <div className={`mt-1 text-xs font-medium ${
-                    turn.runner === "fake" ? "text-amber-300" : turn.session === "resumed" ? "text-emerald-300" : "text-sky-200"}`}>
-                    {turnLabel(turn)}
+            <li key={m.message_id} className="grid grid-cols-[8.5rem_minmax(0,1fr)] gap-4 border-b border-rule py-3">
+              <div className="text-th text-secondary">
+                <div className={`font-medium ${out ? "text-accent" : "text-heading"}`}>{out ? "StormCash" : "Shop"}</div>
+                <div className="tabular-nums">{clockTime(m.created_at)}</div>
+                <div>{m.channel}</div>
+              </div>
+              <div className="min-w-0">
+                <p className="whitespace-pre-wrap break-words text-ink">{m.body}</p>
+                {(turn || held || m.delivered === false) && (
+                  <div className="mt-1.5 flex flex-wrap items-center gap-2 text-th">
+                    {turn && (
+                      <Pill tone={turn.runner === "fake" ? "warning" : turn.session === "resumed" ? "success" : "neutral"}>
+                        {turnLabel(turn)}
+                      </Pill>
+                    )}
+                    {held && <span className="text-danger">{held}</span>}
+                    {m.delivered === false && <span className="text-secondary">not delivered</span>}
                   </div>
                 )}
-                {held && <div className="mt-0.5 text-xs font-medium text-rose-300">{held}</div>}
               </div>
             </li>
           );
         })}
       </ol>
-    </div>
+    </Section>
   );
 }
 
-const VERDICT_STYLE: Record<string, string> = {
-  agree: "bg-emerald-500/15 text-emerald-300",
-  disagree: "bg-amber-500/15 text-amber-300",
-  void: "bg-rose-500/15 text-rose-300",
-};
+const VERDICT_TONE: Record<string, Tone> = { agree: "success", disagree: "agents", void: "danger" };
 
 /** The reviewer Droid's second opinion (§14.7b): verdict, reasons, the records it cited, its own steps. */
 function ReviewPanel({ flag, review, run, live, onReview }: {
@@ -313,55 +265,67 @@ function ReviewPanel({ flag, review, run, live, onReview }: {
 
   if (!review && !live.running && live.steps.length === 0 && !reviewable) return null;
   return (
-    <div className="space-y-3 rounded-xl border border-slate-800 bg-slate-900 p-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <h3 className="text-lg font-semibold text-white">Second opinion</h3>
-        {view && <span className={`rounded-full px-3 py-1 text-sm font-semibold ${VERDICT_STYLE[view.tone]}`}>{view.label}</span>}
-        {review && <RunnerBadge runner={review.runner} model={review.model} modelRequested={review.model_requested} usage={review.usage} />}
-        {reviewable && (
-          <button disabled={busy || live.running} onClick={ask}
-            className="ml-auto rounded-lg bg-slate-800 px-3 py-1 text-sm text-white hover:bg-slate-700 disabled:opacity-50">
+    <Section
+      title="Second opinion"
+      right={
+        reviewable && (
+          <Button small disabled={busy || live.running} onClick={ask}>
             {busy || live.running ? "Reviewing…" : review ? "Review again" : "Ask the reviewer"}
-          </button>
-        )}
-      </div>
-      {!review && !live.running && (
-        <p className="text-slate-400">
-          Not reviewed yet. A second Droid session re-reads the records with the same read-only tools and tries to refute
-          StormDesk's proposal.
-        </p>
-      )}
-      {view?.note && <p className="text-sm text-slate-400">{view.note}</p>}
-      {review?.error && <p className="break-all font-mono text-sm text-rose-300">{review.error}</p>}
-      {review?.reasons && review.reasons.length > 0 && (
-        <ul className="list-disc space-y-1 pl-5 text-base text-slate-200">
-          {review.reasons.map((r, i) => <li key={i}>{r}</li>)}
-        </ul>
-      )}
-      {suggested && <p className="text-base text-slate-300">{suggested}</p>}
-      {review && (
-        <div>
-          <div className="mb-1 text-sm font-semibold text-slate-300">
-            Records it cited {review.citations_valid ? "(checked against the database ✓)" : "(citation check failed ✗)"}
+          </Button>
+        )
+      }
+    >
+      <div className="space-y-3 pt-2">
+        {(view || review) && (
+          <div className="flex flex-wrap items-center gap-2">
+            {view && <Pill tone={VERDICT_TONE[view.tone]}>{view.label}</Pill>}
+            {review && (
+              <RunnerBadge runner={review.runner} model={review.model} modelRequested={review.model_requested} usage={review.usage} />
+            )}
           </div>
-          <ul className="flex flex-wrap gap-2 font-mono text-xs">
-            {(review.evidence_ids ?? []).map((e) => (
-              <li key={e} className={`rounded px-2 py-1 ${review.missing_citations.includes(e) ? "bg-rose-500/20 text-rose-300" : "bg-slate-800 text-slate-300"}`}>
-                {e.length > 20 ? `${e.slice(0, 16)}…` : e}
-              </li>
-            ))}
-            {(review.evidence_ids ?? []).length === 0 && <li className="text-slate-500">none</li>}
+        )}
+        {!review && !live.running && (
+          <p className="text-secondary">
+            Not reviewed yet. A second Droid session re-reads the records with the same read-only tools and tries to
+            refute StormDesk's proposal.
+          </p>
+        )}
+        {view?.note && <p className="text-secondary">{view.note}</p>}
+        {review?.error && <p className="break-all font-mono text-th text-danger">{review.error}</p>}
+        {review?.reasons && review.reasons.length > 0 && (
+          <ul className="list-disc space-y-1 pl-5 text-ink">
+            {review.reasons.map((r, i) => <li key={i}>{r}</li>)}
           </ul>
+        )}
+        {suggested && <p className="text-ink">{suggested}</p>}
+      </div>
+      {review && (
+        <div className="mt-5 grid gap-10 lg:grid-cols-2">
+          <div>
+            <div className="py-1.5 text-th text-secondary">
+              Records it cited {review.citations_valid ? "· checked against the database ✓" : "· citation check failed ✗"}
+            </div>
+            <div className="border-t border-rule">
+              <CitedIds ids={review.evidence_ids ?? []} missing={review.missing_citations} />
+            </div>
+          </div>
+          <div>
+            {live.steps.length > 0 || live.running ? (
+              <StepList steps={live.steps} live />
+            ) : (
+              run?.transcript && (
+                <StepList steps={run.transcript.steps} replayLabel={replayTitle(run.started_at, run.runner, run.transcript.model)} />
+              )
+            )}
+          </div>
         </div>
       )}
-      {live.steps.length > 0 || live.running ? (
-        <StepList steps={live.steps} live />
-      ) : (
-        run?.transcript && (
-          <StepList steps={run.transcript.steps} replayLabel={replayTitle(run.started_at, run.runner, run.transcript.model)} />
-        )
+      {!review && (live.steps.length > 0 || live.running) && (
+        <div className="mt-4">
+          <StepList steps={live.steps} live />
+        </div>
       )}
-    </div>
+    </Section>
   );
 }
 
@@ -370,6 +334,10 @@ function FlagView({ flagId, onChanged }: { flagId: number; onChanged: () => void
   const [run, setRun] = useState<Run | null>(null);
   const [reviewRun, setReviewRun] = useState<Run | null>(null);
   const [showReasoning, setShowReasoning] = useState(false);
+  const [operator, setOperator] = useState(operatorName);
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
   const load = useCallback(() => {
     getJSON<FlagDetail>(`/v1/flags/${flagId}`).then((d) => {
       setDetail(d);
@@ -379,7 +347,11 @@ function FlagView({ flagId, onChanged }: { flagId: number; onChanged: () => void
       else setReviewRun(null);
     });
   }, [flagId]);
-  useEffect(load, [load]);
+  useEffect(() => {
+    setResult(null);
+    setShowReasoning(false);
+    load();
+  }, [load]);
   const live = useLiveSteps(detail ? `candidate #${detail.flag.candidate_id}` : "");
   const liveReview = useLiveSteps(detail ? `review of candidate #${detail.flag.candidate_id}` : "");
   useEvents(["flag", "approval"], (data) => {
@@ -391,11 +363,13 @@ function FlagView({ flagId, onChanged }: { flagId: number; onChanged: () => void
     }
   });
 
-  if (!detail) return <p className="text-slate-400">Loading flag…</p>;
+  if (!detail) return <Note>Loading flag…</Note>;
   const { flag, agent } = detail;
   const merchantFlag = flag.kind === "merchant_silence" || flag.proposed_action === "hold_pool_payout"
     || flag.proposed_action === "lower_merchant_limit";
   const certFlag = detail.candidate?.kind === "cap_drain" || flag.proposed_action === "freeze_cert";
+  const actionable = flag.status === "open" && flag.citations_valid;
+  const status = flagStatus(flag);
 
   async function rerun() {
     live.reset();
@@ -405,64 +379,123 @@ function FlagView({ flagId, onChanged }: { flagId: number; onChanged: () => void
     onChanged();
   }
 
+  async function decide(verb: "approve" | "reject") {
+    if (!operator.trim()) {
+      setResult("Type your name first: every decision is signed by a person.");
+      return;
+    }
+    try {
+      localStorage.setItem("sc-operator", operator.trim());
+    } catch {
+      // private window: fine
+    }
+    setBusy(true);
+    try {
+      const body = await operatorPost<{ executed_actions: Record<string, unknown> }>(
+        `/v1/flags/${flag.flag_id}/${verb}`, { note: note || null }, operator.trim());
+      setResult(verb === "approve" ? `Approved: ${JSON.stringify(body.executed_actions)}` : "Rejected: nothing ran.");
+      load();
+      onChanged();
+    } catch (e) {
+      setResult(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <h2 className="text-3xl font-bold text-white">{KIND_TITLE[flag.kind] ?? flag.kind}</h2>
-        <span className={`rounded-full px-3 py-1 text-sm font-semibold ${STATUS_STYLE[flag.status]}`}>{flag.status}</span>
-        <span className="rounded-full bg-slate-800 px-3 py-1 text-sm text-slate-300">{flag.severity}</span>
-        <RunnerBadge runner={flag.runner} model={agent?.model} modelRequested={agent?.model_requested} usage={agent?.usage} />
-        {flag.agents_disagree && (
-          <span className="rounded-full bg-amber-500/20 px-3 py-1 text-sm font-semibold text-amber-200"
-            title="A second Droid session reviewed StormDesk's proposal and didn't agree. A person decides.">
-            Agents disagree · a person decides
-          </span>
+    <div className="space-y-10">
+      <div>
+        <Eyebrow>
+          {flag.subject_name ?? flag.subject_id} · proposed by {flag.runner === "fake" ? "the rules-only stand-in" : "StormDesk"} · flag #
+          {flag.flag_id}
+        </Eyebrow>
+        <div className="mt-1 flex flex-wrap items-center gap-3">
+          <h2 className="text-[22px] leading-8 font-semibold text-heading">
+            {ACTION_TITLE[flag.proposed_action] ?? flag.proposed_action}
+          </h2>
+          <Pill tone={SEVERITY_TONE[flag.severity] ?? "neutral"}>{SEVERITY_PLAIN[flag.severity] ?? flag.severity}</Pill>
+          <RunnerBadge runner={flag.runner} model={agent?.model} modelRequested={agent?.model_requested} usage={agent?.usage} />
+          {flag.agents_disagree && (
+            <span title="A second Droid session reviewed StormDesk's proposal and didn't agree. A person decides.">
+              <Pill tone="agents">Agents disagree · a person decides</Pill>
+            </span>
+          )}
+          <div className="ml-auto flex items-center gap-2">
+            {actionable ? (
+              <>
+                <Button disabled={busy} onClick={() => decide("reject")}>
+                  Reject
+                </Button>
+                <Button primary disabled={busy} onClick={() => decide("approve")}>
+                  Approve
+                </Button>
+              </>
+            ) : (
+              <Pill tone={status.tone}>{status.text}</Pill>
+            )}
+          </div>
+        </div>
+        <p className="mt-3 max-w-[80ch] text-ink">
+          {flag.subject_name ?? flag.subject_id}: {flag.summary}
+        </p>
+        <p className="mt-1 text-secondary">
+          {KIND_TITLE[flag.kind] ?? flag.kind}
+          {flag.exposure_cents > 0 && ` · Exposure ${dollars(flag.exposure_cents)}`}
+        </p>
+        {actionable ? (
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <span className="text-secondary">Signed by</span>
+            <TextInput value={operator} onChange={(e) => setOperator(e.target.value)} placeholder="Operator name" />
+            <TextInput value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (optional)" className="min-w-64" />
+          </div>
+        ) : (
+          flag.status === "invalid" && (
+            <p className="mt-3 text-secondary">Not actionable: a cited id doesn't exist or there was no valid output.</p>
+          )
+        )}
+        {flag.agents_disagree && actionable && (
+          <p className="mt-3 max-w-[80ch] text-accent">
+            StormDesk and its reviewer disagree. Read both, then decide: Approve runs StormDesk's proposal and nothing
+            else. The reviewer can't act.
+          </p>
+        )}
+        {result && <p className="mt-3 break-all font-mono text-th text-ink">{result}</p>}
+        {certFlag && (
+          <div className="mt-4">
+            <OwnerFreezeNote certId={flag.subject_id}
+              seenByDetector={detail.candidate?.features?.owner_freeze_request === true} />
+          </div>
+        )}
+        {agent?.reasoning && (
+          <div className="mt-3">
+            <button onClick={() => setShowReasoning((v) => !v)} className="text-accent hover:underline">
+              {showReasoning ? "Hide reasoning" : "Show reasoning"}
+            </button>
+            {showReasoning && <p className="mt-2 max-w-[80ch] whitespace-pre-wrap text-ink">{agent.reasoning}</p>}
+          </div>
         )}
       </div>
-      <p className="text-lg text-slate-200">
-        {flag.subject_name ?? flag.subject_id}: {flag.summary}
-      </p>
-      {flag.exposure_cents > 0 && <p className="text-slate-400">Exposure: {dollars(flag.exposure_cents)}</p>}
-      {certFlag && (
-        <OwnerFreezeNote certId={flag.subject_id}
-          seenByDetector={detail.candidate?.features?.owner_freeze_request === true} />
-      )}
-      {agent?.reasoning && (
-        <div>
-          <button onClick={() => setShowReasoning((v) => !v)} className="text-sm text-sky-300 hover:underline">
-            {showReasoning ? "Hide reasoning" : "Show reasoning"}
-          </button>
-          {showReasoning && <pre className="mt-2 whitespace-pre-wrap font-sans text-base text-slate-300">{agent.reasoning}</pre>}
-        </div>
-      )}
-      <div>
-        <div className="mb-1 text-base font-semibold text-slate-200">
-          Evidence {flag.citations_valid ? "(every id checked against the database ✓)" : "(citation check failed ✗)"}
-        </div>
-        <ul className="flex flex-wrap gap-2 font-mono text-xs">
-          {flag.evidence_ids.map((e) => (
-            <li key={e} className={`rounded px-2 py-1 ${agent?.missing_citations?.includes(e) ? "bg-rose-500/20 text-rose-300" : "bg-slate-800 text-slate-300"}`}>
-              {e.length > 20 ? `${e.slice(0, 16)}…` : e}
-            </li>
-          ))}
-          {flag.evidence_ids.length === 0 && <li className="text-slate-500">none</li>}
-        </ul>
+
+      <div className="grid gap-10 lg:grid-cols-2">
+        <Section title="Evidence"
+          right={<span className={`text-th ${flag.citations_valid ? "text-success" : "text-danger"}`}>
+            {flag.citations_valid ? "every id checked ✓" : "citation check failed ✗"}
+          </span>}>
+          <CitedIds ids={flag.evidence_ids} missing={agent?.missing_citations ?? []} />
+        </Section>
+        <Section title="Agent steps" right={<Button small onClick={rerun}>Run StormDesk again</Button>}>
+          {live.steps.length > 0 || live.running ? (
+            <StepList steps={live.steps} live />
+          ) : (
+            <StepList steps={agent?.steps ?? []}
+              replayLabel={run ? replayTitle(run.started_at, agent?.runner ?? flag.runner, agent?.model) : undefined} />
+          )}
+        </Section>
       </div>
-      {live.steps.length > 0 || live.running ? (
-        <StepList steps={live.steps} live />
-      ) : (
-        <StepList steps={agent?.steps ?? []}
-          replayLabel={run ? replayTitle(run.started_at, agent?.runner ?? flag.runner, agent?.model) : undefined} />
-      )}
-      <button onClick={rerun} className="rounded-lg bg-slate-800 px-4 py-2 text-base text-white hover:bg-slate-700">
-        Run StormDesk again
-      </button>
+
       <ReviewPanel flag={flag} review={flag.review} run={reviewRun} live={liveReview} onReview={() => {
         liveReview.reset();
-        load();
-        onChanged();
-      }} />
-      <Decision flag={flag} onDone={() => {
         load();
         onChanged();
       }} />
@@ -471,6 +504,11 @@ function FlagView({ flagId, onChanged }: { flagId: number; onChanged: () => void
   );
 }
 
+function secondOpinion(f: FlagRow): string {
+  return f.review ? reviewVerdict(f.review).label : "Not reviewed";
+}
+
+/** The review queue: every flag, then the selected one in full. */
 export function FlagsView() {
   const [flags, setFlags] = useState<FlagRow[] | null>(null);
   const [selected, setSelected] = useState<number | null>(null);
@@ -483,33 +521,45 @@ export function FlagsView() {
   useEffect(load, [load]);
   useEvents(["flag", "approval", "town"], load);
 
-  if (!flags) return <p className="p-8 text-xl text-slate-300">Loading…</p>;
-  if (flags.length === 0) {
-    return <p className="p-8 text-xl text-slate-400">No StormDesk flags yet. They appear as soon as a detector fires.</p>;
-  }
+  if (!flags) return <Note>Loading…</Note>;
+  if (flags.length === 0) return <Note>No StormDesk flags yet. They appear as soon as a detector fires.</Note>;
   return (
-    <div className="grid gap-6 p-6 lg:grid-cols-[22rem_minmax(0,1fr)]">
-      <ol className="max-h-[80vh] space-y-2 overflow-y-auto">
-        {flags.map((f) => (
-          <li key={f.flag_id}>
-            <button onClick={() => setSelected(f.flag_id)}
-              className={`w-full rounded-xl border p-3 text-left ${
-                selected === f.flag_id ? "border-sky-400 bg-slate-800" : "border-slate-800 bg-slate-900 hover:bg-slate-800"}`}>
-              <div className="flex justify-between gap-2">
-                <span className="font-semibold text-white">{KIND_TITLE[f.kind] ?? f.kind}</span>
-                <span className={`rounded-full px-2 text-xs font-semibold ${STATUS_STYLE[f.status]}`}>{f.status}</span>
-              </div>
-              <div className="truncate text-sm text-slate-400">
-                {f.subject_name ?? f.subject_id} · {f.runner === "fake" ? "fake runner" : f.runner ?? ""}
-                {f.agents_disagree ? <span className="text-amber-300"> · agents disagree</span>
-                  : f.review?.verdict === "agree" && f.review.status === "succeeded" && f.review.runner !== "fake"
-                    ? " · reviewer agrees" : ""}
-              </div>
-            </button>
-          </li>
-        ))}
-      </ol>
-      {selected !== null && <FlagView flagId={selected} onChanged={load} />}
+    <div className="space-y-10">
+      <div className="max-h-[22rem] overflow-y-auto">
+        <Table>
+          <thead className="sticky top-0 bg-page">
+            <tr>
+              <Th className="pl-3">Subject</Th>
+              <Th>Signal</Th>
+              <Th num>Exposure</Th>
+              <Th>Second opinion</Th>
+              <Th>Status</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {flags.map((f) => {
+              const status = flagStatus(f);
+              const on = selected === f.flag_id;
+              return (
+                <tr key={f.flag_id} onClick={() => setSelected(f.flag_id)} aria-selected={on}
+                  className={`cursor-pointer ${on ? "bg-accent-tint" : "hover:bg-accent-tint/50"}`}>
+                  <Td className={`pl-3 ${on ? "font-semibold text-heading" : "text-heading"}`}>{f.subject_name ?? f.subject_id}</Td>
+                  <Td>{KIND_TITLE[f.kind] ?? f.kind}</Td>
+                  <Td num>{f.exposure_cents > 0 ? dollars(f.exposure_cents) : <span className="text-secondary">—</span>}</Td>
+                  <Td className="text-secondary">{secondOpinion(f)}</Td>
+                  <Td className="pr-3">
+                    <span className="flex flex-wrap gap-1.5">
+                      <Pill tone={status.tone}>{status.text}</Pill>
+                      {f.runner === "fake" && <Pill tone="warning">Stand-in</Pill>}
+                    </span>
+                  </Td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </Table>
+      </div>
+      {selected !== null && <FlagView key={selected} flagId={selected} onChanged={load} />}
     </div>
   );
 }
@@ -544,24 +594,28 @@ export function CaseStormDesk({ caseId, onFiled }: { caseId: number; onFiled: ()
   }
 
   return (
-    <div className="space-y-3 rounded-2xl border border-slate-800 bg-slate-900 p-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <h3 className="text-lg font-semibold text-white">StormDesk</h3>
-        <RunnerBadge runner={run?.runner} model={run?.transcript?.model} modelRequested={run?.transcript?.model_requested}
-          usage={run?.transcript?.usage} />
-        {run && <span className="text-sm text-slate-400">last run {clockTime(run.started_at)} · {run.status}</span>}
-        <button disabled={busy} onClick={start}
-          className="ml-auto rounded-lg bg-slate-800 px-4 py-2 text-base text-white hover:bg-slate-700 disabled:opacity-50">
+    <Section
+      title="StormDesk"
+      right={
+        <Button small disabled={busy} onClick={start}>
           {busy ? "Investigating…" : run ? "Investigate again" : "Investigate"}
-        </button>
-      </div>
+        </Button>
+      }
+    >
+      {run && (
+        <div className="flex flex-wrap items-center gap-2 py-2">
+          <RunnerBadge runner={run.runner} model={run.transcript?.model} modelRequested={run.transcript?.model_requested}
+            usage={run.transcript?.usage} />
+          <span className="text-th text-secondary">last run {clockTime(run.started_at)} · {run.status}</span>
+        </div>
+      )}
       {live.steps.length > 0 || live.running ? (
         <StepList steps={live.steps} live />
+      ) : run?.transcript ? (
+        <StepList steps={run.transcript.steps} replayLabel={replayTitle(run.started_at, run.runner, run.transcript.model)} />
       ) : (
-        run?.transcript && (
-          <StepList steps={run.transcript.steps} replayLabel={replayTitle(run.started_at, run.runner, run.transcript.model)} />
-        )
+        <p className="py-2.5 text-secondary">StormDesk hasn't investigated this case yet.</p>
       )}
-    </div>
+    </Section>
   );
 }

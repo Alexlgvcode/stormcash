@@ -33,3 +33,26 @@ def test_relay_paths_name_the_carriers(world, app_client):
     assert [h["name"] for h in row["path"]] == ["Pharmacy", "Maya", "Gas Station"]
     assert row["hops"] == 2 and row["uploaded_by"] == "Gas Station" and row["merchant"] == "Pharmacy"
     assert row["amount_cents"] == 1200
+
+
+def test_a_real_payment_keeps_the_seeded_towns_dark_areas_and_alerts(world, app_client, deps):
+    """The town runs on sim time; a real phone paying now mustn't push its dark areas and alerts out of view."""
+    import time
+
+    world.sync(GAS, [world.pay("gas_station", 500)])
+    world.sync(PHARMACY, [world.pay("pharmacy", 700)])  # a real payment, now
+    sim_now = int(time.time()) - 3 * 24 * 3600  # the seeded town's clock: days ago
+    with deps.pool.connection() as conn:
+        # The gas station stands in for a simulated shop whose payment is the town's latest.
+        conn.execute("UPDATE merchants SET simulated = true WHERE display_name = 'Gas Station'")
+        conn.execute("""UPDATE payments SET device_ts = %s
+                        WHERE merchant_id = (SELECT merchant_id FROM merchants WHERE display_name = 'Gas Station')""",
+                     (sim_now,))
+        conn.execute("""INSERT INTO candidates (kind, subject_id, window_start, window_end, features)
+                        VALUES ('region_dark', 'swannanoa', %s, %s, '{}')""", (sim_now - 7200, sim_now - 600))
+        conn.execute("""INSERT INTO weather_alerts (alert_id, region_id, event, onset, expires, source)
+                        VALUES ('replayed-1', 'swannanoa', 'Flash Flood Warning', %s, %s, 'replayed')""",
+                     (sim_now - 7200, sim_now + 3600))
+    town = app_client.get("/v1/town").json()
+    assert town["dark_regions"] == ["swannanoa"]
+    assert [a["event"] for a in town["alerts"]] == ["Flash Flood Warning"]

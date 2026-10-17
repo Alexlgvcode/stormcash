@@ -1,15 +1,45 @@
-// Cases tab (spec §18.3, Digital Trust add-on): hard cases with both tags side
-// by side, the conflicting field in red, Verify it yourself, the Proof QR, the
-// "merchant knew" view and StormDesk's case file; StormDesk flags; and certs
-// their owners froze by texting FREEZE (§17.2).
+// Cases tab (spec §18.3, Digital Trust add-on): proven fraud (both tags in one
+// table with the conflicting row tinted, Verify it yourself, the Proof QR, the
+// "merchant knew" view and StormDesk's case file), the review queue of
+// StormDesk flags, and certs their owners froze by texting FREEZE (§17.2).
 import QRCode from "qrcode";
-import { useCallback, useEffect, useState } from "react";
-import { getJSON, type CaseDetail, type CaseSummary, type Health } from "../api";
-import { RULE_TEXT, TagCard, TagPair, VerifyPanel } from "../components/Evidence";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { getJSON, type CaseDetail, type CaseSummary, type Health, type RelayPath } from "../api";
+import { caseTitle, casesTakeaway } from "../cases";
+import { RULE_TEXT, TagTable, useVerify, VerifyResult } from "../components/Evidence";
 import { OwnerFreezes } from "../components/OwnerFreeze";
 import { CaseStormDesk, FlagsView } from "../components/StormDesk";
+import { Button, Facts, Note, PageHeader, Pill, Section, Strip, Tabs } from "../components/ui";
 import { useEvents } from "../events";
 import { clockTime, dollars } from "../format";
+
+const VIEWS = [
+  { id: "cases", label: "Proven fraud" },
+  { id: "flags", label: "Review queue" },
+  { id: "freezes", label: "Owner freezes" },
+] as const;
+type CasesView = (typeof VIEWS)[number]["id"];
+
+// What the amount in the headline is, per rule.
+const RULE_VERB: Record<string, string> = {
+  SAME_COUNTER: "spent twice",
+  BROKEN_LINK: "spent twice",
+  TOTAL_BACKWARDS: "spent twice",
+  OVER_CAP: "over the cap",
+  MERCHANT_KNEW: "accepted knowingly",
+};
+
+// payments.status (schema.sql) in words.
+const PAYMENT_STATUS: Record<string, string> = {
+  pending: "pending settlement",
+  settled: "settled",
+  held: "held",
+  denied_knowing: "denied: the shop knew",
+  refused_evidence: "refused offline, kept as evidence",
+  invalid: "invalid",
+};
+
+const detectedText = (c: CaseSummary) => (c.detected_where === "offline" ? "Found offline by a phone" : "Caught at settlement");
 
 function ProofQR({ caseId }: { caseId: number }) {
   const [url, setUrl] = useState<string | null>(null);
@@ -30,19 +60,47 @@ function ProofQR({ caseId }: { caseId: number }) {
 
   if (!url) return null;
   return (
-    <div className="flex flex-col items-center gap-2 rounded-2xl bg-white p-4">
-      {img && <img src={img} alt={`QR code for ${url}`} className="h-64 w-64" />}
-      <a href={url} target="_blank" rel="noreferrer" className="break-all text-center font-mono text-sm text-slate-700">
-        {url}
-      </a>
+    <div className="flex flex-wrap items-center gap-6 border-b border-rule py-4">
+      {img && <img src={img} alt={`QR code for ${url}`} className="h-56 w-56" />}
+      <div>
+        <div className="text-th text-secondary">Scan to verify on your own phone</div>
+        <a href={url} target="_blank" rel="noreferrer" className="break-all font-mono text-th text-accent hover:underline">
+          {url}
+        </a>
+      </div>
     </div>
   );
 }
 
-function CaseView({ caseId }: { caseId: number }) {
+/** What happened, in time order, from the case, its certificate and the payments' relay paths. */
+function timeline(c: CaseDetail["case"], cert: CaseDetail["cert"], pa?: RelayPath, pb?: RelayPath): [number, string][] {
+  const out: [number, string][] = [];
+  if (cert) {
+    out.push([Number(cert.fields.issued_at), `The bank certified the wallet for ${dollars(Number(cert.fields.cap_cents))}`]);
+  }
+  for (const [label, p] of [["A", pa], ["B", pb]] as const) {
+    if (!p?.paid_at) continue;
+    out.push([p.paid_at, p.status === "refused_evidence"
+      ? `${p.merchant} refused payment ${label} offline`
+      : `${p.merchant} accepted payment ${label}, ${dollars(p.amount_cents)}`]);
+  }
+  // The upload that carried the accepted payment to the server (the refused one only proves the conflict).
+  const carried = [pa, pb].find((p) => p && p.status !== "refused_evidence") ?? pa;
+  if (carried?.received_at) {
+    const via = carried.path.map((h) => h.name).join(" → ");
+    out.push([carried.received_at,
+      `Uploaded by ${carried.uploaded_by ?? "a phone"}, ${carried.hops} ${carried.hops === 1 ? "hop" : "hops"}: ${via} → server`]);
+  }
+  out.push([c.created_at, `Case #${c.case_id} opened: ${detectedText(c).toLowerCase()}`]);
+  return out.sort((x, y) => x[0] - y[0]);
+}
+
+function CaseView({ row, paths }: { row: CaseSummary; paths: Map<string, RelayPath> }) {
+  const caseId = row.case_id;
   const [detail, setDetail] = useState<CaseDetail | null>(null);
   const [serverPub, setServerPub] = useState<string | null>(null);
   const [showQR, setShowQR] = useState(false);
+  const caseFile = useRef<HTMLDivElement>(null);
   const reload = useCallback(() => {
     getJSON<CaseDetail>(`/v1/cases/${caseId}`).then(setDetail);
   }, [caseId]);
@@ -54,94 +112,223 @@ function CaseView({ caseId }: { caseId: number }) {
     getJSON<Health>("/v1/health").then((h) => setServerPub(h.server_pub));
   }, [caseId, reload]);
 
-  if (!detail) return <p className="text-slate-400">Loading case…</p>;
-  const { case: c, cert, tag_a: a, tag_b: b, log_entries } = detail;
+  const c = detail?.case;
+  const accept = c?.rule === "MERCHANT_KNEW" ? detail?.log_entries.find((e) => e.fields.kind === "ACCEPT") : undefined;
+  const { cert, tag_a: a, tag_b: b } = detail ?? { cert: null, tag_a: null, tag_b: null };
+  const canVerify = !!(c && cert && a && b && serverPub);
+  const { checks, busy, error, verify } = useVerify(
+    canVerify ? { rule: c!.rule, cert: cert!, tagA: a!, tagB: b!, serverPubB64: serverPub!, accept } : null,
+  );
+
+  if (!detail || !c) return <Note>Loading case…</Note>;
   const text = RULE_TEXT[c.rule] ?? { title: c.rule, why: "" };
-  const accept = c.rule === "MERCHANT_KNEW" ? log_entries.find((e) => e.fields.kind === "ACCEPT") : undefined;
+  const pa = c.tag_a ? paths.get(c.tag_a) : undefined;
+  const pb = c.tag_b ? paths.get(c.tag_b) : undefined;
+  // Each payment's shop and status come with the case list; the relay paths add when and how it travelled.
+  const shopA = row.payment_a?.merchant ?? pa?.merchant;
+  const shopB = row.payment_b?.merchant ?? pb?.merchant;
+  const amount = (b ?? a)?.fields.amount_cents as number | undefined;
+  const refusedAt = [row.payment_b, row.payment_a].find((p) => p?.status === "refused_evidence");
+  const rulesFired = (c.evidence.rules_fired as string[] | undefined) ?? [c.rule];
+  const events = timeline(c, cert, pa, pb);
 
   return (
-    <div className="space-y-5">
-      <div>
-        <div className="flex flex-wrap items-center gap-3">
-          <h2 className="text-3xl font-bold text-white">{text.title}</h2>
-          <span className="rounded-full bg-slate-800 px-3 py-1 font-mono text-sm text-slate-300">{c.rule}</span>
-          <span
-            className={`rounded-full px-3 py-1 text-sm font-semibold ${
-              c.detected_where === "offline" ? "bg-emerald-500/15 text-emerald-300" : "bg-sky-500/15 text-sky-300"
-            }`}
-          >
-            {c.detected_where === "offline" ? "found offline by a phone" : "caught at settlement"}
-          </span>
+    <div className="min-w-0 space-y-10">
+      <div className="space-y-4">
+        <div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <h2 className="text-title font-light text-heading">
+              {amount !== undefined && RULE_VERB[c.rule] ? (
+                <><span className="tabular-nums">{dollars(amount)}</span> {RULE_VERB[c.rule]}</>
+              ) : text.title}
+            </h2>
+            <Pill tone="danger">{detectedText(c)}</Pill>
+            {row.simulated && <Pill tone="neutral">simulated</Pill>}
+          </div>
+          <p className="mt-1.5 text-secondary">
+            Case #{c.case_id} · {text.title} · proven by signed records, not a score
+          </p>
+          <p className="mt-3 max-w-[80ch] text-ink">{text.why}</p>
+          {canVerify && (
+            <div className="mt-5 flex flex-wrap gap-2.5">
+              <Button primary disabled={busy} onClick={verify}>
+                {busy ? "Verifying…" : "Verify it yourself"}
+              </Button>
+              <Button onClick={() => setShowQR((v) => !v)}>{showQR ? "Hide Proof QR" : "Proof QR"}</Button>
+            </div>
+          )}
         </div>
-        <p className="mt-2 text-lg text-slate-300">{text.why}</p>
-        {c.exposure_cents > 0 && <p className="text-slate-400">Exposure: {dollars(c.exposure_cents)}</p>}
+        <Strip
+          items={[
+            { label: "Rule", value: text.title },
+            { label: "Detected", value: c.detected_where === "offline" ? `Offline${refusedAt ? `, ${refusedAt.merchant}` : ""}` : "At settlement" },
+            { label: "Exposure", value: <span className="tabular-nums">{dollars(c.exposure_cents)}</span> },
+            ...(cert ? [{ label: "Wallet limit", value: dollars(Number(cert.fields.cap_cents)) }] : []),
+          ]}
+        />
+        {showQR && <ProofQR caseId={c.case_id} />}
+        <VerifyResult checks={checks} error={error} />
       </div>
 
-      {a && b && <TagPair rule={c.rule === "MERCHANT_KNEW" ? "" : c.rule} a={a} b={b} />}
-      {a && !b && <TagCard title="Settled payment" tag={a} red={["cum_cents"]} />}
+      {a && (
+        <Section title="Conflicting signatures">
+          <TagTable
+            rule={c.rule === "MERCHANT_KNEW" ? "" : c.rule}
+            a={a}
+            b={b}
+            titleA={b ? `Payment A${shopA ? ` · ${shopA}` : ""}` : "Settled payment"}
+            titleB={`Payment B${shopB ? ` · ${shopB}` : ""}`}
+            checks={checks}
+          />
+        </Section>
+      )}
 
       {accept && (
-        <div className="rounded-2xl border border-amber-500/40 bg-amber-500/5 p-4">
-          <h3 className="text-lg font-semibold text-amber-200">The merchant's own signed log</h3>
-          <p className="text-slate-300">
+        <Section title="The merchant's own signed log">
+          <p className="py-2.5 text-ink">
             ACCEPT entry #{String(accept.fields.seq)} for payment B lists what the shop already held:
           </p>
-          <ul className="mt-2 font-mono text-sm">
-            {(accept.fields.held_ids as string[]).map((h) => (
-              <li key={h} className={h === a?.digest ? "font-bold text-rose-300" : "text-slate-400"}>
-                {h.slice(0, 24)}… {h === a?.digest && "← payment A"}
-              </li>
-            ))}
+          <ul className="border-t border-rule">
+            {(accept.fields.held_ids as string[]).map((h) => {
+              const isA = h === a?.digest;
+              return (
+                <li key={h} className={`flex justify-between gap-4 border-b border-rule px-3 py-2 font-mono text-th ${
+                  isA ? "bg-danger-tint font-semibold text-danger" : "text-secondary"}`}>
+                  <span className="truncate">{h.slice(0, 24)}…</span>
+                  {isA && <span className="font-sans">payment A</span>}
+                </li>
+              );
+            })}
           </ul>
-          <p className="mt-2 truncate font-mono text-xs text-slate-500">signature {String(accept.json.sig).slice(0, 32)}…</p>
-        </div>
+          <p className="truncate py-2 font-mono text-th text-secondary">signature {String(accept.json.sig).slice(0, 32)}…</p>
+        </Section>
       )}
 
       {c.rule === "LOG_TAMPER" && (
-        <div className="rounded-2xl border border-slate-700 p-4">
-          <h3 className="text-lg font-semibold text-white">
-            {String(c.evidence.kind)} at entry #{String(c.evidence.seq)}
-          </h3>
-          {log_entries.map((e) => (
-            <p key={e.digest} className="font-mono text-sm text-slate-300">
-              #{String(e.fields.seq)} {String(e.fields.kind)} entry {e.digest.slice(0, 16)}… after{" "}
-              {String(e.fields.prev_hash).slice(0, 16)}…
-            </p>
-          ))}
-        </div>
+        <Section title={`${String(c.evidence.kind)} at entry #${String(c.evidence.seq)}`}>
+          <ul>
+            {detail.log_entries.map((e) => (
+              <li key={e.digest} className="border-b border-rule py-2 font-mono text-th text-ink">
+                #{String(e.fields.seq)} {String(e.fields.kind)} entry {e.digest.slice(0, 16)}… after{" "}
+                {String(e.fields.prev_hash).slice(0, 16)}…
+              </li>
+            ))}
+          </ul>
+        </Section>
       )}
 
-      {cert && a && b && serverPub && (
-        <div className="grid gap-4 lg:grid-cols-[1fr_auto]">
-          <VerifyPanel input={{ rule: c.rule, cert, tagA: a, tagB: b, serverPubB64: serverPub, accept }} />
-          <div className="flex flex-col gap-3">
-            <button
-              onClick={() => setShowQR((v) => !v)}
-              className="rounded-xl bg-slate-800 px-5 py-3 text-lg font-semibold text-white hover:bg-slate-700"
-            >
-              {showQR ? "Hide Proof QR" : "Proof QR"}
-            </button>
-            {showQR && <ProofQR caseId={c.case_id} />}
-          </div>
-        </div>
-      )}
+      <div className="grid gap-10 lg:grid-cols-2">
+        <Section title="Timeline">
+          <ol>
+            {events.map(([t, what], i) => (
+              <li key={i} className="flex justify-between gap-4 border-b border-rule py-2.5">
+                <span className="text-ink">{what}</span>
+                <span className="whitespace-nowrap tabular-nums text-secondary">{clockTime(t)}</span>
+              </li>
+            ))}
+          </ol>
+        </Section>
+        <Section title="Payment details">
+          <Facts
+            rows={[
+              ...([["Payment A", row.payment_a], ["Payment B", row.payment_b]] as const)
+                .filter(([, p]) => p)
+                .map(([label, p]) => [label, `${dollars(p!.amount_cents)} at ${p!.merchant ?? "a shop"}, ${
+                  PAYMENT_STATUS[p!.status ?? ""] ?? p!.status ?? "not paid"}`] as [string, string]),
+              ["Case file", (
+                <button onClick={() => caseFile.current?.scrollIntoView({ behavior: "smooth" })} className="text-accent hover:underline">
+                  StormDesk report
+                </button>
+              )],
+            ]}
+          />
+          {(cert || c.cert_id) && (
+            <details className="mt-3">
+              <summary className="cursor-pointer py-1 text-accent">Technical details</summary>
+              <Facts rows={[
+                ...(cert ? [["Escrow account", <span className="font-mono text-th">{String(cert.fields.escrow_ref)}</span>] as [string, ReactNode]] : []),
+                ...(cert ? [["Certificate version", String(cert.fields.cert_ver)] as [string, ReactNode]] : []),
+                ...(c.cert_id ? [["Certificate id", <span className="font-mono text-th">{c.cert_id}</span>] as [string, ReactNode]] : []),
+                ...(rulesFired.length ? [["Rules fired", <span className="font-mono text-th">{rulesFired.join(", ")}</span>] as [string, ReactNode]] : []),
+              ]} />
+            </details>
+          )}
+        </Section>
+      </div>
 
       <CaseStormDesk caseId={c.case_id} onFiled={reload} />
 
-      <div className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
-        <h3 className="mb-2 text-lg font-semibold text-white">Case file (StormDesk)</h3>
-        {c.case_file_md ? (
-          <pre className="whitespace-pre-wrap font-sans text-base text-slate-200">{c.case_file_md}</pre>
-        ) : (
-          <p className="text-slate-400">No case file yet.</p>
-        )}
+      <div ref={caseFile}>
+        <Section title="Case file (StormDesk)">
+          {c.case_file_md ? (
+            <p className="max-w-[90ch] whitespace-pre-wrap py-2.5 text-ink">{c.case_file_md}</p>
+          ) : (
+            <p className="py-2.5 text-secondary">No case file yet.</p>
+          )}
+        </Section>
       </div>
     </div>
   );
 }
 
-type CasesView = "cases" | "flags" | "freezes";
-const VIEW_TITLE: Record<CasesView, string> = { cases: "Hard cases", flags: "StormDesk flags", freezes: "Owner freezes" };
+function CaseButton({ c, on, onPick }: { c: CaseSummary; on: boolean; onPick: () => void }) {
+  return (
+    <li>
+      <button onClick={onPick} aria-current={on ? "true" : undefined}
+        className={`w-full border-b border-rule px-3 py-2.5 text-left ${on ? "bg-accent-tint" : "hover:bg-accent-tint/50"}`}>
+        <div className={`font-medium ${on ? "text-accent" : "text-heading"}`}>{caseTitle(c)}</div>
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-th text-secondary">
+          <span>{clockTime(c.created_at)}</span>
+          <span>· {c.detected_where === "offline" ? "found offline" : "at settlement"}</span>
+          <span>· #{c.case_id}</span>
+          {c.simulated && <Pill tone="neutral">simulated</Pill>}
+        </div>
+      </button>
+    </li>
+  );
+}
+
+/** Your phones' cases first; the simulated town's below, collapsed. */
+function HardCases({ cases, paths }: { cases: CaseSummary[] | null; paths: Map<string, RelayPath> }) {
+  const [selected, setSelected] = useState<number | null>(null);
+  const [townOpen, setTownOpen] = useState<boolean | null>(null);
+
+  if (!cases) return <Note>Loading…</Note>;
+  if (cases.length === 0) return <Note>No proven cases yet.</Note>;
+  const real = cases.filter((c) => !c.simulated);
+  const town = cases.filter((c) => c.simulated);
+  const open = townOpen ?? real.length === 0; // with nothing from the phones, show the town's cases
+  const current = cases.find((c) => c.case_id === selected) ?? real[0] ?? town[0];
+  return (
+    <div className="grid gap-10 lg:grid-cols-[20rem_minmax(0,1fr)]">
+      <div className="max-h-[calc(100vh-12rem)] self-start overflow-y-auto lg:sticky lg:top-6">
+        <div className="border-b border-rule pb-1.5 text-eyebrow font-semibold uppercase text-secondary">Your phones</div>
+        {real.length === 0 ? (
+          <p className="border-b border-rule px-3 py-2.5 text-secondary">No proven cases from your phones yet.</p>
+        ) : (
+          <ol>
+            {real.map((c) => <CaseButton key={c.case_id} c={c} on={current?.case_id === c.case_id} onPick={() => setSelected(c.case_id)} />)}
+          </ol>
+        )}
+        {town.length > 0 && (
+          <>
+            <button onClick={() => setTownOpen(!open)} aria-expanded={open}
+              className="mt-6 flex w-full items-center justify-between border-b border-rule pb-1.5 text-left text-eyebrow font-semibold uppercase text-secondary hover:text-heading">
+              Simulated town ({town.length})
+              <span aria-hidden="true">{open ? "−" : "+"}</span>
+            </button>
+            {open && (
+              <ol>
+                {town.map((c) => <CaseButton key={c.case_id} c={c} on={current?.case_id === c.case_id} onPick={() => setSelected(c.case_id)} />)}
+              </ol>
+            )}
+          </>
+        )}
+      </div>
+      {current && <CaseView key={current.case_id} row={current} paths={paths} />}
+    </div>
+  );
+}
 
 export function CasesTab() {
   const [view, setView] = useState<CasesView>(() => {
@@ -152,6 +339,17 @@ export function CasesTab() {
       return "cases";
     }
   });
+  const [cases, setCases] = useState<CaseSummary[] | null>(null);
+  const [paths, setPaths] = useState<Map<string, RelayPath>>(new Map());
+  const load = useCallback(() => {
+    getJSON<CaseSummary[]>("/v1/cases?limit=200").then(setCases).catch(() => setCases((cur) => cur ?? []));
+    getJSON<RelayPath[]>("/v1/relay/paths?limit=200")
+      .then((rows) => setPaths(new Map(rows.map((p) => [p.tag_hash, p]))))
+      .catch(() => undefined);
+  }, []);
+  useEffect(load, [load]);
+  useEvents(["case_opened", "town", "upload"], load);
+
   const pick = (v: CasesView) => {
     setView(v);
     try {
@@ -161,60 +359,12 @@ export function CasesTab() {
     }
   };
   return (
-    <div>
-      <div className="flex gap-2 px-6 pt-4">
-        {(["cases", "flags", "freezes"] as const).map((v) => (
-          <button key={v} onClick={() => pick(v)}
-            className={`rounded-full px-4 py-2 text-base font-semibold ${
-              view === v ? "bg-sky-500 text-slate-950" : "bg-slate-800 text-slate-300 hover:bg-slate-700"}`}>
-            {VIEW_TITLE[v]}
-          </button>
-        ))}
-      </div>
-      {view === "cases" ? <HardCases /> : view === "flags" ? <FlagsView /> : <OwnerFreezes />}
-    </div>
-  );
-}
-
-function HardCases() {
-  const [cases, setCases] = useState<CaseSummary[] | null>(null);
-  const [selected, setSelected] = useState<number | null>(null);
-
-  const load = useCallback(() => {
-    getJSON<CaseSummary[]>("/v1/cases?limit=200").then((rows) => {
-      setCases(rows);
-      setSelected((cur) => cur ?? rows[0]?.case_id ?? null);
-    });
-  }, []);
-  useEffect(load, [load]);
-  useEvents(["case_opened", "town"], load);
-
-  if (!cases) return <p className="p-8 text-xl text-slate-300">Loading…</p>;
-  if (cases.length === 0) return <p className="p-8 text-xl text-slate-400">No hard cases yet.</p>;
-  return (
-    <div className="grid gap-6 p-6 lg:grid-cols-[22rem_1fr]">
-      <ol className="max-h-[80vh] space-y-2 overflow-y-auto">
-        {cases.map((c) => (
-          <li key={c.case_id}>
-            <button
-              onClick={() => setSelected(c.case_id)}
-              className={`w-full rounded-xl border p-3 text-left ${
-                selected === c.case_id ? "border-sky-400 bg-slate-800" : "border-slate-800 bg-slate-900 hover:bg-slate-800"
-              }`}
-            >
-              <div className="flex justify-between gap-2">
-                <span className="font-semibold text-white">{RULE_TEXT[c.rule]?.title ?? c.rule}</span>
-                <span className="text-sm text-slate-400">#{c.case_id}</span>
-              </div>
-              <div className="text-sm text-slate-400">
-                {clockTime(c.created_at)} · {c.detected_where === "offline" ? "offline" : "settlement"}
-                {c.exposure_cents > 0 && ` · ${dollars(c.exposure_cents)}`}
-              </div>
-            </button>
-          </li>
-        ))}
-      </ol>
-      {selected !== null && <CaseView caseId={selected} />}
+    <div className="pb-12">
+      <PageHeader title="Cases" subtitle="Proven fraud and the agent's review queue"
+        takeaway={cases ? casesTakeaway(cases) : undefined}>
+        <Tabs tabs={VIEWS} value={view} onChange={pick} />
+      </PageHeader>
+      {view === "cases" ? <HardCases cases={cases} paths={paths} /> : view === "flags" ? <FlagsView /> : <OwnerFreezes />}
     </div>
   );
 }

@@ -10,6 +10,13 @@ export function signedDollars(cents: number): string {
   return cents > 0 ? `+${dollars(cents)}` : dollars(cents);
 }
 
+/** "4:34 PM" today, "Oct 17, 4:34 PM" on another day: no seconds, no 24-hour clock. */
 export function clockTime(unixSeconds: number): string {
-  return new Date(unixSeconds * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  return timeOfDay(new Date(unixSeconds * 1000));
+}
+
+export function timeOfDay(d: Date): string {
+  const time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+  if (d.toDateString() === new Date().toDateString()) return time;
+  return `${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })}, ${time}`;
 }

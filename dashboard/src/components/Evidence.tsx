@@ -1,95 +1,151 @@
-// Two conflicting tags side by side, and the in-browser "Verify it yourself"
-// check list (spec §18.3, §18.6). Shared by the Cases tab and the proof page.
-import { useState } from "react";
+// The two conflicting tags as one table, the conflicting row tinted, and the
+// in-browser "Verify it yourself" check (spec §18.3, §18.6). Shared by the
+// Cases tab and the proof page.
+import { useState, type ReactNode } from "react";
 import type { SignedObj } from "../api";
+import { conflictSentence, plainChecks } from "../cases";
 import { dollars } from "../format";
 import { conflictingFields, runChecks, type Check, type VerifyInput } from "../verify";
+import { Table, Td, Th } from "./ui";
 
 export const RULE_TEXT: Record<string, { title: string; why: string }> = {
   SAME_COUNTER: {
-    title: "Same counter used twice",
-    why: "The wallet signed two different payments with the same counter: the same money was spent twice.",
+    title: "Same payment number used twice",
+    why: "The wallet signed two different payments with the same payment number: the same money was spent twice.",
   },
   BROKEN_LINK: {
-    title: "Broken link",
-    why: "The next payment doesn't point back to the previous one: the wallet was rolled back and forked.",
+    title: "Payment chain broken",
+    why: "A payment doesn't continue from the one before it: the wallet was rolled back and the money spent again.",
   },
   TOTAL_BACKWARDS: {
     title: "Running total went backwards",
-    why: "A later payment claims less was spent before it than an earlier payment already had: a counter was skipped.",
+    why: "A later payment claims less was spent before it than an earlier payment already had: a payment number was skipped.",
   },
-  OVER_CAP: { title: "Over the certificate cap", why: "Settled payments add up to more than any cap ever issued." },
+  OVER_CAP: { title: "Spent over the limit", why: "Settled payments add up to more than any limit this wallet was ever given." },
   MERCHANT_KNEW: {
-    title: "Merchant knew",
+    title: "Shop accepted it knowingly",
     why: "The shop accepted a double spend while its own signed log shows it already held the conflicting payment.",
   },
-  LOG_TAMPER: { title: "Device log tampered", why: "A device's signed, hash-chained log was forked or rewritten." },
+  LOG_TAMPER: { title: "Device log altered", why: "A device's signed, chained log was forked or rewritten." },
 };
 
 const short = (hex: string) => `${hex.slice(0, 10)}…`;
 
-const ROWS: [string, string, (v: unknown) => string][] = [
-  ["counter", "Counter", String],
-  ["amount_cents", "Amount", (v) => dollars(v as number)],
-  ["cum_cents", "Running total", (v) => dollars(v as number)],
-  ["prev_hash", "Points back to", (v) => short(String(v))],
-  ["details_hash", "Payment details", (v) => short(String(v))],
+// The raw signed fields, for the Technical details.
+const RAW: [string, string, (v: unknown) => string][] = [
+  ["counter", "counter", String],
+  ["amount_cents", "amount_cents", String],
+  ["cum_cents", "cum_cents", String],
+  ["prev_hash", "prev_hash (points back to)", (v) => short(String(v))],
+  ["details_hash", "details_hash", (v) => short(String(v))],
 ];
 
-export function TagCard({ title, tag, red }: { title: string; tag: SignedObj; red: string[] }) {
-  return (
-    <div className="rounded-2xl border border-slate-700 bg-slate-900 p-4">
-      <div className="mb-2 flex items-baseline justify-between gap-2">
-        <h3 className="text-lg font-semibold text-white">{title}</h3>
-        <span className="font-mono text-xs text-slate-400">tag {short(tag.digest)}</span>
-      </div>
-      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-base">
-        {ROWS.map(([key, label, show]) => (
-          <div key={key} className="contents">
-            <dt className="text-slate-400">{label}</dt>
-            <dd
-              className={`text-right font-mono ${
-                red.includes(key) ? "rounded bg-rose-500/20 px-1 font-bold text-rose-300" : "text-slate-100"
-              }`}
-            >
-              {show(tag.fields[key])}
-            </dd>
-          </div>
-        ))}
-      </dl>
-      <div className="mt-2 truncate font-mono text-xs text-slate-500" title={String(tag.json.sig)}>
-        signature {String(tag.json.sig).slice(0, 24)}…
-      </div>
-    </div>
-  );
+/** ✓ Valid / ✗ Invalid once the browser checked it (runChecks order: certificate, then A's two, then B's two). */
+function validity(checks: Check[] | null, side: 0 | 1): ReactNode {
+  if (!checks) return <span className="text-secondary">Press Verify it yourself</span>;
+  const own = checks.slice(2 + side * 2, 4 + side * 2);
+  const ok = own.length === 2 && own.every((c) => c.ok);
+  return ok ? <span className="font-medium text-success">✓ Valid</span> : <span className="font-medium text-danger">✗ Invalid</span>;
 }
 
-export function TagPair({ rule, a, b }: { rule: string; a: SignedObj; b: SignedObj }) {
-  const red = conflictingFields(rule);
-  return (
-    <div className="grid gap-4 sm:grid-cols-2">
-      <TagCard title="Payment A" tag={a} red={red.a} />
-      <TagCard title="Payment B" tag={b} red={red.b} />
-    </div>
-  );
-}
-
-export function VerifyPanel({
-  input,
-  big = false,
-  onStart,
-  onDone,
-}: {
-  input: VerifyInput;
-  big?: boolean;
-  onStart?: () => void; // the button was pressed (the proof page starts its C++ check)
-  onDone?: (checks: Check[] | null) => void; // null: WebCrypto couldn't run the checks
+/**
+ * The two payments in plain words: what conflicts as one sentence, then
+ * payment number, amount, running total and signature validity. The raw signed
+ * fields, signatures and tag ids sit under "Technical details".
+ */
+export function TagTable({ rule, a, b, titleA = "Payment A", titleB = "Payment B", checks = null }: {
+  rule: string;
+  a: SignedObj;
+  b?: SignedObj | null;
+  titleA?: string;
+  titleB?: string;
+  checks?: Check[] | null;
 }) {
+  const red = b ? conflictingFields(rule) : { a: ["cum_cents"], b: [] };
+  const sentence = conflictSentence(rule, a.fields, b?.fields);
+  const tags = [a, b].filter((t): t is SignedObj => !!t);
+  const plain: [string, string, (t: SignedObj) => ReactNode][] = [
+    ["counter", "Payment number", (t) => String(t.fields.counter)],
+    ["amount_cents", "Amount", (t) => dollars(Number(t.fields.amount_cents))],
+    ["cum_cents", "Running total", (t) => dollars(Number(t.fields.cum_cents))],
+  ];
+  return (
+    <div>
+      {sentence && <p className="border-b border-rule bg-danger-tint px-3 py-2.5 font-medium text-danger">{sentence}</p>}
+      <Table>
+        <thead>
+          <tr>
+            <Th className="pl-3">Field</Th>
+            <Th>{titleA}</Th>
+            {b && <Th>{titleB}</Th>}
+          </tr>
+        </thead>
+        <tbody>
+          {plain.map(([key, label, show]) => {
+            const inA = red.a.includes(key);
+            const inB = red.b.includes(key);
+            return (
+              <tr key={key} className={inA || inB ? "bg-danger-tint" : undefined}>
+                <Td className="pl-3 text-secondary">{label}</Td>
+                {tags.map((t, i) => (
+                  <Td key={t.digest} className={`tabular-nums ${(i === 0 ? inA : inB) ? "font-semibold text-danger" : ""}`}>
+                    {show(t)}
+                  </Td>
+                ))}
+              </tr>
+            );
+          })}
+          <tr>
+            <Td className="pl-3 text-secondary">Signature</Td>
+            {tags.map((t, i) => <Td key={t.digest}>{validity(checks, i as 0 | 1)}</Td>)}
+          </tr>
+        </tbody>
+      </Table>
+      <details className="mt-3">
+        <summary className="cursor-pointer py-1 text-accent">Technical details</summary>
+        <Table>
+          <tbody>
+            {RAW.map(([key, label, show]) => (
+              <tr key={key}>
+                <Td className="pl-3 font-mono text-th text-secondary">{label}</Td>
+                {tags.map((t, i) => (
+                  <Td key={t.digest} className={`font-mono text-th ${(i === 0 ? red.a : red.b).includes(key) ? "font-semibold text-danger" : ""}`}>
+                    {show(t.fields[key])}
+                  </Td>
+                ))}
+              </tr>
+            ))}
+            <tr>
+              <Td className="pl-3 font-mono text-th text-secondary">sig</Td>
+              {tags.map((t) => (
+                <Td key={t.digest} className="max-w-0 truncate font-mono text-th" title={String(t.json.sig)}>
+                  {String(t.json.sig).slice(0, 24)}…
+                </Td>
+              ))}
+            </tr>
+            <tr>
+              <Td className="pl-3 font-mono text-th text-secondary">tag id</Td>
+              {tags.map((t) => <Td key={t.digest} className="font-mono text-th">{short(t.digest)}</Td>)}
+            </tr>
+          </tbody>
+        </Table>
+      </details>
+    </div>
+  );
+}
+
+/**
+ * The WebCrypto check (spec §18.6). `onStart` fires when it's asked to run (the
+ * proof page starts its C++ check then); `onDone` gets the checks, or null when
+ * WebCrypto couldn't run them.
+ */
+export function useVerify(input: VerifyInput | null, onStart?: () => void, onDone?: (checks: Check[] | null) => void) {
   const [checks, setChecks] = useState<Check[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function verify() {
+    if (!input) return;
     onStart?.();
     if (!window.isSecureContext || !crypto?.subtle) {
       setError("This browser only verifies over HTTPS. Open the proof link from the QR code (https://…).");
@@ -110,37 +166,37 @@ export function VerifyPanel({
     }
   }
 
-  const allOk = checks !== null && checks.every((c) => c.ok);
+  return { checks, busy, error, verify };
+}
+
+/** The checks the browser ran, one ruled row each. */
+export function CheckList({ checks }: { checks: Check[] }) {
   return (
-    <div className="space-y-3">
-      <button
-        onClick={verify}
-        disabled={busy}
-        className={`w-full rounded-xl bg-sky-500 font-bold text-slate-950 hover:bg-sky-400 disabled:opacity-60 ${
-          big ? "py-5 text-2xl" : "py-3 text-lg"
-        }`}
-      >
-        {busy ? "Verifying…" : "Verify it yourself"}
-      </button>
-      {error && <p className="text-rose-300">{error}</p>}
-      {checks && (
-        <div className={`rounded-xl border-2 p-4 ${allOk ? "border-emerald-500/60" : "border-rose-500/60"}`}>
-          <p className={`mb-2 text-xl font-bold ${allOk ? "text-emerald-300" : "text-rose-300"}`}>
-            {allOk ? "Verified in this browser ✓" : "Something didn't verify ✗"}
-          </p>
-          <ul className="space-y-1">
-            {checks.map((c, i) => (
-              <li key={i} className="flex gap-2 text-base">
-                <span className={c.ok ? "text-emerald-400" : "text-rose-400"}>{c.ok ? "✓" : "✗"}</span>
-                <span className="text-slate-200">
-                  {c.label}
-                  {c.detail && <span className="block font-mono text-xs text-slate-400">{c.detail}</span>}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+    <ul className="border-t border-rule">
+      {plainChecks(checks).map((c, i) => (
+        <li key={i} className="grid grid-cols-[1.25rem_minmax(0,1fr)] gap-3 border-b border-rule py-2">
+          <span className={c.ok ? "text-success" : "text-danger"}>{c.ok ? "✓" : "✗"}</span>
+          <span className="min-w-0 text-ink">
+            {c.label}
+            {c.detail && <span className="block break-words font-mono text-th text-secondary">{c.detail}</span>}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** "Verified in this browser ✓" and the checks, or why it couldn't run. */
+export function VerifyResult({ checks, error }: { checks: Check[] | null; error: string | null }) {
+  if (error) return <p className="text-danger">{error}</p>;
+  if (!checks) return null;
+  const allOk = checks.every((c) => c.ok);
+  return (
+    <div>
+      <p className={`py-2 font-semibold ${allOk ? "text-success" : "text-danger"}`}>
+        {allOk ? "Verified in this browser ✓" : "Something didn't verify ✗"}
+      </p>
+      <CheckList checks={checks} />
     </div>
   );
 }

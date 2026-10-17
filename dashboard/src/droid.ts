@@ -153,23 +153,65 @@ export interface RunDetail {
 }
 
 export const JOB_LABEL: Record<string, string> = {
-  investigate: "Investigate",
-  triage: "Triage",
-  respond: "Respond",
-  review: "Review",
-  author: "Author",
+  investigate: "Investigated a case",
+  triage: "Checked a suspicion",
+  respond: "Appeal reply",
+  review: "Second opinion",
+  author: "Wrote a detector",
 };
 
-export const OUTCOME_STYLE: Record<Outcome, string> = {
-  valid: "bg-emerald-500/15 text-emerald-300",
-  invalid_citation: "bg-rose-500/15 text-rose-300",
-  rerun_rejected: "bg-rose-500/15 text-rose-300",
-  structured_output_failed: "bg-rose-500/15 text-rose-300",
-  failed: "bg-rose-500/15 text-rose-300",
-  fallback: "bg-amber-500/15 text-amber-300",
-  fake: "bg-amber-500/15 text-amber-300",
-  running: "bg-sky-500/15 text-sky-300",
-  unfinished: "bg-slate-500/20 text-slate-300",
+/** Each outcome in plain words (the server's labels name our internals). */
+export const OUTCOME_PLAIN: Record<Outcome, string> = {
+  valid: "Valid",
+  invalid_citation: "Cited a missing record",
+  rerun_rejected: "Re-run didn't match",
+  structured_output_failed: "No usable answer",
+  failed: "Failed",
+  fallback: "Stand-in answered",
+  fake: "Stand-in",
+  running: "Running",
+  unfinished: "Unfinished",
+};
+
+/** Each guardrail in plain words, by its key; an unknown one keeps the server's text. */
+export const GUARDRAIL_PLAIN: Record<string, { label: string; about: string }> = {
+  invalid_citation: {
+    label: "Answers rejected for citing a record that doesn't exist",
+    about: "Droid cited an id that isn't in the database: the answer is stored as invalid and can never be acted on.",
+  },
+  rerun_rejected: {
+    label: "Proposed detectors our re-run rejected",
+    about: "After Droid writes a detector, our server re-runs its tests and the eval; a claim that didn't match was rejected and no pull request was opened.",
+  },
+  structured_output_retry: {
+    label: "Answers that needed a second try",
+    about: "A missing or malformed answer is asked for once more; these runs answered on the second try.",
+  },
+  structured_output_failed: {
+    label: "No usable answer after a second try",
+    about: "Both tries failed: stored as failed, nothing saved.",
+  },
+  fallback: {
+    label: "Times the stand-in answered because Droid couldn't run",
+    about: "Droid couldn't run (for example, out of credits), so the rules-only stand-in answered, labelled as such.",
+  },
+  permission_denial: {
+    label: "Tool requests the permission handler blocked",
+    about: "Droid asked for a tool outside its read-only set and was refused.",
+  },
+};
+
+/** Each outcome's pill tone: green valid, red rejected or failed, amber for the fake runner. */
+export const OUTCOME_TONE: Record<Outcome, "success" | "danger" | "warning" | "neutral" | "agents"> = {
+  valid: "success",
+  invalid_citation: "danger",
+  rerun_rejected: "danger",
+  structured_output_failed: "danger",
+  failed: "danger",
+  fallback: "warning",
+  fake: "warning",
+  running: "agents",
+  unfinished: "neutral",
 };
 
 const n = (value: number) => Math.round(value).toLocaleString("en-US");

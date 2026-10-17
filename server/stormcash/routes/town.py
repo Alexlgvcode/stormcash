@@ -49,7 +49,11 @@ def get_town(request: Request) -> dict:
             """SELECT merchant_id, display_name, region_id, x, y, simulated, pool_eligible FROM merchants
                WHERE x IS NOT NULL AND y IS NOT NULL ORDER BY simulated, display_name""",
         )
-        latest = all_rows(conn, "SELECT max(device_ts) AS t FROM payments")[0]["t"] or now
+        # The town's clock: the seeded town runs on sim time, so its latest simulated payment, not a real
+        # phone's payment from now, sets which dark areas and alerts are recent (§18.4 [v4.23]).
+        latest = (all_rows(conn, """SELECT max(p.device_ts) AS t FROM payments p
+                                    JOIN merchants m USING (merchant_id) WHERE m.simulated""")[0]["t"]
+                  or all_rows(conn, "SELECT max(device_ts) AS t FROM payments")[0]["t"] or now)
         payments = all_rows(
             conn,
             """SELECT p.tag_hash, p.merchant_id, p.device_ts, p.status, p.hops, t.amount_cents

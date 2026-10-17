@@ -18,7 +18,7 @@ test("an agent's verdict counts", () => {
 
 test("the fake reviewer is labelled and never counts against a flag", () => {
   const fake = reviewVerdict({ ...base, runner: "fake", verdict: "disagree" });
-  assert.equal(fake.label, "Fake reviewer (rules only) disagrees");
+  assert.equal(fake.label, "Stand-in reviewer (rules only) disagrees");
   assert.equal(fake.counted, false);
   assert.match(fake.note ?? "", /Not counted/);
   assert.equal(reviewVerdict({ ...base, runner: "fake" }).note, null);

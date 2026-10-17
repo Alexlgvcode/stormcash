@@ -1,160 +1,49 @@
 // Accounts tab (spec §18.2, Capital One add-on): live Nessie balances, the
-// reconciliation of our ledger with Nessie's records, the Nessie call log, the
-// ledger check and the queued-payout counter.
-import { useCallback, useEffect, useRef, useState } from "react";
+// reconciliation of our ledger with Nessie's own records, the Nessie call log,
+// the ledger check and the queued-payout counter. Three views: Balances (what a
+// judge sees first), Reconciliation and Nessie log, with the full data.
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { accountAndOwner, callLine, callStatus, isMoneyMove } from "../accounts";
 import { getJSON, type AccountCard, type AccountsSnapshot, type NessieCall } from "../api";
+import { Button, PageHeader, Pill, Section, StatusItem, Table, Tabs, Td, Th, type Tone as UiTone } from "../components/ui";
 import { useEvents } from "../events";
 import { clockTime, dollars, signedDollars } from "../format";
 import {
+  accountsTakeaway,
+  bankPill,
   itemsOf,
   openingNote,
   pairsLine,
+  reconciledLine,
   simulatedNote,
-  summary,
   unreachable,
-  verdict,
   type ReconcileAccount,
   type Reconciliation,
   type Tone,
 } from "../reconcile";
 
-const KIND_STYLE: Record<AccountCard["kind"], string> = {
-  checking: "border-sky-500/40",
-  escrow: "border-violet-500/40",
-  merchant: "border-emerald-500/40",
-  pool: "border-amber-500/40",
-};
+const VIEWS = [
+  { id: "balances", label: "Balances" },
+  { id: "reconciliation", label: "Reconciliation" },
+  { id: "log", label: "Nessie log" },
+] as const;
+type View = (typeof VIEWS)[number]["id"];
 
-function BalanceCard({ card }: { card: AccountCard }) {
-  const value = card.nessie_cents;
-  const previous = useRef<number | null>(value);
-  const [delta, setDelta] = useState<number | null>(null);
+// A difference is red, like an outage; ledger-only accounts are neutral.
+const TONE: Record<Tone, UiTone> = { ok: "success", diff: "danger", error: "danger", off: "neutral" };
 
-  useEffect(() => {
-    if (value !== null && previous.current !== null && value !== previous.current) {
-      setDelta(value - previous.current);
-      const t = setTimeout(() => setDelta(null), 2500);
-      previous.current = value;
-      return () => clearTimeout(t);
-    }
-    previous.current = value;
-  }, [value]);
+const LATEST_CALLS = 8;
 
-  return (
-    <div
-      className={`relative rounded-2xl border-2 bg-slate-900 p-5 transition-colors duration-700 ${KIND_STYLE[card.kind]} ${
-        delta !== null ? "bg-slate-800" : ""
-      }`}
-    >
-      <div className="text-lg font-medium text-slate-300">{card.label}</div>
-      {value !== null ? (
-        <div className="mt-1 font-mono text-4xl font-bold tabular-nums text-white">{dollars(value)}</div>
-      ) : (
-        <div className="mt-1 text-xl font-semibold text-rose-300">
-          {card.nessie_account_id ? "Nessie unavailable" : "No Nessie account"}
-        </div>
-      )}
-      {delta !== null && (
-        <div
-          className={`absolute right-4 top-4 rounded-full px-3 py-1 font-mono text-lg font-bold ${
-            delta > 0 ? "bg-emerald-500/20 text-emerald-300" : "bg-rose-500/20 text-rose-300"
-          }`}
-        >
-          {signedDollars(delta)}
-        </div>
-      )}
-      <div className="mt-2 text-sm text-slate-400">
-        {value !== null ? "from Nessie transactions" : card.nessie_error ?? ""}
-        <span className="float-right">ledger {signedDollars(card.ledger_cents)}</span>
-      </div>
-    </div>
-  );
+interface ReconcileState {
+  result: Reconciliation | null;
+  lastOk: number | null;
+  error: string | null;
+  busy: boolean;
+  run: () => void;
 }
 
-function callLine(c: NessieCall): { kind: string; text: string } {
-  const kind = c.path.split("/").filter(Boolean).at(-1) ?? "";
-  return { kind: kind.replace(/s$/, ""), text: c.summary ?? c.path };
-}
-
-function NessieLog({ calls }: { calls: NessieCall[] }) {
-  return (
-    <section className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
-      <h2 className="mb-3 text-xl font-semibold text-white">Nessie call log</h2>
-      {calls.length === 0 && <p className="text-slate-400">No Nessie calls yet.</p>}
-      <ol className="max-h-[28rem] space-y-1 overflow-y-auto font-mono text-base">
-        {calls.map((c) => {
-          const { kind, text } = callLine(c);
-          const ok = c.status !== null && c.status < 400;
-          return (
-            <li key={c.call_id} className="flex gap-3 rounded px-2 py-1 even:bg-slate-800/40">
-              <span className="shrink-0 text-slate-500">{clockTime(c.created_at)}</span>
-              <span className="shrink-0 text-sky-300">
-                {c.method} {kind}
-              </span>
-              <span className="min-w-0 flex-1 truncate text-slate-200">{text}</span>
-              <span className={`shrink-0 ${ok ? "text-emerald-400" : "text-rose-400"}`}>
-                {c.status === null ? "timeout" : ok ? "completed" : `HTTP ${c.status}`}
-              </span>
-            </li>
-          );
-        })}
-      </ol>
-    </section>
-  );
-}
-
-const TONE_TEXT: Record<Tone, string> = {
-  ok: "text-emerald-400",
-  diff: "text-amber-300",
-  error: "text-rose-300",
-  off: "text-slate-400",
-};
-
-function ReconcileRow({ a, checkedAt }: { a: ReconcileAccount; checkedAt: number }) {
-  const v = verdict(a);
-  const read = a.status === "reconciled" || a.status === "difference";
-  return (
-    <li className="rounded-xl bg-slate-800/50 p-4">
-      <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-        <span className="text-xl font-semibold text-white">{a.label}</span>
-        <span className={`text-xl font-bold ${TONE_TEXT[v.tone]}`}>{v.text}</span>
-        {read && (
-          <span className="ml-auto font-mono text-lg tabular-nums text-slate-300">
-            ledger expects {dollars(a.expected_cents!)} · Nessie has {dollars(a.nessie_cents!)}
-          </span>
-        )}
-      </div>
-      {a.error && <p className={`mt-1 text-base ${a.status === "error" ? "text-rose-300" : "text-slate-400"}`}>{a.error}</p>}
-      {(a.by_kind ?? []).map((k) => {
-        const { shown, more } = itemsOf(a, k.kind);
-        return (
-          <div key={k.kind} className="mt-2">
-            <div className="text-lg">
-              <span className="font-semibold text-amber-200">{k.label}</span>{" "}
-              <span className="font-mono tabular-nums text-slate-100">{signedDollars(k.cents)}</span>
-              {k.count > 1 && <span className="text-slate-400"> · {k.count} transactions</span>}
-            </div>
-            <ul className="ml-4 list-disc text-base text-slate-300">
-              {shown.map((i, n) => (
-                <li key={`${i.txn_id}-${n}`} className="break-words">
-                  {i.text}
-                </li>
-              ))}
-              {more > 0 && <li className="text-slate-500">and {more} more</li>}
-            </ul>
-          </div>
-        );
-      })}
-      {a.simulated && <p className="mt-2 text-base text-slate-400">{simulatedNote(a.simulated)}</p>}
-      {a.opening && <p className="mt-1 text-sm text-slate-500">{openingNote(a.opening)}</p>}
-      {a.fetched_at !== undefined && a.fetched_at < checkedAt - 1 && (
-        <p className="text-sm text-slate-500">Nessie records as read at {clockTime(a.fetched_at)} (cached ≤ 10 s)</p>
-      )}
-    </li>
-  );
-}
-
-function ReconcilePanel() {
+// GET /v1/accounts/reconcile, re-run (debounced) when money moves; one check at a time.
+function useReconcile(): ReconcileState {
   const [result, setResult] = useState<Reconciliation | null>(null);
   const [lastOk, setLastOk] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -194,70 +83,221 @@ function ReconcilePanel() {
     timer.current = setTimeout(run, 1500);
   });
 
-  const s = result ? summary(result) : null;
-  const down = result ? unreachable({ ...result, last_ok_at: result.last_ok_at ?? lastOk }, clockTime) : null;
-  const pairs = result && result.nessie.enabled ? pairsLine(result.pairs) : null;
+  return { result, lastOk, error, busy, run };
+}
+
+/** The reconcile part of a status line: the count, or why there is none. */
+function ReconcileStatus({ rec }: { rec: ReconcileState }) {
+  if (rec.error) {
+    return (
+      <StatusItem tone="danger">
+        Can't reach the server: {rec.error}
+        {rec.lastOk !== null && ` Last successful check: ${clockTime(rec.lastOk)}.`}
+      </StatusItem>
+    );
+  }
+  if (!rec.result) return <span className="text-secondary">Checking with Nessie…</span>;
+  const line = reconciledLine(rec.result);
+  return <StatusItem tone={TONE[line.tone]}>{line.text}</StatusItem>;
+}
+
+function StatusLine({ children }: { children: ReactNode }) {
+  return <div className="mb-6 flex flex-wrap items-center gap-x-6 gap-y-2">{children}</div>;
+}
+
+function BalanceRow({ card, rec }: { card: AccountCard; rec: ReconcileAccount | undefined }) {
+  const value = card.nessie_cents;
+  const previous = useRef<number | null>(value);
+  const [delta, setDelta] = useState<number | null>(null);
+
+  // Animate a change (spec §18.2): the difference shows beside the balance for a moment.
+  useEffect(() => {
+    if (value !== null && previous.current !== null && value !== previous.current) {
+      setDelta(value - previous.current);
+      const t = setTimeout(() => setDelta(null), 2500);
+      previous.current = value;
+      return () => clearTimeout(t);
+    }
+    previous.current = value;
+  }, [value]);
+
+  const { account, owner } = accountAndOwner(card);
+  const pill = rec ? bankPill(rec) : null;
+  // An account row in the bank style: who and which account, what the bank says, the balance big on the right.
   return (
-    <section className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0 flex-1">
-          <h2 className="text-2xl font-semibold text-white">Reconciled with Capital One Nessie</h2>
-          <p className="text-base text-slate-400">
-            Our double-entry ledger against Nessie's own records (opening balance + completed deposits − completed
-            withdrawals), matched by the SC txn id in every Nessie description.
-          </p>
-        </div>
-        <button
-          onClick={run}
-          disabled={busy}
-          className="rounded-lg bg-sky-600 px-4 py-2 text-lg font-semibold text-white hover:bg-sky-500 disabled:opacity-60"
-        >
-          {busy ? "Checking…" : "Re-check"}
-        </button>
-      </div>
-      {error && (
-        <p className="mt-3 text-lg text-rose-300">
-          Can't reach the server: {error}
-          {lastOk !== null && ` Last successful check: ${clockTime(lastOk)}.`}
-        </p>
-      )}
-      {!result && !error && <p className="mt-3 text-lg text-slate-300">Checking…</p>}
-      {result && s && (
-        <>
-          <div className="mt-3 flex flex-wrap items-baseline gap-x-4">
-            <span className={`text-3xl font-bold ${TONE_TEXT[s.tone]}`}>{s.text}</span>
-            <span className="text-base text-slate-400">last ran {clockTime(result.checked_at)}</span>
-          </div>
-          {down && <p className="mt-2 rounded-lg bg-rose-500/10 p-3 text-lg text-rose-200">{down}</p>}
-          <ul className="mt-4 space-y-3">
-            {result.accounts.map((a) => (
-              <ReconcileRow key={a.key} a={a} checkedAt={result.checked_at} />
-            ))}
-          </ul>
-          {pairs && (
-            <div className="mt-4">
-              <div className={`text-lg font-semibold ${TONE_TEXT[pairs.tone]}`}>{pairs.text}</div>
-              <ul className="ml-4 list-disc text-base text-slate-300">
-                {result.pairs.problems.slice(0, 5).map((p) => (
-                  <li key={p.txn_id} className="break-words">
-                    {p.text}
-                  </li>
-                ))}
-                {result.pairs.problems_total > 5 && (
-                  <li className="text-slate-500">and {result.pairs.problems_total - 5} more</li>
-                )}
-              </ul>
-            </div>
+    <li className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-b border-rule py-4">
+      <div className="min-w-0">
+        <div className="text-[17px] font-semibold text-heading">{owner} · {account}</div>
+        <div className="mt-1 flex flex-wrap items-center gap-2 text-th text-secondary">
+          {pill ? (
+            <Pill tone={TONE[pill.tone]} title={rec?.error ?? undefined}>
+              {pill.tone === "ok" ? "Matches the bank" : pill.text}
+            </Pill>
+          ) : (
+            <span>Checking with the bank…</span>
           )}
-          <p className="mt-3 text-base text-slate-400">
-            {result.simulated_town.label}: {dollars(result.simulated_town.merchant_cents)} at{" "}
-            {result.simulated_town.merchants} simulated shops, not a difference.
-          </p>
-        </>
-      )}
-    </section>
+          {value !== null && <span>from Nessie transactions</span>}
+        </div>
+      </div>
+      <div className="flex items-center gap-3">
+        {delta !== null && <Pill tone={delta > 0 ? "success" : "danger"}>{signedDollars(delta)}</Pill>}
+        {value !== null ? (
+          <span className="text-[28px] leading-9 font-light tabular-nums text-ink">{dollars(value)}</span>
+        ) : (
+          <span className="text-secondary" title={card.nessie_error ?? undefined}>
+            {card.nessie_account_id ? "Nessie unavailable" : "No Nessie account"}
+          </span>
+        )}
+      </div>
+    </li>
   );
 }
+
+/** "Show setup calls": opening accounts and creating customers, hidden by default. */
+function SetupToggle({ on, set, hidden }: { on: boolean; set: (v: boolean) => void; hidden: number }) {
+  return (
+    <label className="flex items-center gap-2 text-th text-ink">
+      <input type="checkbox" checked={on} onChange={(e) => set(e.target.checked)} className="h-4 w-4 accent-accent" />
+      Show setup calls{!on && hidden > 0 ? ` (${hidden} hidden)` : ""}
+    </label>
+  );
+}
+
+/** Recent money movements as bank-statement rows: what happened, when and its status, the amount on the right. */
+function ActivityList({ calls }: { calls: NessieCall[] }) {
+  if (calls.length === 0) return <p className="py-3 text-secondary">No Nessie calls yet.</p>;
+  return (
+    <ul>
+      {calls.map((c) => {
+        const { description, cents } = callLine(c);
+        const status = callStatus(c.status);
+        return (
+          <li key={c.call_id} className="flex items-center justify-between gap-6 border-b border-rule py-3.5">
+            <div className="min-w-0">
+              <div className="break-words text-ink">{description}</div>
+              <div className="mt-1 flex items-center gap-2 text-th text-secondary">
+                <span className="tabular-nums">{clockTime(c.created_at)}</span>
+                <Pill tone={status.ok ? "success" : "danger"}>{status.text}</Pill>
+              </div>
+            </div>
+            {cents !== null && <span className="text-[22px] font-light tabular-nums text-ink">{dollars(cents)}</span>}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function CallTable({ calls, header = false }: { calls: NessieCall[]; header?: boolean }) {
+  if (calls.length === 0) return <p className="py-3 text-secondary">No Nessie calls yet.</p>;
+  return (
+    <Table>
+      {header && (
+        <thead>
+          <tr>
+            <Th className="w-32">Time</Th>
+            <Th>Description</Th>
+            <Th num>Amount</Th>
+            <Th className="w-32">Status</Th>
+          </tr>
+        </thead>
+      )}
+      <tbody>
+        {calls.map((c) => {
+          const { description, cents } = callLine(c);
+          const status = callStatus(c.status);
+          return (
+            <tr key={c.call_id}>
+              <Td className="w-32 whitespace-nowrap tabular-nums text-secondary">{clockTime(c.created_at)}</Td>
+              <Td className="break-words">{description}</Td>
+              <Td num className="font-medium text-heading">
+                {cents !== null ? dollars(cents) : ""}
+              </Td>
+              <Td className="w-32">
+                <Pill tone={status.ok ? "success" : "danger"}>{status.text}</Pill>
+              </Td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </Table>
+  );
+}
+
+function Balances({ snap, rec, calls, setup, setSetup }: {
+  snap: AccountsSnapshot;
+  rec: ReconcileState;
+  calls: NessieCall[];
+  setup: boolean;
+  setSetup: (v: boolean) => void;
+}) {
+  const shown = setup ? calls : calls.filter(isMoneyMove);
+  const byKey = new Map((rec.result?.accounts ?? []).map((a) => [a.key, a]));
+  const { ledger, nessie, simulated_town: town } = snap;
+  return (
+    <>
+      <StatusLine>
+        {ledger.balanced ? (
+          <StatusItem tone="success">Ledger balanced</StatusItem>
+        ) : (
+          <StatusItem tone="danger">Ledger unbalanced: {ledger.unbalanced_txns} transactions</StatusItem>
+        )}
+        <ReconcileStatus rec={rec} />
+        {nessie.queued > 0 && <StatusItem tone="warning">Payouts waiting for Nessie: {nessie.queued}</StatusItem>}
+        {rec.result && <span className="text-secondary">Checked {clockTime(rec.result.checked_at)}</span>}
+      </StatusLine>
+      <ul className="border-t border-rule">
+        {snap.accounts.map((card) => (
+          <BalanceRow key={card.key} card={card} rec={byKey.get(card.key)} />
+        ))}
+      </ul>
+      {town.merchants > 0 && (
+        <p className="mt-4 text-secondary">Simulated town: {town.merchants} shops, ledger only, never sent to Nessie</p>
+      )}
+      <div className="mt-10">
+        <Section title="Recent Nessie activity" right={<SetupToggle on={setup} set={setSetup} hidden={calls.length - shown.length} />}>
+          <ActivityList calls={shown.slice(0, LATEST_CALLS)} />
+        </Section>
+      </div>
+    </>
+  );
+}
+
+function ReconcileDetails({ a, checkedAt }: { a: ReconcileAccount; checkedAt: number }) {
+  return (
+    <div className="space-y-2 text-secondary">
+      {a.error && <p className={a.status === "error" ? "text-danger" : undefined}>{a.error}</p>}
+      {(a.by_kind ?? []).map((k) => {
+        const { shown, more } = itemsOf(a, k.kind);
+        return (
+          <div key={k.kind}>
+            <div className="text-ink">
+              <span className="font-medium">{k.label}</span>{" "}
+              <span className="tabular-nums">{signedDollars(k.cents)}</span>
+              {k.count > 1 && <span className="text-secondary"> · {k.count} transactions</span>}
+            </div>
+            <ul className="ml-5 list-disc">
+              {shown.map((i, n) => (
+                <li key={`${i.txn_id}-${n}`} className="break-words">
+                  {i.text}
+                </li>
+              ))}
+              {more > 0 && <li>and {more} more</li>}
+            </ul>
+          </div>
+        );
+      })}
+      {a.simulated && <p>{simulatedNote(a.simulated)}</p>}
+      {a.opening && <p>{openingNote(a.opening)}</p>}
+      {a.fetched_at !== undefined && a.fetched_at < checkedAt - 1 && (
+        <p>Nessie records as read at {clockTime(a.fetched_at)} (cached ≤ 10 s)</p>
+      )}
+    </div>
+  );
+}
+
+const hasDetails = (a: ReconcileAccount) =>
+  !!(a.error || a.by_kind?.length || a.simulated || a.opening || a.fetched_at !== undefined);
 
 const TOTAL_LABELS: Record<string, string> = {
   checking: "Checking",
@@ -268,48 +308,158 @@ const TOTAL_LABELS: Record<string, string> = {
   pool_recoveries: "Pool recoveries",
 };
 
-function LedgerPanel({ snap }: { snap: AccountsSnapshot }) {
-  const { ledger, nessie, simulated_town: town } = snap;
+function ReconciliationView({ snap, rec }: { snap: AccountsSnapshot; rec: ReconcileState }) {
+  const r = rec.result;
+  const down = r ? unreachable({ ...r, last_ok_at: r.last_ok_at ?? rec.lastOk }, clockTime) : null;
+  const pairs = r && r.nessie.enabled ? pairsLine(r.pairs) : null;
+  const { ledger } = snap;
   return (
-    <section className="space-y-4">
-      <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
-        <div className={`text-3xl font-bold ${ledger.balanced ? "text-emerald-400" : "text-rose-400"}`}>
-          {ledger.balanced ? "Ledger balanced ✓" : `Ledger unbalanced: ${ledger.unbalanced_txns} transactions`}
-        </div>
-        <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-lg">
-          {Object.entries(ledger.totals).map(([k, v]) => (
-            <div key={k} className="contents">
-              <dt className="text-slate-400">{TOTAL_LABELS[k] ?? k}</dt>
-              <dd className="text-right font-mono tabular-nums text-slate-100">{signedDollars(v)}</dd>
+    <>
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+        <p className="max-w-3xl text-secondary">
+          Our double-entry ledger against Nessie's own records (opening balance + completed deposits − completed
+          withdrawals), matched by the StormCash transaction id written into every Nessie description.
+        </p>
+        <Button primary onClick={rec.run} disabled={rec.busy}>
+          {rec.busy ? "Checking…" : "Re-check"}
+        </Button>
+      </div>
+      <StatusLine>
+        <ReconcileStatus rec={rec} />
+        {r && <span className="text-secondary">Checked {clockTime(r.checked_at)}</span>}
+      </StatusLine>
+      {down && <p className="-mt-3 mb-6 text-danger">{down}</p>}
+      {r && (
+        <>
+          <Table>
+            <thead>
+              <tr>
+                <Th>Account</Th>
+                <Th>Owner</Th>
+                <Th num>Ledger expects</Th>
+                <Th num>Nessie has</Th>
+                <Th>Bank</Th>
+              </tr>
+            </thead>
+            {r.accounts.map((a) => {
+              const { account, owner } = accountAndOwner(a);
+              const read = a.status === "reconciled" || a.status === "difference";
+              const pill = bankPill(a);
+              const details = hasDetails(a);
+              return (
+                <tbody key={a.key}>
+                  <tr>
+                    <Td rule={!details} className="font-medium text-heading">
+                      {account}
+                    </Td>
+                    <Td rule={!details}>{owner}</Td>
+                    <Td rule={!details} num>
+                      {read ? dollars(a.expected_cents!) : <span className="text-secondary">—</span>}
+                    </Td>
+                    <Td rule={!details} num>
+                      {read ? dollars(a.nessie_cents!) : <span className="text-secondary">—</span>}
+                    </Td>
+                    <Td rule={!details}>
+                      <Pill tone={TONE[pill.tone]}>{pill.text}</Pill>
+                    </Td>
+                  </tr>
+                  {details && (
+                    <tr>
+                      <Td colSpan={5} className="pt-0">
+                        <ReconcileDetails a={a} checkedAt={r.checked_at} />
+                      </Td>
+                    </tr>
+                  )}
+                </tbody>
+              );
+            })}
+          </Table>
+          {pairs && (
+            <div className="mt-6">
+              <StatusItem tone={TONE[pairs.tone]}>{pairs.text}</StatusItem>
+              {r.pairs.problems.length > 0 && (
+                <ul className="mt-2 ml-6 list-disc text-secondary">
+                  {r.pairs.problems.slice(0, 5).map((p) => (
+                    <li key={p.txn_id} className="break-words">
+                      {p.text}
+                    </li>
+                  ))}
+                  {r.pairs.problems_total > 5 && <li>and {r.pairs.problems_total - 5} more</li>}
+                </ul>
+              )}
             </div>
-          ))}
-        </dl>
+          )}
+          <p className="mt-4 text-secondary">
+            {r.simulated_town.label}: {dollars(r.simulated_town.merchant_cents)} at {r.simulated_town.merchants}{" "}
+            simulated shops, not a difference.
+          </p>
+        </>
+      )}
+      <div className="mt-10">
+        <Section title="Ledger">
+          <StatusLine>
+            {ledger.balanced ? (
+              <StatusItem tone="success">Ledger balanced</StatusItem>
+            ) : (
+              <StatusItem tone="danger">Ledger unbalanced: {ledger.unbalanced_txns} transactions</StatusItem>
+            )}
+          </StatusLine>
+          <Table>
+            <thead>
+              <tr>
+                <Th>Account type</Th>
+                <Th num>Total</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {Object.entries(ledger.totals).map(([k, v]) => (
+                <tr key={k}>
+                  <Td>{TOTAL_LABELS[k] ?? k}</Td>
+                  <Td num className="font-medium text-heading">
+                    {signedDollars(v)}
+                  </Td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        </Section>
       </div>
-      <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
-        <div className="text-lg text-slate-300">Nessie queued</div>
-        <div className={`font-mono text-4xl font-bold ${nessie.queued ? "text-amber-300" : "text-slate-100"}`}>
-          {nessie.queued}
-        </div>
-        <div className="text-sm text-slate-400">
-          {nessie.enabled ? "payouts waiting for Nessie; retried every 10 s" : "Nessie is switched off: ledger only"}
-        </div>
-      </div>
-      <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-900/60 p-5">
-        <div className="text-lg text-slate-300">{town.label}</div>
-        <div className="font-mono text-3xl font-bold text-slate-100">{dollars(town.merchant_cents)}</div>
-        <div className="text-sm text-slate-400">
-          paid to {town.merchants} simulated merchants · escrow {dollars(town.escrow_cents)}
-        </div>
-      </div>
-    </section>
+    </>
+  );
+}
+
+function NessieLog({ snap, calls, setup, setSetup }: {
+  snap: AccountsSnapshot;
+  calls: NessieCall[];
+  setup: boolean;
+  setSetup: (v: boolean) => void;
+}) {
+  const { nessie } = snap;
+  const shown = setup ? calls : calls.filter(isMoneyMove);
+  return (
+    <>
+      <StatusLine>
+        {nessie.enabled ? (
+          <StatusItem tone={nessie.queued ? "warning" : "success"}>Payouts waiting for Nessie: {nessie.queued}</StatusItem>
+        ) : (
+          <StatusItem tone="neutral">Nessie is switched off: ledger only</StatusItem>
+        )}
+        {nessie.enabled && <span className="text-secondary">retried every 10 seconds</span>}
+        <span className="ml-auto"><SetupToggle on={setup} set={setSetup} hidden={calls.length - shown.length} /></span>
+      </StatusLine>
+      <CallTable calls={shown} header />
+    </>
   );
 }
 
 export function AccountsTab() {
+  const [view, setView] = useState<View>("balances");
+  const [setup, setSetup] = useState(false); // account setup calls (open account, create customer) hidden by default
   const [snap, setSnap] = useState<AccountsSnapshot | null>(null);
   const [calls, setCalls] = useState<NessieCall[]>([]);
   const [error, setError] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rec = useReconcile();
 
   const load = useCallback(() => {
     getJSON<AccountsSnapshot>("/v1/accounts")
@@ -337,21 +487,21 @@ export function AccountsTab() {
   });
   useEvents(["accounts", "payment", "upload"], refresh);
 
-  if (!snap) {
-    return <p className="p-8 text-xl text-slate-300">{error ? `Can't reach the server: ${error}` : "Loading…"}</p>;
-  }
   return (
-    <div className="grid gap-6 p-6 xl:grid-cols-[2fr_1fr]">
-      <div className="space-y-6">
-        <div className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-3">
-          {snap.accounts.map((card) => (
-            <BalanceCard key={card.key} card={card} />
-          ))}
-        </div>
-        <ReconcilePanel />
-        <NessieLog calls={calls} />
-      </div>
-      <LedgerPanel snap={snap} />
+    <div className="pb-12">
+      <PageHeader title="Accounts" subtitle="Balances from Capital One Nessie transactions"
+        takeaway={rec.result ? accountsTakeaway(rec.result) : undefined}>
+        <Tabs tabs={VIEWS} value={view} onChange={setView} />
+      </PageHeader>
+      {!snap ? (
+        <p className={error ? "text-danger" : "text-secondary"}>{error ? `Can't reach the server: ${error}` : "Loading…"}</p>
+      ) : view === "balances" ? (
+        <Balances snap={snap} rec={rec} calls={calls} setup={setup} setSetup={setSetup} />
+      ) : view === "reconciliation" ? (
+        <ReconciliationView snap={snap} rec={rec} />
+      ) : (
+        <NessieLog snap={snap} calls={calls} setup={setup} setSetup={setSetup} />
+      )}
     </div>
   );
 }

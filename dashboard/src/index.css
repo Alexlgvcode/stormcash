@@ -1,23 +1,56 @@
 @import "tailwindcss";
 
-/* Intro slide fade-in; used through motion-safe: so reduced motion skips it. */
+/* Design tokens (issue #93): the bank style of Alex's "Capital One" mockup. A
+   white page, deep navy headlines in a light weight, bank blue for links and the
+   one primary action, a soft blue tint, pill buttons, chips and segmented tabs,
+   and account rows with big balances. No logo or brand red. Sizes stay large for
+   judges about 1 m away (§18); secondary text is never lighter than #545969. */
 @theme {
-  --animate-intro-in: intro-in 0.6s ease-out both;
+  --font-sans: "Nunito Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 
-  @keyframes intro-in {
-    from {
-      opacity: 0;
-      transform: translateY(0.75rem);
-    }
-  }
+  --color-page: #ffffff;
+  --color-rule: #e5e5e5;
+  --color-ink: #2a2a2a;
+  --color-heading: #0b3b5c;
+  --color-secondary: #545969;
+  --color-nav: #545969;
+  --color-muted: #545969;
+  --color-accent: #0b5d8c;
+  --color-accent-tint: #e6f0f6;
+
+  --color-success: #1e6b35;
+  --color-success-bg: #e3f4e8;
+  --color-danger: #b0261b;
+  --color-danger-bg: #fbe7e5;
+  --color-danger-tint: #fdf3f2; /* a conflicting row in a table */
+  --color-warning: #9a5300;
+  --color-warning-bg: #fff2de;
+  --color-neutral: #545969;
+  --color-neutral-bg: #eeeeee;
+
+  --text-eyebrow: 13px;
+  --text-eyebrow--line-height: 18px;
+  --text-eyebrow--letter-spacing: 0.06em;
+  --text-th: 13px;
+  --text-th--line-height: 18px;
+  --text-ui: 15px;
+  --text-ui--line-height: 22px;
+  --text-section: 20px;
+  --text-section--line-height: 28px;
+  --text-title: 38px;
+  --text-title--line-height: 44px;
+
+  --radius-pill: 999px;
+  --radius-button: 999px;
 }
 
 :root {
-  color-scheme: dark;
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: light;
 }
 
 body {
   margin: 0;
-  background: #020617;
+  background: var(--color-page);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
 }

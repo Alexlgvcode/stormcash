@@ -24,6 +24,7 @@
 > **v4.20 (Oct 17):** the public proof page checks each proof a second time with our C++ verifier (`cpp/verify`) compiled to WebAssembly, next to WebCrypto; the two implementations share no code (§18.6). Marked **[v4.20]**.
 > **v4.21 (Oct 17):** a shop's appeal by text is one conversation (§17.2): each appeal thread (shop + flag) keeps one Droid session, resumed with `Session.resume` for every new text, with the same read-only tools, permission handler and citation check on every turn; a session that can't be resumed is replaced by a new one seeded with the thread from `messages`. `STORMDESK_APPEAL_SESSIONS` (§6.3, §12.1, §14.7c, §18.7, §22.4). No migration: each turn's run stores its session, turn and thread. Marked **[v4.21]**.
 > **v4.22 (Oct 17):** Droid proposes a new deterministic detector as a pull request (§14.7d): it writes a pure detector and its test in a throwaway worktree, under a permission handler and two macOS sandbox profiles; our server re-runs the tests and an evaluation on the simulator's labelled candidates and rejects any mismatch; then deterministic code opens a PR labelled for a person and never merges it. `STORMDESK_AUTHOR`, `POST /v1/stormdesk/author-detector`, `stormdesk_runs.job = 'author'`, `server/stormcash/detectors_proposed/` (§6.3, §11.1, §12.1, §14.1, §18.5, §18.7, §22.4). Migration `007_stormdesk_author.sql`. Marked **[v4.22]**.
+> **v4.23 (Oct 17):** dashboard redesign (#93, §18): one bank style for every tab and the proof page, after Alex's "Capital One" mockup (a top navigation bar, light deep-navy headlines, bank blue for links and the primary action, pill buttons, chips and segmented tabs, account rows with big balances, Nunito Sans bundled with the build; no logo or brand red), and no intro screen (the dashboard opens on Accounts). Each tab splits into views: Accounts (Balances, Reconciliation, Nessie log), Cases (Proven fraud, Review queue, Owner freezes), Town (Map, Relay paths, What-if), Evals (Held-out towns, Main dataset, Runs), Droid (Runs, Guardrails, Detector proposals). Every feature is kept. A readability pass: plain words instead of internal names (signals, jobs, rules, tools, the rules-only "stand-in"), times as "4:34 PM", secondary text no lighter than #545969 and never under 13 px, a one-line takeaway from real data atop each tab, account-setup Nessie calls behind "Show setup calls", proven cases from your phones before the simulated town's, and raw hashes under "Technical details". Marked **[v4.23]**.
 > **Builds on:** "StormCash: The 10/10 Build" v3 (Oct 16, Alexandre Lugovoi, on Brian Maina's Oct 11 draft). Everything new since v3 is marked **[v4]**.
 
 ---
@@ -1095,7 +1096,7 @@ All JSON. Byte fields base64url. Prefix `/v1`. Auth for demo: none on reads; res
 | `GET /v1/accounts/reconcile` **[v4.17]** | | the ledger against Nessie's own records per real account, with every difference explained by txn and every `SC` pair checked (§11.4a) | WS2 |
 | `GET /v1/health` **[v4.3]** | | `{ok, time, demo_mode, nessie_enabled, api_sig_required, server_pub}` for the header and phones | WS2 |
 | `GET /v1/nessie/log` | `?limit=50` | rows of `nessie_calls` | WS2 |
-| `GET /v1/cases` / `GET /v1/cases/{id}` | | case with both tags, the cert, the rule, evidence, case file | WS2 |
+| `GET /v1/cases` / `GET /v1/cases/{id}` | | case with both tags, the cert, the rule, evidence, case file. **[v4.23]** The list also gives each case `simulated` (its wallet's resident or a shop is simulated), `merchant`, and `payment_a` / `payment_b` `{counter, amount_cents, status, merchant, simulated}`, read-only, for the dashboard's plain titles | WS2 |
 | `GET /v1/proof/{case_id}` | | everything the public verify page needs: cert (+server sig), tag A, tag B, holder_pub, rule. **[v4.3]** Each object comes with its `canonical` string so a browser can verify it with WebCrypto ECDSA P-256/SHA-256 over the UTF-8 bytes | WS2 |
 | `GET /v1/flags` / `GET /v1/flags/{id}` | | flag + candidate features + agent transcript | WS5 |
 | `POST /v1/flags/{id}/approve` / `reject` | `{note}` | executes actions (§14.6), returns approval. **[v4.3]** `X-SC-Operator` names the operator; `GET /v1/flags/{id}/approvals` lists decisions | WS5 |
@@ -1717,6 +1718,8 @@ React + Vite + TS, one page with four tabs and a persistent header. Live via SSE
 
 Title, "Demo mode", connection dot, **Reset demo** button (calls `/v1/demo/reset`, < 30 s), clock.
 
+**[v4.23] As built (#93).** The header is a top navigation bar: "StormCash", the tabs (Accounts, Cases, Town, Droid, Evals), and on the right "Demo mode", "Nessie off: ledger only" when it is, the connection dot, the clock and Reset demo. Each tab opens with its title and a grey subtitle. The intro screen (#91) is gone: no Intro item, no `#intro` link, no I shortcut; the dashboard opens on Accounts. Design tokens (navy #0B3B5C, bank blue #0B5D8C, blue tint #E6F0F6, rules #E5E5E5, chips) live in `dashboard/src/index.css`; the shared pieces (page header, tabs, section, table, pill, button) in `dashboard/src/components/ui.tsx`.
+
 ### 18.2 Accounts tab (Capital One add-on)
 
 - Cards: Maya Checking, Maya Escrow, Pharmacy, Gas Station, Guarantee Pool (Nessie), plus a "Simulated town (ledger only)" totals card. Live Nessie balances, labeled "from Nessie transactions" (§11.4); animate on change.
@@ -1724,6 +1727,8 @@ Title, "Demo mode", connection dot, **Reset demo** button (calls `/v1/demo/reset
 - Ledger panel: "Ledger balanced ✓", totals per account type.
 - Queued Nessie payouts counter (fallback visible).
 - **[v4.17]** "Reconciled with Capital One Nessie" panel (§11.4a): per account ✓ or the difference with its explanation, how each side represents the opening, simulated money as "ledger only, never sent to Nessie", the `SC` pair check, when it last ran, and a Re-check button. It re-runs (debounced) on `accounts`, `payment`, `upload` and `nessie_call` SSE events. If Nessie can't be read it says so and shows the last successful check's time.
+
+- **[v4.23] As built (#93).** Three views. **Balances**: one status line ("Ledger balanced", "Reconciled with Nessie, n of n accounts", "Nessie queued: n" when payouts wait, the check's time), a table Account | Owner | Balance | Bank (owner per §11.4's account mapping; Bank is "Matches" or the difference with its reasons from the reconciliation), "Simulated town: n shops, ledger only, never sent to Nessie", and the latest Nessie calls (time, description, amount, status). **Reconciliation**: the full panel above as a table, with the pair check, the simulated-town line and the ledger totals per account type. **Nessie log**: "Nessie queued: n" and every logged call.
 
 ### 18.3 Cases tab (Digital Trust + Factory add-ons)
 
@@ -1734,12 +1739,16 @@ Title, "Demo mode", connection dot, **Reset demo** button (calls `/v1/demo/reset
 - **[v4.3] As built.** The Cases tab switches between *Hard cases* and *StormDesk flags*. A flag shows its subject, summary, exposure, reasoning, evidence ids (marked as checked), the tool calls (live from `stormdesk_step`, or a stored run replayed step by step, labelled "Replay of run at …"), Run again, Approve / Reject with the operator's name, and the Photon thread live from `message` events. Each hard case has a StormDesk section (Investigate, live steps, replay). Fake-runner output carries a "Fake runner · rules only" badge everywhere.
 - "Merchant knew" case view: the merchant's ACCEPT entry listing the conflicting tag, with its signature.
 
+- **[v4.23] As built (#93).** Three views. **Proven fraud**: the case list, then the selected case: "CASE #n", the amount and what happened to it, a status pill, Proof QR and Verify it yourself, a summary strip (rule, where it was detected, exposure, certificate), the two tags as one table with the conflicting row tinted, the merchant-knew log, a Timeline and Payment details (from the case, its certificate and the payments' relay paths, matched by tag id), StormDesk and the case file. **Review queue**: a table of flags (subject, signal, exposure, second opinion, status), then the selected flag's proposal with Approve / Reject and the operator's name, evidence and agent steps side by side, the second opinion and the Photon thread. **Owner freezes**: the FREEZE-by-text list and the resident's thread.
+
 ### 18.4 Town tab
 
 - SVG grid map: regions (shaded), merchants (dots; real ones larger and labeled; simulated ones labeled "simulated" in a legend), live payment pulses, relay uploads, region alert badges (labeled live/replayed), dark regions hatched.
 - Relay path panel: recent payments with hop paths.
 - Sliders (§16.6) + charts: share refused offline, caught at settlement, loss per cheater, time to settlement.
 - **[v4.3]** `GET /v1/town` also returns `dark_regions` (a `region_dark` candidate in the last 6 h), active alerts with their source, and the latest simulator `stats.json` for a one-line summary. Payment pulses come from `payment` SSE events; merchants without pool eligibility are drawn amber.
+
+- **[v4.23] As built (#93).** Three views: **Map** (a summary strip from the seeded town's `stats.json`, labelled simulated, then the map in light colors and a few recent relay paths), **Relay paths** and **What-if** (the sliders and the default-vs-yours table). The 6-hour window for dark areas and alerts is measured on the town's clock, its latest simulated payment (else the latest payment), so a real phone paying now doesn't hide the seeded town's.
 
 ### 18.5 Evals tab (Chalk add-on)
 
@@ -1750,6 +1759,8 @@ Title, "Demo mode", connection dot, **Reset demo** button (calls `/v1/demo/reset
 
 - **[v4.22]** "Ask Droid to write a detector" (§14.7d) under the eval sections: the gap from the stored StormDesk runs (dark regions caught on dev and held-out rows) and the dev rows Droid is shown, the operator's name, the button (off with the reasons when the server can't run it), the live tool calls (`StepList`), then a result card: the verdict, the Droid badge with model and credits, the PR link, the rationale, our re-run's metrics table, each check ✓/✗, Droid's caveats, what the sandbox refused, the code Droid wrote and the replayable steps.
 
+- **[v4.23] As built (#93).** Three views, held-out towns first: **Held-out towns** (a strip with seeds, cases, model and Chalk run, the comparison, the scenarios, both runs, then "Ask Droid to write a detector"), **Main dataset** (the same, plus the trap cases and the planted subjects not in the dataset) and **Runs** (every saved run that isn't scored, with its reason, and Reload results).
+
 ### 18.6 Public proof page `/proof/:caseId`
 
 Mobile-friendly, no login. Shows the two tags, the rule, and a **Verify** button that runs WebCrypto ECDSA verification in the judge's browser against the holder key and the server-signed certificate. Explains in two sentences why this proves cheating.
@@ -1759,6 +1770,8 @@ Mobile-friendly, no login. Shows the two tags, the rule, and a **Verify** button
 **[v4.20] Second check: the C++ verifier, as WebAssembly.** Each press of **Verify** also runs `stormcash-verify`'s proof check (`cpp/verify`, the code behind `stormcash-verify proof`) in the browser, on the same `/v1/proof` JSON and with the same server key. It shares no code with the WebCrypto check: it decodes the transport JSON with its own strict codec, rebuilds every canonical string and digest, re-derives the rule, and uses its own P-256 (p256-m) and SHA-256 instead of the browser's. WebCrypto stays the primary result, exactly as before. The C++ verdict is shown under it, then one line: **"Verified by 2 independent implementations"** when both verify, **"Neither implementation verified this proof"** when neither does, and **"The two implementations disagree"** otherwise, never hidden. If WebAssembly can't load, or the C++ side can't read the file, the card says **"C++ check unavailable"** and the WebCrypto result stands alone. The module is built from `cpp/verify/wasm/` with Emscripten 6.0.10 and committed as `dashboard/src/wasm/` (518 KB, 163 KB gzipped), loaded only by the proof page. CI's `wasm` job rebuilds it and fails unless it equals the committed files byte for byte; `npm test` runs both checks on proofs captured from the server and on tampered copies. The C++ verifier passes all 124 vectors and Project Wycheproof's P-256 tests with both its crypto backends (OpenSSL natively, p256-m in the browser).
 
 **Done when:** the full core demo runs with only dashboard clicks + phones, and every tab survives a page reload.
+
+**[v4.23] As built (#93).** Light and phone-first: the rule and why, one full-width Verify button, then "Checked on your phone" with a row per implementation (WebCrypto first) and the agreement line, the browser's checks, the C++ verifier's answer, and the two tags as one table with the conflicting row tinted.
 
 ### 18.7 Droid tab (Factory add-on) [v4.16]
 
@@ -1774,6 +1787,8 @@ What Droid does in the running product, at the table in seconds, from stored run
 - **[v4.22] Author runs (§14.7d):** job `author`, subject "detector for <kind>", verdict "<name>: PR #N opened" / "re-run matched" / "rejected by the re-run", outcome `rerun_rejected` ("Re-run rejected") when our re-run didn't match, and a guardrail "Proposed detectors rejected by the re-run". Their tool calls (sandbox reads, Create/Edit, `run_tests`, `run_eval`) count "in the sandbox", not read-only, and never as built-ins "still seen". The harness says `author_on`.
 
 The tab (`#droid`): summary tiles, Droid's runs (fake-runner runs behind a toggle, badged), a run view with its tool calls replayed step by step (the Cases tab's `StepList`), the guardrail events with links to their runs, totals per job, and runs in progress live from `stormdesk_step`. Empty state: "No StormDesk runs yet."
+
+**[v4.23] As built (#93).** Three views under a summary strip (Droid runs, valid outputs, credits, mean time, invalid citations, write tools) and the harness line: **Runs** (live runs, the runs table and the selected run's facts and steps), **Guardrails** (each guardrail with its runs, and totals per job) and **Detector proposals** (the author runs and "Ask Droid to write a detector").
 
 ---
 

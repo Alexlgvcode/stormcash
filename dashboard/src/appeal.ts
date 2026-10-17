@@ -69,7 +69,7 @@ export function sessionSummary(turns: AppealTurn[]): string | null {
 
 /** Who answered a message, in a few words: the Droid session and turn, or the labelled fake runner. */
 export function turnLabel(t: AppealTurn): string {
-  if (t.runner === "fake") return t.fallback_from_droid ? "Fake runner · rules only (Droid couldn't run)" : "Fake runner · rules only";
+  if (t.runner === "fake") return t.fallback_from_droid ? "Rules-only stand-in (Droid couldn't run)" : "Rules-only stand-in";
   if (t.runner !== "droid") return "StormDesk";
   const parts: string[] = [];
   if (t.mode !== "session" || !t.session_id) {
