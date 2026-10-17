@@ -9,6 +9,7 @@
 > **v4.5 (Oct 17):** Photon shapes verified (§6.3, §17): Spectrum webhooks with HMAC signatures inbound, a small Node bridge for outbound. Marked **[v4.5]**.
 > **v4.6 (Oct 16):** Chalk verified and built (#28, §15.1, §15.2): sim-time windows are an `as_of` feature (no Postgres views needed), SQL resolvers read the Neon integration `neon_stormcash`, the NWS resolver labels live vs replayed, and `query_features` calls Chalk with fallback switch `CHALK_DISABLED` (§6.3, §14.7a, §22.4). Marked **[v4.6]**.
 > **v4.7 (Oct 17):** Chalk Evaluations built (#33, §15.3): 48-row dataset from 5 seeds in local per-seed databases, a token-gated gateway behind one tunnel for the StormDesk task, a rules-only baseline task, the `run_local.py` fallback, and results files that never show a fake-runner run as StormDesk. Marked **[v4.7]**.
+> **v4.8 (Oct 17):** Evals tab built (#38, §18.5): `GET /v1/evals` serves the saved Chalk runs, and only a verified Droid run fills the StormDesk column. Marked **[v4.8]**.
 > **Builds on:** "StormCash: The 10/10 Build" v3 (Oct 16, Alexandre Lugovoi, on Brian Maina's Oct 11 draft). Everything new since v3 is marked **[v4]**.
 
 ---
@@ -1047,6 +1048,7 @@ All JSON. Byte fields base64url. Prefix `/v1`. Auth for demo: none on reads; res
 | `POST /v1/flags/{id}/approve` / `reject` | `{note}` | executes actions (§14.6), returns approval. **[v4.3]** `X-SC-Operator` names the operator; `GET /v1/flags/{id}/approvals` lists decisions | WS5 |
 | `POST /v1/stormdesk/run` | `{candidate_id}` or `{case_id}` | `{flag}` or `{case_file_md}` (sync; used by evals) | WS5 |
 | `GET /v1/stormdesk/runs` / `GET /v1/stormdesk/runs/{id}` **[v4.3]** | `?case_id&candidate_id` | stored runs; one run with its full transcript for replay (§14.8). `POST /v1/stormdesk/run` needs the operator header | WS5 |
+| `GET /v1/evals` **[v4.8]** | | the saved Chalk eval runs for the Evals tab: the newest file per comparison column (full), the others as summaries (§18.5) | WS3 |
 | `GET /v1/town` | | regions, merchants (x, y, simulated), live dots, recent payments, uploads, alerts | WS4/WS2 |
 | `GET /v1/relay/paths` | `?limit=20` | recent payments with `path`, hops, latency. **[v4.3]** Each hop names the device (resident or merchant, from `device_short_id`) | WS2 |
 | `GET /v1/town/quick` **[v4.3]** | `?adoption&p_link&p_uplink` | the §16.6 quick re-sim: `{baseline, current, seconds}` | WS4 |
@@ -1570,6 +1572,7 @@ Title, "Demo mode", connection dot, **Reset demo** button (calls `/v1/demo/reset
 - Run id, timestamp, dataset size, link to the Chalk run.
 - Rules-only vs. StormDesk table (§15.3) and a per-scenario breakdown; a "trap cases it got right" list with one example opened.
 - Empty state: "No eval run yet." Never placeholder numbers.
+- **[v4.8] As built (#38).** `GET /v1/evals` reads `chalk/evals/results/*.json` (`EVALS_RESULTS_DIR` overrides) on every request, so a new run shows up without a restart (the tab also re-fetches every 60 s). The server re-checks each file before it fills a column: rules-only needs runner `rules_only`; StormDesk needs runner `droid`, `is_agent_result`, every row answered by Droid and no fallback to the fake runner. Every other run (fake, mixed, older) is listed by time, run id and the reason it isn't scored, never with its numbers. Until a Droid run exists the StormDesk column says "No StormDesk run yet" and the trap list waits for it. The Chalk run is identified by its run id and "Evaluations → StormCash → <evaluation>"; it is a link only if the results file carries `chalk.dashboard_url` (the dashboard URL format isn't verified). Planted subjects the detectors never raised are listed, not counted.
 
 ### 18.6 Public proof page `/proof/:caseId`
 
