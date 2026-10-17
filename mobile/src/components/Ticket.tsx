@@ -18,7 +18,7 @@ export function Ticket({
         <Text style={styles.kicker}>{kicker}</Text>
         <View style={styles.stubRow}>
           <Text style={styles.title} numberOfLines={1}>{title}</Text>
-          <Text style={styles.amount}>{amount}</Text>
+          <Text maxFontSizeMultiplier={1.15} style={styles.amount}>{amount}</Text>
         </View>
       </View>
       <View style={styles.perf}>

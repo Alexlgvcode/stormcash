@@ -112,10 +112,10 @@ export function Row({ children, style }: { children: ReactNode; style?: ViewStyl
 // ---- Type ----
 
 export const Title = ({ children, color }: { children: ReactNode; color?: string }) => (
-  <Text style={[s.title, color ? { color } : null]} accessibilityRole="header">{children}</Text>
+  <Text maxFontSizeMultiplier={1.15} style={[s.title, color ? { color } : null]} accessibilityRole="header">{children}</Text>
 );
 export const Big = ({ children, color }: { children: ReactNode; color?: string }) => (
-  <Text style={[s.big, color ? { color } : null]} adjustsFontSizeToFit numberOfLines={1}>{children}</Text>
+  <Text maxFontSizeMultiplier={1.15} style={[s.big, color ? { color } : null]} adjustsFontSizeToFit numberOfLines={1}>{children}</Text>
 );
 export const Body = ({ children, color }: { children: ReactNode; color?: string }) => (
   <Text style={[s.body, color ? { color } : null]}>{children}</Text>
@@ -316,16 +316,17 @@ const s = StyleSheet.create({
   body: { fontFamily: font.regular, fontSize: 18, lineHeight: 26, color: colors.ink },
   muted: { fontFamily: font.regular, fontSize: 16, lineHeight: 23, color: colors.muted },
   label: { fontFamily: font.bold, fontSize: 16, lineHeight: 21, color: colors.ink },
-  field: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space.md, paddingVertical: 6 },
+  // Wraps so that at large text sizes the value drops under its label instead of squeezing into it.
+  field: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', columnGap: space.md, rowGap: 2, paddingVertical: 6 },
   fieldLabel: { fontFamily: font.regular, fontSize: 16, color: colors.muted },
-  fieldValue: { fontFamily: font.semibold, fontSize: 16, color: colors.ink, flexShrink: 1, textAlign: 'right', fontVariant: ['tabular-nums'] },
+  fieldValue: { fontFamily: font.semibold, fontSize: 16, color: colors.ink, flexShrink: 1, marginLeft: 'auto', textAlign: 'right', fontVariant: ['tabular-nums'] },
   group: { backgroundColor: colors.card, borderRadius: radius.lg, overflow: 'hidden', paddingVertical: 4 },
   cell: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 64, paddingHorizontal: 18, paddingVertical: 12 },
   cellTitle: { fontFamily: font.semibold, fontSize: 17, color: colors.ink },
   cellDetail: { fontFamily: font.regular, fontSize: 14, lineHeight: 19, color: colors.muted },
   cellValue: { fontFamily: font.semibold, fontSize: 17, color: colors.ink, fontVariant: ['tabular-nums'] },
-  pill: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 5, borderRadius: radius.pill, alignSelf: 'flex-start' },
-  pillText: { fontFamily: font.semibold, fontSize: 13 },
+  pill: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 5, borderRadius: radius.md, alignSelf: 'flex-start', maxWidth: '100%' }, // md, not pill: stays a capsule on one line, a rounded box when large text wraps
+  pillText: { fontFamily: font.semibold, fontSize: 13, flexShrink: 1 },
   status: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   statusText: { fontFamily: font.medium, fontSize: 15 },
   dot: { width: 8, height: 8, borderRadius: 4 },

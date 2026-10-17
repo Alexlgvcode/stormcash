@@ -11,7 +11,7 @@ const LABEL_NAMES: Record<string, string> = { MAYA: 'Maya', PHARMACY: 'Pharmacy'
 
 export function Logo({ light }: { light?: boolean }) {
   return (
-    <Text style={[styles.word, light && { color: '#fff' }]} accessibilityRole="header">StormCash</Text>
+    <Text maxFontSizeMultiplier={1.15} style={[styles.word, light && { color: '#fff' }]} accessibilityRole="header">StormCash</Text>
   );
 }
 

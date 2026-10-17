@@ -74,11 +74,8 @@ export function RecordsScreen() {
               : 'Not yet'}
           />
           {lastSync?.rejected ? <Field label="Rejected" value={`${lastSync.rejected} invalid items`} /> : null}
-          <Field
-            label="Last upload"
-            value={up ? `${up.sent} records · ${Math.max(0, up.maxHops - 1)} hops · ${ago(up.ts)}` : 'Not yet'}
-            last
-          />
+          <Field label="Last upload" value={up ? ago(up.ts) : 'Not yet'} />
+          {up ? <Field label="Uploaded" value={`${up.sent} records, up to ${Math.max(0, up.maxHops - 1)} hops`} /> : null}
           {lastError ? <Pill text={lastError} tone="red" /> : null}
         </Card>
       </Section>

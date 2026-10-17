@@ -7,7 +7,8 @@ import { BigShouldersDisplay_700Bold, BigShouldersDisplay_800ExtraBold } from '@
 import { getDeviceKey } from './src/keys';
 import { NavContext, type Nav, type Route } from './src/nav';
 import { getRole } from './src/settings';
-import { getDb } from './src/store/db';
+import { PREVIEW_OK, PREVIEW_REFUSED } from './src/demo/previews';
+import { getDb, getSetting } from './src/store/db';
 import { syncManager } from './src/sync/manager';
 import { ChargeScreen } from './src/screens/ChargeScreen';
 import { DemoMenuScreen } from './src/screens/DemoMenuScreen';
@@ -32,6 +33,12 @@ export default function App() {
 
   useEffect(() => {
     getDb();
+    // Dev builds only: open a screen straight away (layout audits drive this through the settings table).
+    if (__DEV__) {
+      const dev = getSetting('dev_route');
+      const previews: Record<string, Route> = { 'result-ok': PREVIEW_OK, 'result-refused': PREVIEW_REFUSED };
+      if (dev) setRoute(previews[dev] ?? ({ name: dev } as Route));
+    }
     getDeviceKey().then(() => setKeyReady(true));
   }, []);
 

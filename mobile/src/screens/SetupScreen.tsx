@@ -54,7 +54,7 @@ export function SetupScreen() {
     <Screen>
       <View style={styles.heroWrap}>
         <Logo />
-        <Text style={styles.hero}>Pay shops with no signal.</Text>
+        <Text maxFontSizeMultiplier={1.15} style={styles.hero}>Pay shops with no signal.</Text>
         <Muted>Setup needs internet once. After that, payments work phone to phone.</Muted>
       </View>
 

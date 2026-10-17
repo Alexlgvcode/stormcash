@@ -62,7 +62,7 @@ export function ChargeScreen() {
         <Title>Charge</Title>
         <View style={{ alignItems: 'center', paddingVertical: 12 }}>
           <Label>{mc.display_name} charges</Label>
-          <Text style={[styles.amount, amount === 0 && { color: colors.faint }]} adjustsFontSizeToFit numberOfLines={1}>${amount}</Text>
+          <Text maxFontSizeMultiplier={1.15} style={[styles.amount, amount === 0 && { color: colors.faint }]} adjustsFontSizeToFit numberOfLines={1}>${amount}</Text>
           <Muted>Whole dollars</Muted>
         </View>
         <Row style={{ justifyContent: 'center' }}>
