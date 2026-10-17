@@ -43,7 +43,7 @@ export function reviewVerdict(review: FlagReview): VerdictView {
     };
   }
   const fake = review.runner === "fake";
-  const who = fake ? "Fake reviewer (rules only)" : "Reviewer";
+  const who = fake ? "Stand-in reviewer (rules only)" : "Reviewer";
   const label = review.verdict === "agree" ? `${who} agrees`
     : review.verdict === "disagree" ? `${who} disagrees` : `${who}: not enough evidence`;
   return {

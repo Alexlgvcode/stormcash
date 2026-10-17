@@ -249,8 +249,8 @@ function Sliders() {
       </div>
       <div className="grid gap-8 md:grid-cols-3">
         {slider("Adoption", adoption, setAdoption, 0.1, 1, 0.05, (v) => `${Math.round(v * 100)}%`)}
-        {slider("Foot traffic (p_link)", pLink, setPLink, 0.05, 1, 0.05, (v) => v.toFixed(2))}
-        {slider("Relay density (uplink/h)", pUplink, setPUplink, 0.005, 0.2, 0.005, (v) => v.toFixed(3))}
+        {slider("Foot traffic (chance two phones meet)", pLink, setPLink, 0.05, 1, 0.05, (v) => v.toFixed(2))}
+        {slider("Phones finding a signal (per hour)", pUplink, setPUplink, 0.005, 0.2, 0.005, (v) => v.toFixed(3))}
       </div>
       {error && <p className="text-danger">{error}</p>}
       {quick && <Bars base={quick.baseline} cur={quick.current} />}
@@ -283,11 +283,21 @@ export function TownTab() {
   });
 
   const simulated = town?.merchants.filter((m) => m.simulated).length ?? 0;
+  const real = (town?.merchants.length ?? 0) - simulated;
   const s = town?.town_stats;
+  const share = (v: number | null) => (v == null ? null : `${Math.round(v * 100)}%`);
+  const takeaway = town && [
+    `${simulated} simulated shops${real ? ` around ${real} real ${real === 1 ? "shop" : "shops"}` : ""}.`,
+    s && share(s.double_spends.share_refused_offline) && share(s.double_spends.share_caught_at_settlement)
+      ? `In the seeded town, ${share(s.double_spends.share_refused_offline)} of double spends were refused offline and ${
+        share(s.double_spends.share_caught_at_settlement)} caught at settlement.`
+      : null,
+  ].filter(Boolean).join(" ");
   return (
     <div className="pb-12">
       <PageHeader title="Town"
-        subtitle={town ? `${simulated} simulated shops in Buncombe County, NC, plus the real phones` : undefined}>
+        subtitle={town ? `${simulated} simulated shops in Buncombe County, NC, plus the real phones` : undefined}
+        takeaway={takeaway || undefined}>
         <Tabs tabs={VIEWS} value={view} onChange={setView} />
       </PageHeader>
       {!town ? (
@@ -306,9 +316,9 @@ export function TownTab() {
           ) : (
             <p className="border-y border-rule py-3 text-secondary">No seeded town stats yet.</p>
           )}
-          <p className="text-ink">
-            Your 3 phones are part of a {town.merchants.length}-shop town. Every shop but the real ones is{" "}
-            <span className="font-medium text-heading">simulated</span>, checked by the same code as the phones.
+          <p className="text-secondary">
+            Every shop but the real ones is <span className="font-medium text-heading">simulated</span>, checked by the
+            same code as the phones.
           </p>
           <TownMap town={town} pulses={pulses} />
           <Legend />

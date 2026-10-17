@@ -3,12 +3,13 @@
 // the ledger check and the queued-payout counter. Three views: Balances (what a
 // judge sees first), Reconciliation and Nessie log, with the full data.
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { accountAndOwner, callLine, callStatus } from "../accounts";
+import { accountAndOwner, callLine, callStatus, isMoneyMove } from "../accounts";
 import { getJSON, type AccountCard, type AccountsSnapshot, type NessieCall } from "../api";
 import { Button, PageHeader, Pill, Section, StatusItem, Table, Tabs, Td, Th, type Tone as UiTone } from "../components/ui";
 import { useEvents } from "../events";
 import { clockTime, dollars, signedDollars } from "../format";
 import {
+  accountsTakeaway,
   bankPill,
   itemsOf,
   openingNote,
@@ -153,6 +154,16 @@ function BalanceRow({ card, rec }: { card: AccountCard; rec: ReconcileAccount | 
   );
 }
 
+/** "Show setup calls": opening accounts and creating customers, hidden by default. */
+function SetupToggle({ on, set, hidden }: { on: boolean; set: (v: boolean) => void; hidden: number }) {
+  return (
+    <label className="flex items-center gap-2 text-th text-ink">
+      <input type="checkbox" checked={on} onChange={(e) => set(e.target.checked)} className="h-4 w-4 accent-accent" />
+      Show setup calls{!on && hidden > 0 ? ` (${hidden} hidden)` : ""}
+    </label>
+  );
+}
+
 function CallTable({ calls, header = false }: { calls: NessieCall[]; header?: boolean }) {
   if (calls.length === 0) return <p className="py-3 text-secondary">No Nessie calls yet.</p>;
   return (
@@ -189,7 +200,14 @@ function CallTable({ calls, header = false }: { calls: NessieCall[]; header?: bo
   );
 }
 
-function Balances({ snap, rec, calls }: { snap: AccountsSnapshot; rec: ReconcileState; calls: NessieCall[] }) {
+function Balances({ snap, rec, calls, setup, setSetup }: {
+  snap: AccountsSnapshot;
+  rec: ReconcileState;
+  calls: NessieCall[];
+  setup: boolean;
+  setSetup: (v: boolean) => void;
+}) {
+  const shown = setup ? calls : calls.filter(isMoneyMove);
   const byKey = new Map((rec.result?.accounts ?? []).map((a) => [a.key, a]));
   const { ledger, nessie, simulated_town: town } = snap;
   return (
@@ -201,7 +219,7 @@ function Balances({ snap, rec, calls }: { snap: AccountsSnapshot; rec: Reconcile
           <StatusItem tone="danger">Ledger unbalanced: {ledger.unbalanced_txns} transactions</StatusItem>
         )}
         <ReconcileStatus rec={rec} />
-        {nessie.queued > 0 && <StatusItem tone="warning">Nessie queued: {nessie.queued}</StatusItem>}
+        {nessie.queued > 0 && <StatusItem tone="warning">Payouts waiting for Nessie: {nessie.queued}</StatusItem>}
         {rec.result && <span className="text-secondary">Checked {clockTime(rec.result.checked_at)}</span>}
       </StatusLine>
       <Table>
@@ -223,8 +241,8 @@ function Balances({ snap, rec, calls }: { snap: AccountsSnapshot; rec: Reconcile
         <p className="mt-4 text-secondary">Simulated town: {town.merchants} shops, ledger only, never sent to Nessie</p>
       )}
       <div className="mt-10">
-        <Section title="Latest Nessie calls">
-          <CallTable calls={calls.slice(0, LATEST_CALLS)} />
+        <Section title="Latest Nessie calls" right={<SetupToggle on={setup} set={setSetup} hidden={calls.length - shown.length} />}>
+          <CallTable calls={shown.slice(0, LATEST_CALLS)} />
         </Section>
       </div>
     </>
@@ -286,7 +304,7 @@ function ReconciliationView({ snap, rec }: { snap: AccountsSnapshot; rec: Reconc
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <p className="max-w-3xl text-secondary">
           Our double-entry ledger against Nessie's own records (opening balance + completed deposits − completed
-          withdrawals), matched by the SC txn id in every Nessie description.
+          withdrawals), matched by the StormCash transaction id written into every Nessie description.
         </p>
         <Button primary onClick={rec.run} disabled={rec.busy}>
           {rec.busy ? "Checking…" : "Re-check"}
@@ -396,25 +414,33 @@ function ReconciliationView({ snap, rec }: { snap: AccountsSnapshot; rec: Reconc
   );
 }
 
-function NessieLog({ snap, calls }: { snap: AccountsSnapshot; calls: NessieCall[] }) {
+function NessieLog({ snap, calls, setup, setSetup }: {
+  snap: AccountsSnapshot;
+  calls: NessieCall[];
+  setup: boolean;
+  setSetup: (v: boolean) => void;
+}) {
   const { nessie } = snap;
+  const shown = setup ? calls : calls.filter(isMoneyMove);
   return (
     <>
       <StatusLine>
         {nessie.enabled ? (
-          <StatusItem tone={nessie.queued ? "warning" : "success"}>Nessie queued: {nessie.queued}</StatusItem>
+          <StatusItem tone={nessie.queued ? "warning" : "success"}>Payouts waiting for Nessie: {nessie.queued}</StatusItem>
         ) : (
           <StatusItem tone="neutral">Nessie is switched off: ledger only</StatusItem>
         )}
-        {nessie.enabled && <span className="text-secondary">payouts waiting for Nessie; retried every 10 s</span>}
+        {nessie.enabled && <span className="text-secondary">retried every 10 seconds</span>}
+        <span className="ml-auto"><SetupToggle on={setup} set={setSetup} hidden={calls.length - shown.length} /></span>
       </StatusLine>
-      <CallTable calls={calls} header />
+      <CallTable calls={shown} header />
     </>
   );
 }
 
 export function AccountsTab() {
   const [view, setView] = useState<View>("balances");
+  const [setup, setSetup] = useState(false); // account setup calls (open account, create customer) hidden by default
   const [snap, setSnap] = useState<AccountsSnapshot | null>(null);
   const [calls, setCalls] = useState<NessieCall[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -449,17 +475,18 @@ export function AccountsTab() {
 
   return (
     <div className="pb-12">
-      <PageHeader title="Accounts" subtitle="Balances from Capital One Nessie transactions">
+      <PageHeader title="Accounts" subtitle="Balances from Capital One Nessie transactions"
+        takeaway={rec.result ? accountsTakeaway(rec.result) : undefined}>
         <Tabs tabs={VIEWS} value={view} onChange={setView} />
       </PageHeader>
       {!snap ? (
         <p className={error ? "text-danger" : "text-secondary"}>{error ? `Can't reach the server: ${error}` : "Loading…"}</p>
       ) : view === "balances" ? (
-        <Balances snap={snap} rec={rec} calls={calls} />
+        <Balances snap={snap} rec={rec} calls={calls} setup={setup} setSetup={setSetup} />
       ) : view === "reconciliation" ? (
         <ReconciliationView snap={snap} rec={rec} />
       ) : (
-        <NessieLog snap={snap} calls={calls} />
+        <NessieLog snap={snap} calls={calls} setup={setup} setSetup={setSetup} />
       )}
     </div>
   );

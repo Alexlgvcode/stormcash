@@ -66,16 +66,15 @@ function Verdict({ v }: { v: CppVerdict }) {
             </li>
           ))}
         </ul>
-      ) : (
-        <p className="mt-1 break-words text-th text-ink">{v.verdict}</p>
-      )}
+      ) : null}
       <details className="mt-3 text-th">
         <summary className="cursor-pointer py-1 text-accent">All {lines.length} checks the C++ verifier ran</summary>
+        <p className="mt-2 break-words text-ink">{v.verdict}</p>
         <ul className="mt-2 border-t border-rule">
           {lines.map((l, i) => (
             <li key={i} className="flex gap-2 border-b border-rule py-1.5">
               <span className={l.ok ? "text-success" : "text-danger"}>{l.ok ? "✓" : "✗"}</span>
-              <span className="min-w-0 font-mono text-[12px] wrap-anywhere text-ink">{l.text}</span>
+              <span className="min-w-0 font-mono text-th wrap-anywhere text-ink">{l.text}</span>
             </li>
           ))}
         </ul>

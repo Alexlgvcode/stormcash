@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { ApiError, getJSON, operatorPost, type Health } from "../api";
 import { useEventsStatus } from "../events";
+import { timeOfDay } from "../format";
 import { Icon, type IconName } from "./Icon";
 import { Eyebrow } from "./ui";
 
@@ -81,7 +82,7 @@ export function Sidebar({ tab }: { tab: string }) {
           <span className={`h-2 w-2 rounded-full ${DOT[status]}`} />
           {DOT_LABEL[status]}
           <time className="ml-auto tabular-nums">
-            {now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+            {timeOfDay(now)}
           </time>
         </div>
         <button

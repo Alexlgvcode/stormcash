@@ -119,7 +119,7 @@ export function ProofPage({ caseId }: { caseId: number }) {
       {cpp && <CppCheck state={cpp} />}
 
       <Section title="The two payments">
-        <TagTable rule={proof.rule === "MERCHANT_KNEW" ? "" : proof.rule} a={proof.tag_a} b={proof.tag_b} />
+        <TagTable rule={proof.rule === "MERCHANT_KNEW" ? "" : proof.rule} a={proof.tag_a} b={proof.tag_b} checks={checks} />
       </Section>
 
       <p className="text-ink">

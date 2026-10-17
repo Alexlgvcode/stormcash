@@ -63,11 +63,47 @@ def _detail(conn, row: dict) -> dict:
     }
 
 
+# What the dashboard says about each case in plain words (§18.3 [v4.23]): which shop took
+# each payment, its amount and number, and whether the case is the simulated town's.
+LIST_SQL = """
+SELECT c.*,
+  (SELECT r.simulated FROM certificates ce JOIN residents r ON r.resident_id = ce.resident_id
+    WHERE ce.cert_id = c.cert_id LIMIT 1) AS resident_simulated,
+  m.display_name AS case_merchant, m.simulated AS case_merchant_simulated,
+  ta.counter AS a_counter, ta.amount_cents AS a_amount, pa.status AS a_status,
+  ma.display_name AS a_merchant, ma.simulated AS a_simulated,
+  tb.counter AS b_counter, tb.amount_cents AS b_amount, pb.status AS b_status,
+  mb.display_name AS b_merchant, mb.simulated AS b_simulated
+FROM cases c
+LEFT JOIN merchants m ON m.merchant_id = c.merchant_id
+LEFT JOIN tags ta ON ta.tag_hash = c.tag_a
+LEFT JOIN payments pa ON pa.tag_hash = c.tag_a
+LEFT JOIN merchants ma ON ma.merchant_id = pa.merchant_id
+LEFT JOIN tags tb ON tb.tag_hash = c.tag_b
+LEFT JOIN payments pb ON pb.tag_hash = c.tag_b
+LEFT JOIN merchants mb ON mb.merchant_id = pb.merchant_id
+ORDER BY c.case_id DESC LIMIT %s"""
+
+
+def _payment(row: dict, side: str) -> dict | None:
+    if row[f"{side}_counter"] is None:
+        return None
+    return {"counter": row[f"{side}_counter"], "amount_cents": row[f"{side}_amount"], "status": row[f"{side}_status"],
+            "merchant": row[f"{side}_merchant"], "simulated": row[f"{side}_simulated"]}
+
+
 @router.get("/v1/cases")
 def list_cases(request: Request, limit: int = Query(100, ge=1, le=1000)) -> list[dict]:
     with request.app.state.deps.pool.connection() as conn:
-        rows = all_rows(conn, "SELECT * FROM cases ORDER BY case_id DESC LIMIT %s", (limit,))
-    return [jsonable(case_summary(r)) for r in rows]
+        rows = all_rows(conn, LIST_SQL, (limit,))
+    return [jsonable({
+        **case_summary(r),
+        "simulated": bool(r["resident_simulated"] or r["case_merchant_simulated"] or r["a_simulated"]
+                          or r["b_simulated"]),
+        "merchant": r["case_merchant"],
+        "payment_a": _payment(r, "a"),
+        "payment_b": _payment(r, "b"),
+    }) for r in rows]
 
 
 @router.get("/v1/cases/{case_id}")

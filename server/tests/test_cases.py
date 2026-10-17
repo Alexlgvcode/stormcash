@@ -128,6 +128,12 @@ def test_cases_and_proof_endpoints(world, app_client):
     listed = app_client.get("/v1/cases").json()
     assert [c["rule"] for c in listed] == ["SAME_COUNTER"]
     case_id = listed[0]["case_id"]
+    # Plain words for the dashboard: real phones, each payment's shop, amount and number.
+    assert listed[0]["simulated"] is False
+    a, b = listed[0]["payment_a"], listed[0]["payment_b"]
+    assert {a["amount_cents"], b["amount_cents"]} == {1200} and a["counter"] == b["counter"]
+    assert a["merchant"] and b["merchant"] and a["merchant"] != b["merchant"]
+    assert not a["simulated"] and not b["simulated"]
     detail = app_client.get(f"/v1/cases/{case_id}").json()
     assert detail["case"]["evidence"]["rules_fired"] == ["SAME_COUNTER"]
 

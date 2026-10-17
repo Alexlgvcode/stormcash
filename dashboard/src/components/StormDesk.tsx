@@ -9,24 +9,13 @@ import { getJSON, operatorPost, type FlagDetail, type FlagRow, type Message, typ
 import { heldBack, sessionSummary, turnLabel, turnsByReply, type AppealTurn } from "../appeal";
 import { useEvents } from "../events";
 import { clockTime, dollars } from "../format";
+import { ACTION_PLAIN, KIND_PLAIN, SEVERITY_PLAIN, toolPlain } from "../plain";
 import { reviewVerdict, suggestion, type FlagReview } from "../review";
 import { OwnerFreezeNote } from "./OwnerFreeze";
 import { Button, Eyebrow, Note, Pill, Section, Table, Td, TextInput, Th, type Tone } from "./ui";
 
-const KIND_TITLE: Record<string, string> = {
-  merchant_silence: "Shop went quiet",
-  cap_drain: "Certificate drained fast",
-  region_dark: "Region went dark",
-  none: "Dismissed",
-};
-
-const ACTION_TITLE: Record<string, string> = {
-  hold_pool_payout: "Hold guarantee-pool payouts",
-  lower_merchant_limit: "Lower the shop's per-payment limit",
-  freeze_cert: "Freeze the certificate",
-  dispatch_relay: "Send a relay",
-  none: "No action",
-};
+const KIND_TITLE = KIND_PLAIN;
+const ACTION_TITLE = ACTION_PLAIN;
 
 const SEVERITY_TONE: Record<string, Tone> = { urgent: "danger", review: "warning", info: "neutral" };
 
@@ -47,7 +36,7 @@ function flagStatus(f: FlagRow): { tone: Tone; text: string } {
 
 /** "Replay of run at 09:23:23 · Droid, claude-sonnet-5-5": a replay always says what produced it. */
 export function replayTitle(startedAt: number, runner: string | null | undefined, model?: string | null): string {
-  const by = runner === "fake" ? "fake runner, rules only" : runner === "droid" ? `Droid, ${model ?? "model not recorded"}` : runner;
+  const by = runner === "fake" ? "rules-only stand-in" : runner === "droid" ? `Droid, ${model ?? "model not recorded"}` : runner;
   return `Replay of run at ${clockTime(startedAt)}${by ? ` · ${by}` : ""}`;
 }
 
@@ -59,8 +48,8 @@ export function RunnerBadge({ runner, model, modelRequested, usage }: {
 }) {
   if (runner === "fake") {
     return (
-      <Pill tone="warning" title="No Factory access yet: a deterministic rules-only stand-in, not an agent's judgement.">
-        Fake runner · rules only
+      <Pill tone="warning" title="A deterministic rules-only stand-in answered, not an agent's judgement.">
+        Rules-only stand-in
       </Pill>
     );
   }
@@ -116,12 +105,12 @@ export function StepList({ steps, live, replayLabel }: { steps: Step[]; live?: b
       {steps.length === 0 && <p className="border-t border-rule py-2.5 text-secondary">No tool calls.</p>}
       <ol className="border-t border-rule">
         {steps.slice(0, shown).map((s) => (
-          <li key={s.index} className="grid grid-cols-[1.25rem_auto_minmax(0,1fr)] items-baseline gap-3 border-b border-rule py-2">
+          <li key={s.index} title={`${s.tool} ${s.input_summary}`}
+            className="grid grid-cols-[1.25rem_minmax(0,1fr)] items-baseline gap-3 border-b border-rule py-2">
             <span className={s.ok === null ? "text-secondary" : s.ok ? "text-success" : "text-danger"}>
               {s.ok === null ? "…" : s.ok ? "✓" : "✗"}
             </span>
-            <span className="font-medium text-heading">{s.tool}</span>
-            <span className="truncate font-mono text-th text-secondary">{s.input_summary}</span>
+            <span className="text-ink">{toolPlain(s.tool)}</span>
           </li>
         ))}
       </ol>
@@ -206,7 +195,7 @@ function PhotonThread({ merchantId }: { merchantId: string }) {
       title="Photon thread"
       right={
         summary && (
-          <span title="Every reply in this appeal is a turn of the same Droid session, resumed for each new text (spec §17.2).">
+          <span title="Every reply in this appeal is a turn of the same Droid conversation, picked up again for each new text.">
             <Pill tone="success">{summary}</Pill>
           </span>
         )
@@ -418,14 +407,14 @@ function FlagView({ flagId, onChanged }: { flagId: number; onChanged: () => void
     <div className="space-y-10">
       <div>
         <Eyebrow>
-          {flag.subject_name ?? flag.subject_id} · proposed by {flag.runner === "fake" ? "the fake runner" : "StormDesk"} · flag #
+          {flag.subject_name ?? flag.subject_id} · proposed by {flag.runner === "fake" ? "the rules-only stand-in" : "StormDesk"} · flag #
           {flag.flag_id}
         </Eyebrow>
         <div className="mt-1 flex flex-wrap items-center gap-3">
           <h2 className="text-[22px] leading-8 font-semibold text-heading">
             {ACTION_TITLE[flag.proposed_action] ?? flag.proposed_action}
           </h2>
-          <Pill tone={SEVERITY_TONE[flag.severity] ?? "neutral"}>{flag.severity}</Pill>
+          <Pill tone={SEVERITY_TONE[flag.severity] ?? "neutral"}>{SEVERITY_PLAIN[flag.severity] ?? flag.severity}</Pill>
           <RunnerBadge runner={flag.runner} model={agent?.model} modelRequested={agent?.model_requested} usage={agent?.usage} />
           {flag.agents_disagree && (
             <span title="A second Droid session reviewed StormDesk's proposal and didn't agree. A person decides.">
@@ -561,7 +550,7 @@ export function FlagsView() {
                   <Td className="pr-3">
                     <span className="flex flex-wrap gap-1.5">
                       <Pill tone={status.tone}>{status.text}</Pill>
-                      {f.runner === "fake" && <Pill tone="warning">Fake runner</Pill>}
+                      {f.runner === "fake" && <Pill tone="warning">Stand-in</Pill>}
                     </span>
                   </Td>
                 </tr>

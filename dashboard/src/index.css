@@ -11,7 +11,7 @@
   --color-rule: #ebeef1;
   --color-ink: #30313d;
   --color-heading: #1a1b25;
-  --color-secondary: #687385;
+  --color-secondary: #545969; /* no lighter than this, for judges 1 m away */
   --color-nav: #414552;
   --color-muted: #545969;
   --color-accent: #2b3a9e;
@@ -27,8 +27,8 @@
   --color-neutral: #545969;
   --color-neutral-bg: #ebeef1;
 
-  --text-eyebrow: 12px;
-  --text-eyebrow--line-height: 16px;
+  --text-eyebrow: 13px;
+  --text-eyebrow--line-height: 18px;
   --text-eyebrow--letter-spacing: 0.06em;
   --text-th: 13px;
   --text-th--line-height: 18px;

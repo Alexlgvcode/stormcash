@@ -132,29 +132,34 @@ export interface Metric {
 }
 
 const KINDS = ["merchant_silence", "cap_drain", "region_dark"] as const;
+const KIND_QUESTION: Record<(typeof KINDS)[number], string> = {
+  merchant_silence: "When it flags a quiet shop, how often it's right",
+  cap_drain: "When it flags a fast-drained wallet, how often it's right",
+  region_dark: "When it flags a dark area, how often it's right",
+};
 
 export const METRICS: Metric[] = [
   {
     label: "Real cases caught",
-    hint: "cheaters and dark regions flagged with the right kind and action",
+    hint: "cheaters and dark areas flagged with the right signal and action",
     cell: (r) => frac(r.metrics.real_caught.caught, r.metrics.real_caught.total, r.metrics.real_caught.recall),
   },
   {
     label: "Colluding shops caught",
-    hint: "the merchant_silence cheats",
+    hint: "shops that went quiet to collect pool money",
     cell: (r) =>
       frac(r.metrics.colluders_caught.caught, r.metrics.colluders_caught.total, r.metrics.colluders_caught.recall),
   },
   {
-    label: "Honest subjects flagged",
-    hint: "false flags on the traps (lower is better)",
+    label: "Honest cases flagged",
+    hint: "honest look-alikes wrongly flagged (lower is better)",
     cell: (r) =>
       frac(r.metrics.honest_flagged.flagged, r.metrics.honest_flagged.total, r.metrics.honest_flagged.false_flag_rate),
   },
   ...KINDS.map(
     (kind): Metric => ({
-      label: `Precision · ${kind}`,
-      hint: "of the flags of this kind, how many were right",
+      label: KIND_QUESTION[kind],
+      hint: "right flags of this kind, out of all of them",
       cell: (r) => {
         const p = r.metrics.precision_by_kind[kind];
         return p ? frac(p.correct, p.flagged, p.precision) : "n/a";
@@ -162,25 +167,25 @@ export const METRICS: Metric[] = [
     }),
   ),
   {
-    label: "Citations valid",
-    hint: "every evidence id exists (§14.7)",
+    label: "Answers that only cite real records",
+    hint: "every record it cites exists in the database",
     cell: (r) => {
       const c = r.metrics.citations_valid;
       return c ? frac(c.valid, c.checked, c.rate) : "n/a (cites nothing)";
     },
   },
   {
-    label: "Pool money held at colluders",
-    hint: "pool money in the colluders' 6 h windows",
+    label: "Pool money held back from colluding shops",
+    hint: "in the colluders' 6-hour windows",
     cell: (r) => ({ cents: r.metrics.pool_cents.held_correctly, of: r.metrics.pool_cents.at_colluders }),
   },
   {
-    label: "Pool money held from honest shops",
+    label: "Pool money held back from honest shops",
     hint: "lower is better",
     cell: (r) => ({ cents: r.metrics.pool_cents.held_from_honest_shops }),
   },
   {
-    label: "Rows without a flag · task errors",
+    label: "Cases with no answer · errors",
     hint: "counted as failures",
     cell: (r) => `${r.metrics.rows_without_flag} · ${r.metrics.task_errors}`,
   },
@@ -189,13 +194,38 @@ export const METRICS: Metric[] = [
 export const SCENARIO_LABEL: Record<string, string> = {
   colluder: "Colluding shop",
   stolen_phone: "Stolen phone",
-  dark_region: "Dark region",
+  dark_region: "Dark area",
   trap_remote_shop: "Trap: remote shop",
   trap_victim_shop: "Trap: victim of a cheat",
   trap_stockup: "Trap: storm stock-up",
-  trap_quiet_region: "Trap: quiet region",
+  trap_quiet_region: "Trap: quiet area",
   trap_clock_drift: "Trap: clock drift",
 };
+
+/**
+ * The tab's takeaway from the scored runs: "On towns it never saw, rules alone
+ * flagged all 11 honest cases; StormDesk flagged none of them and caught 6 of 9 real ones."
+ */
+export function evalsTakeaway(rules: EvalRun | null, desk: EvalRun | null, heldout: boolean): string | null {
+  const where = heldout ? "On towns it never saw" : "On the main dataset";
+  const honest = (r: EvalRun) => r.metrics.honest_flagged;
+  const real = (r: EvalRun) => r.metrics.real_caught;
+  if (rules && desk) {
+    const rf = honest(rules);
+    const df = honest(desk);
+    const rulesPart = rf.flagged === rf.total && rf.total > 0 ? `rules alone flagged all ${rf.total} honest cases`
+      : `rules alone flagged ${rf.flagged} of ${rf.total} honest cases`;
+    const deskPart = df.flagged === 0 ? "StormDesk flagged none of them" : `StormDesk flagged ${df.flagged} of them`;
+    return `${where}, ${rulesPart}; ${deskPart} and caught ${real(desk).caught} of ${real(desk).total} real ones.`;
+  }
+  if (desk) {
+    return `${where}, StormDesk caught ${real(desk).caught} of ${real(desk).total} real cases and flagged ${honest(desk).flagged} of ${honest(desk).total} honest ones.`;
+  }
+  if (rules) {
+    return `${where}, rules alone caught ${real(rules).caught} of ${real(rules).total} real cases and flagged ${honest(rules).flagged} of ${honest(rules).total} honest ones. No StormDesk run yet.`;
+  }
+  return null;
+}
 
 /** "caught 9 / 9" for real cases, "left alone 0 / 12" for traps. */
 export function scenarioCell(s: ScenarioResult | undefined): string | null {

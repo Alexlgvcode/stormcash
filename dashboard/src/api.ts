@@ -1,5 +1,6 @@
 // Thin client for the StormCash API (spec §12). In dev the Vite proxy serves
 // /v1; a deployed build sets VITE_API_BASE to the server's URL.
+import type { CasePayment } from "./cases";
 import type { FlagReview } from "./review";
 
 export const API_BASE: string = (import.meta.env.VITE_API_BASE ?? "").replace(/\/$/, "");
@@ -92,6 +93,11 @@ export interface CaseSummary {
   detected_where: "offline" | "server";
   exposure_cents: number;
   created_at: number;
+  // GET /v1/cases only (§18.3 [v4.23]): the simulated town's or a real phone's, and each payment's shop.
+  simulated?: boolean;
+  merchant?: string | null;
+  payment_a?: CasePayment | null;
+  payment_b?: CasePayment | null;
 }
 
 export interface CaseDetail {

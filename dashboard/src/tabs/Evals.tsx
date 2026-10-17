@@ -5,9 +5,11 @@
 // nothing is ever a placeholder (§0 rule 3).
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { getJSON } from "../api";
+import { ACTION_PLAIN, KIND_PLAIN } from "../plain";
 import { AuthorPanel } from "../components/AuthorDetector";
 import { Button, Facts, Note, PageHeader, Section, Strip, Table, Tabs, Td, Th } from "../components/ui";
 import {
+  evalsTakeaway,
   METRICS,
   SCENARIO_LABEL,
   scenarioCell,
@@ -18,7 +20,7 @@ import {
   type EvalSection,
   type EvalsResponse,
 } from "../evals";
-import { dollars } from "../format";
+import { clockTime, dollars } from "../format";
 
 const REFRESH_MS = 60_000; // results files are read on every request, so a new run shows up on its own
 
@@ -29,9 +31,10 @@ const VIEWS = [
 ] as const;
 type View = (typeof VIEWS)[number]["id"];
 
-function when(ts: number): string {
-  return new Date(ts * 1000).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
-}
+const when = clockTime;
+
+// Server-written run labels in plain words: the deterministic baseline runner is a stand-in, not an agent.
+const plainLabel = (text: string) => text.replace(/Fake runner/g, "Rules-only stand-in").replace(/ · prompt v\d+/g, "");
 
 function cellText(cell: Cell): string {
   if (typeof cell === "string") return cell;
@@ -43,14 +46,30 @@ const MODE_LABEL: Record<string, string> = {
   run_local: "run locally, scored in Chalk",
 };
 
-function ChalkRun({ run }: { run: EvalRun }) {
-  return run.chalk.dashboard_url ? (
-    <a href={run.chalk.dashboard_url} target="_blank" rel="noreferrer" className="break-all font-mono text-th text-accent hover:underline">
-      {run.chalk.run_id}
-    </a>
-  ) : (
-    <span className="break-all font-mono text-th">{run.chalk.run_id}</span>
+/** A Chalk run id, shortened; a click copies the whole id. Linked when the results file carries its URL. */
+function ChalkId({ id, url }: { id: string; url?: string | null }) {
+  const [copied, setCopied] = useState(false);
+  function copy() {
+    navigator.clipboard?.writeText(id).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    }).catch(() => undefined);
+  }
+  return (
+    <span className="inline-flex items-baseline gap-2">
+      <button onClick={copy} title={`${id} (click to copy)`} className="font-mono text-th text-ink hover:text-accent">
+        {id.slice(0, 8)}…
+      </button>
+      {copied && <span className="text-th text-success">copied</span>}
+      {url && (
+        <a href={url} target="_blank" rel="noreferrer" className="text-th text-accent hover:underline">open in Chalk</a>
+      )}
+    </span>
   );
+}
+
+function ChalkRun({ run }: { run: EvalRun }) {
+  return <ChalkId id={run.chalk.run_id} url={run.chalk.dashboard_url} />;
 }
 
 /** One section's headline facts, from its StormDesk run (else the baseline). */
@@ -79,10 +98,10 @@ function RunFacts({ title, run, empty }: { title: string; run: EvalRun | null; e
       ) : (
         <Facts rows={[
           ["When", when(run.timestamp)],
-          ["Runner", [run.runner_label, run.model].filter(Boolean).join(" · ")],
+          ["Runner", plainLabel([run.runner_label, run.model].filter(Boolean).join(" · "))],
           ["Chalk run", <ChalkRun run={run} />],
           ["In Chalk", `Evaluations → ${run.chalk.suite} → ${run.chalk.evaluation_name} (${run.chalk.status.toLowerCase()})`],
-          ["Dataset", `${run.dataset.rows} candidates (${run.dataset.honest_rows} honest) from seeds ${run.dataset.seeds.join(", ")}`],
+          ["Dataset", `${run.dataset.rows} cases (${run.dataset.honest_rows} honest) from seeds ${run.dataset.seeds.join(", ")}`],
           ["How", MODE_LABEL[run.mode] ?? run.mode],
         ]} />
       )}
@@ -135,7 +154,7 @@ function Scenarios({ rules, desk }: { rules: EvalRun | null; desk: EvalRun | nul
       <thead>
         <tr>
           <Th>Scenario</Th>
-          <Th num>Candidates</Th>
+          <Th num>Cases</Th>
           <Th>Right answer</Th>
           <Th num>Rules-only</Th>
           <Th num className="pl-6">StormDesk</Th>
@@ -150,7 +169,7 @@ function Scenarios({ rules, desk }: { rules: EvalRun | null; desk: EvalRun | nul
             <tr key={name}>
               <Td className="text-heading">{SCENARIO_LABEL[name] ?? name}</Td>
               <Td num>{info.rows}</Td>
-              <Td className="text-secondary">{info.honest ? "leave alone" : info.label_action}</Td>
+              <Td className="text-secondary">{info.honest ? "Leave alone" : (ACTION_PLAIN[info.label_action] ?? info.label_action)}</Td>
               <Td num className={info.honest && r?.dismissed === 0 ? "text-danger" : undefined}>
                 {scenarioCell(r) ?? "No run yet"}
               </Td>
@@ -174,7 +193,8 @@ function TrapRow({ row, open }: { row: EvalRow; open: boolean }) {
     <details open={open} className="border-b border-rule py-2.5">
       <summary className="cursor-pointer text-heading">
         {row.subject_name ?? row.subject_id} · {SCENARIO_LABEL[row.label_scenario] ?? row.label_scenario} · seed{" "}
-        {row.seed} · left alone ({row.output_kind ?? "no flag"}, {row.output_action ?? "no action"})
+        {row.seed} · left alone ({row.output_kind ? (KIND_PLAIN[row.output_kind] ?? row.output_kind).toLowerCase() : "no flag"},{" "}
+        {row.output_action ? (ACTION_PLAIN[row.output_action] ?? row.output_action).toLowerCase() : "no action"})
       </summary>
       {row.summary && <p className="mt-2 max-w-[90ch] text-ink">{row.summary}</p>}
       {row.reasoning && <p className="mt-2 max-w-[90ch] whitespace-pre-wrap text-secondary">{row.reasoning}</p>}
@@ -193,7 +213,7 @@ function Traps({ rules, desk }: { rules: EvalRun | null; desk: EvalRun | null })
         <p className="py-2.5 text-secondary">
           Appears with the first StormDesk run.
           {rules &&
-            ` The rules-only baseline left ${trapsRight(rules).length} of ${rules.dataset.honest_rows} traps alone: it flags every candidate.`}
+            ` The rules-only baseline left ${trapsRight(rules).length} of ${rules.dataset.honest_rows} traps alone: it flags every one.`}
         </p>
       )}
       {desk && right.length === 0 && (
@@ -231,12 +251,15 @@ function Scored({ section, heldout, children }: { section: EvalSection; heldout:
         <Scenarios rules={rules} desk={desk} />
       </Section>
       {children}
-      <div className="grid gap-10 lg:grid-cols-2">
-        <RunFacts title="Rules-only baseline" run={rules}
-          empty={heldout ? "No rules-only run on these rows yet." : "No rules-only run yet."} />
-        <RunFacts title="StormDesk (Droid)" run={desk}
-          empty={heldout ? "No StormDesk run on the held-out seeds yet." : "No StormDesk run yet."} />
-      </div>
+      <details>
+        <summary className="cursor-pointer py-1 text-accent">Run details</summary>
+        <div className="mt-4 grid gap-10 lg:grid-cols-2">
+          <RunFacts title="Rules-only baseline" run={rules}
+            empty={heldout ? "No rules-only run on these rows yet." : "No rules-only run yet."} />
+          <RunFacts title="StormDesk (Droid)" run={desk}
+            empty={heldout ? "No StormDesk run on the held-out seeds yet." : "No StormDesk run yet."} />
+        </div>
+      </details>
     </div>
   );
 }
@@ -271,7 +294,10 @@ export function EvalsTab() {
 
   return (
     <div className="pb-12">
-      <PageHeader title="Evals" subtitle="StormDesk measured with Chalk Evaluations on labeled simulated towns">
+      <PageHeader title="Evals" subtitle="StormDesk measured with Chalk Evaluations on labeled simulated towns"
+        takeaway={data ? (heldoutShown
+          ? evalsTakeaway(heldout!.columns.rules_only, heldout!.columns.stormdesk, true)
+          : evalsTakeaway(rules, desk, false)) ?? undefined : undefined}>
         <Tabs tabs={VIEWS} value={current} onChange={setView} />
       </PageHeader>
       {error && !data && <Note tone="danger">Couldn't load the eval results: {error}</Note>}
@@ -293,7 +319,7 @@ export function EvalsTab() {
             {shown.dataset.detector_misses.length > 0 && (
               <Section title="Not in the dataset">
                 <p className="py-2 text-secondary">
-                  {shown.dataset.detector_misses.length} planted subjects never raised a candidate, so neither runner saw
+                  {shown.dataset.detector_misses.length} planted cheats and look-alikes never raised a suspicion, so neither side saw
                   them (they aren't counted above):
                 </p>
                 <ul className="border-t border-rule">
@@ -334,9 +360,9 @@ export function EvalsTab() {
                 {others.map((r) => (
                   <tr key={r.file}>
                     <Td className="whitespace-nowrap text-secondary">{r.timestamp ? when(r.timestamp) : r.file}</Td>
-                    <Td className="text-ink">{r.reason}</Td>
+                    <Td className="text-ink">{plainLabel(r.reason)}</Td>
                     <Td className="text-secondary">{r.mode ? (MODE_LABEL[r.mode] ?? r.mode) : "—"}</Td>
-                    <Td className="break-all font-mono text-th text-secondary">{r.chalk_run_id ?? "?"}</Td>
+                    <Td>{r.chalk_run_id ? <ChalkId id={r.chalk_run_id} /> : <span className="text-secondary">—</span>}</Td>
                   </tr>
                 ))}
               </tbody>

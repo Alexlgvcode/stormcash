@@ -153,11 +153,52 @@ export interface RunDetail {
 }
 
 export const JOB_LABEL: Record<string, string> = {
-  investigate: "Investigate",
-  triage: "Triage",
-  respond: "Respond",
-  review: "Review",
-  author: "Author",
+  investigate: "Investigated a case",
+  triage: "Checked a suspicion",
+  respond: "Appeal reply",
+  review: "Second opinion",
+  author: "Wrote a detector",
+};
+
+/** Each outcome in plain words (the server's labels name our internals). */
+export const OUTCOME_PLAIN: Record<Outcome, string> = {
+  valid: "Valid",
+  invalid_citation: "Cited a missing record",
+  rerun_rejected: "Re-run didn't match",
+  structured_output_failed: "No usable answer",
+  failed: "Failed",
+  fallback: "Stand-in answered",
+  fake: "Stand-in",
+  running: "Running",
+  unfinished: "Unfinished",
+};
+
+/** Each guardrail in plain words, by its key; an unknown one keeps the server's text. */
+export const GUARDRAIL_PLAIN: Record<string, { label: string; about: string }> = {
+  invalid_citation: {
+    label: "Answers rejected for citing a record that doesn't exist",
+    about: "Droid cited an id that isn't in the database: the answer is stored as invalid and can never be acted on.",
+  },
+  rerun_rejected: {
+    label: "Proposed detectors our re-run rejected",
+    about: "After Droid writes a detector, our server re-runs its tests and the eval; a claim that didn't match was rejected and no pull request was opened.",
+  },
+  structured_output_retry: {
+    label: "Answers that needed a second try",
+    about: "A missing or malformed answer is asked for once more; these runs answered on the second try.",
+  },
+  structured_output_failed: {
+    label: "No usable answer after a second try",
+    about: "Both tries failed: stored as failed, nothing saved.",
+  },
+  fallback: {
+    label: "Times the stand-in answered because Droid couldn't run",
+    about: "Droid couldn't run (for example, out of credits), so the rules-only stand-in answered, labelled as such.",
+  },
+  permission_denial: {
+    label: "Tool requests the permission handler blocked",
+    about: "Droid asked for a tool outside its read-only set and was refused.",
+  },
 };
 
 /** Each outcome's pill tone: green valid, red rejected or failed, amber for the fake runner. */

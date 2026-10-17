@@ -5,6 +5,7 @@
 import QRCode from "qrcode";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { getJSON, type CaseDetail, type CaseSummary, type Health, type RelayPath } from "../api";
+import { caseTitle, casesTakeaway } from "../cases";
 import { RULE_TEXT, TagTable, useVerify, VerifyResult } from "../components/Evidence";
 import { OwnerFreezes } from "../components/OwnerFreeze";
 import { CaseStormDesk, FlagsView } from "../components/StormDesk";
@@ -75,7 +76,7 @@ function ProofQR({ caseId }: { caseId: number }) {
 function timeline(c: CaseDetail["case"], cert: CaseDetail["cert"], pa?: RelayPath, pb?: RelayPath): [number, string][] {
   const out: [number, string][] = [];
   if (cert) {
-    out.push([Number(cert.fields.issued_at), `Certificate v${cert.fields.cert_ver} issued, cap ${dollars(Number(cert.fields.cap_cents))}`]);
+    out.push([Number(cert.fields.issued_at), `The bank certified the wallet for ${dollars(Number(cert.fields.cap_cents))}`]);
   }
   for (const [label, p] of [["A", pa], ["B", pb]] as const) {
     if (!p?.paid_at) continue;
@@ -94,7 +95,8 @@ function timeline(c: CaseDetail["case"], cert: CaseDetail["cert"], pa?: RelayPat
   return out.sort((x, y) => x[0] - y[0]);
 }
 
-function CaseView({ caseId, paths }: { caseId: number; paths: Map<string, RelayPath> }) {
+function CaseView({ row, paths }: { row: CaseSummary; paths: Map<string, RelayPath> }) {
+  const caseId = row.case_id;
   const [detail, setDetail] = useState<CaseDetail | null>(null);
   const [serverPub, setServerPub] = useState<string | null>(null);
   const [showQR, setShowQR] = useState(false);
@@ -122,8 +124,11 @@ function CaseView({ caseId, paths }: { caseId: number; paths: Map<string, RelayP
   const text = RULE_TEXT[c.rule] ?? { title: c.rule, why: "" };
   const pa = c.tag_a ? paths.get(c.tag_a) : undefined;
   const pb = c.tag_b ? paths.get(c.tag_b) : undefined;
+  // Each payment's shop and status come with the case list; the relay paths add when and how it travelled.
+  const shopA = row.payment_a?.merchant ?? pa?.merchant;
+  const shopB = row.payment_b?.merchant ?? pb?.merchant;
   const amount = (b ?? a)?.fields.amount_cents as number | undefined;
-  const refusedAt = [pa, pb].find((p) => p?.status === "refused_evidence");
+  const refusedAt = [row.payment_b, row.payment_a].find((p) => p?.status === "refused_evidence");
   const rulesFired = (c.evidence.rules_fired as string[] | undefined) ?? [c.rule];
   const events = timeline(c, cert, pa, pb);
 
@@ -131,7 +136,10 @@ function CaseView({ caseId, paths }: { caseId: number; paths: Map<string, RelayP
     <div className="min-w-0 space-y-10">
       <div className="space-y-4">
         <div>
-          <Eyebrow>Case #{c.case_id}</Eyebrow>
+          <div className="flex items-center gap-2">
+            <Eyebrow>Case #{c.case_id}</Eyebrow>
+            {row.simulated && <Pill tone="neutral">simulated</Pill>}
+          </div>
           <div className="mt-1 flex flex-wrap items-center gap-3">
             {amount !== undefined && RULE_VERB[c.rule] ? (
               <>
@@ -157,12 +165,10 @@ function CaseView({ caseId, paths }: { caseId: number; paths: Map<string, RelayP
         </div>
         <Strip
           items={[
-            { label: "Rule", value: rulesFired.map((r) => RULE_TEXT[r]?.title ?? r).join(" + ") },
+            { label: "Rule", value: text.title },
             { label: "Detected", value: c.detected_where === "offline" ? `Offline${refusedAt ? `, ${refusedAt.merchant}` : ""}` : "At settlement" },
             { label: "Exposure", value: <span className="tabular-nums">{dollars(c.exposure_cents)}</span> },
-            ...(cert
-              ? [{ label: "Certificate", value: `v${cert.fields.cert_ver} · ${dollars(Number(cert.fields.cap_cents))} cap` }]
-              : []),
+            ...(cert ? [{ label: "Wallet limit", value: dollars(Number(cert.fields.cap_cents)) }] : []),
           ]}
         />
         {showQR && <ProofQR caseId={c.case_id} />}
@@ -175,8 +181,9 @@ function CaseView({ caseId, paths }: { caseId: number; paths: Map<string, RelayP
             rule={c.rule === "MERCHANT_KNEW" ? "" : c.rule}
             a={a}
             b={b}
-            titleA={b ? `Payment A${pa ? ` · ${pa.merchant}` : ""}` : "Settled payment"}
-            titleB={`Payment B${pb ? ` · ${pb.merchant}` : ""}`}
+            titleA={b ? `Payment A${shopA ? ` · ${shopA}` : ""}` : "Settled payment"}
+            titleB={`Payment B${shopB ? ` · ${shopB}` : ""}`}
+            checks={checks}
           />
         </Section>
       )}
@@ -229,10 +236,10 @@ function CaseView({ caseId, paths }: { caseId: number; paths: Map<string, RelayP
         <Section title="Payment details">
           <Facts
             rows={[
-              ...(pa ? [["Payment A", `${dollars(pa.amount_cents)} at ${pa.merchant}, ${PAYMENT_STATUS[pa.status] ?? pa.status}`] as [string, string]] : []),
-              ...(pb ? [["Payment B", `${dollars(pb.amount_cents)} at ${pb.merchant}, ${PAYMENT_STATUS[pb.status] ?? pb.status}`] as [string, string]] : []),
-              ...(cert ? [["Escrow account", <span className="font-mono text-th">{String(cert.fields.escrow_ref)}</span>] as [string, ReactNode]] : []),
-              ...(c.cert_id ? [["Certificate id", <span className="font-mono text-th">{c.cert_id}</span>] as [string, ReactNode]] : []),
+              ...([["Payment A", row.payment_a], ["Payment B", row.payment_b]] as const)
+                .filter(([, p]) => p)
+                .map(([label, p]) => [label, `${dollars(p!.amount_cents)} at ${p!.merchant ?? "a shop"}, ${
+                  PAYMENT_STATUS[p!.status ?? ""] ?? p!.status ?? "not paid"}`] as [string, string]),
               ["Case file", (
                 <button onClick={() => caseFile.current?.scrollIntoView({ behavior: "smooth" })} className="text-accent hover:underline">
                   StormDesk report
@@ -240,8 +247,16 @@ function CaseView({ caseId, paths }: { caseId: number; paths: Map<string, RelayP
               )],
             ]}
           />
-          {!pa && !pb && (
-            <p className="py-2 text-th text-secondary">The payments' relay paths aren't among the latest 200 uploads.</p>
+          {(cert || c.cert_id) && (
+            <details className="mt-3">
+              <summary className="cursor-pointer py-1 text-accent">Technical details</summary>
+              <Facts rows={[
+                ...(cert ? [["Escrow account", <span className="font-mono text-th">{String(cert.fields.escrow_ref)}</span>] as [string, ReactNode]] : []),
+                ...(cert ? [["Certificate version", String(cert.fields.cert_ver)] as [string, ReactNode]] : []),
+                ...(c.cert_id ? [["Certificate id", <span className="font-mono text-th">{c.cert_id}</span>] as [string, ReactNode]] : []),
+                ...(rulesFired.length ? [["Rules fired", <span className="font-mono text-th">{rulesFired.join(", ")}</span>] as [string, ReactNode]] : []),
+              ]} />
+            </details>
           )}
         </Section>
       </div>
@@ -261,48 +276,61 @@ function CaseView({ caseId, paths }: { caseId: number; paths: Map<string, RelayP
   );
 }
 
-function HardCases() {
-  const [cases, setCases] = useState<CaseSummary[] | null>(null);
-  const [selected, setSelected] = useState<number | null>(null);
-  const [paths, setPaths] = useState<Map<string, RelayPath>>(new Map());
+function CaseButton({ c, on, onPick }: { c: CaseSummary; on: boolean; onPick: () => void }) {
+  return (
+    <li>
+      <button onClick={onPick} aria-current={on ? "true" : undefined}
+        className={`w-full border-b border-rule px-3 py-2.5 text-left ${on ? "bg-accent-tint" : "hover:bg-accent-tint/50"}`}>
+        <div className={`font-medium ${on ? "text-accent" : "text-heading"}`}>{caseTitle(c)}</div>
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-th text-secondary">
+          <span>{clockTime(c.created_at)}</span>
+          <span>· {c.detected_where === "offline" ? "found offline" : "at settlement"}</span>
+          <span>· #{c.case_id}</span>
+          {c.simulated && <Pill tone="neutral">simulated</Pill>}
+        </div>
+      </button>
+    </li>
+  );
+}
 
-  const load = useCallback(() => {
-    getJSON<CaseSummary[]>("/v1/cases?limit=200").then((rows) => {
-      setCases(rows);
-      setSelected((cur) => cur ?? rows[0]?.case_id ?? null);
-    });
-    getJSON<RelayPath[]>("/v1/relay/paths?limit=200")
-      .then((rows) => setPaths(new Map(rows.map((p) => [p.tag_hash, p]))))
-      .catch(() => undefined);
-  }, []);
-  useEffect(load, [load]);
-  useEvents(["case_opened", "town", "upload"], load);
+/** Your phones' cases first; the simulated town's below, collapsed. */
+function HardCases({ cases, paths }: { cases: CaseSummary[] | null; paths: Map<string, RelayPath> }) {
+  const [selected, setSelected] = useState<number | null>(null);
+  const [townOpen, setTownOpen] = useState<boolean | null>(null);
 
   if (!cases) return <Note>Loading…</Note>;
-  if (cases.length === 0) return <Note>No hard cases yet.</Note>;
+  if (cases.length === 0) return <Note>No proven cases yet.</Note>;
+  const real = cases.filter((c) => !c.simulated);
+  const town = cases.filter((c) => c.simulated);
+  const open = townOpen ?? real.length === 0; // with nothing from the phones, show the town's cases
+  const current = cases.find((c) => c.case_id === selected) ?? real[0] ?? town[0];
   return (
-    <div className="grid gap-10 lg:grid-cols-[17rem_minmax(0,1fr)]">
-      <ol className="max-h-[calc(100vh-12rem)] self-start overflow-y-auto border-t border-rule lg:sticky lg:top-6">
-        {cases.map((c) => {
-          const on = selected === c.case_id;
-          return (
-            <li key={c.case_id}>
-              <button onClick={() => setSelected(c.case_id)} aria-current={on ? "true" : undefined}
-                className={`w-full border-b border-rule px-3 py-2.5 text-left ${on ? "bg-accent-tint" : "hover:bg-accent-tint/50"}`}>
-                <div className="flex justify-between gap-2">
-                  <span className={`font-medium ${on ? "text-accent" : "text-heading"}`}>{RULE_TEXT[c.rule]?.title ?? c.rule}</span>
-                  <span className="text-th text-secondary">#{c.case_id}</span>
-                </div>
-                <div className="text-th tabular-nums text-secondary">
-                  {clockTime(c.created_at)} · {c.detected_where === "offline" ? "offline" : "settlement"}
-                  {c.exposure_cents > 0 && ` · ${dollars(c.exposure_cents)}`}
-                </div>
-              </button>
-            </li>
-          );
-        })}
-      </ol>
-      {selected !== null && <CaseView key={selected} caseId={selected} paths={paths} />}
+    <div className="grid gap-10 lg:grid-cols-[20rem_minmax(0,1fr)]">
+      <div className="max-h-[calc(100vh-12rem)] self-start overflow-y-auto lg:sticky lg:top-6">
+        <div className="border-b border-rule pb-1.5 text-eyebrow font-semibold uppercase text-secondary">Your phones</div>
+        {real.length === 0 ? (
+          <p className="border-b border-rule px-3 py-2.5 text-secondary">No proven cases from your phones yet.</p>
+        ) : (
+          <ol>
+            {real.map((c) => <CaseButton key={c.case_id} c={c} on={current?.case_id === c.case_id} onPick={() => setSelected(c.case_id)} />)}
+          </ol>
+        )}
+        {town.length > 0 && (
+          <>
+            <button onClick={() => setTownOpen(!open)} aria-expanded={open}
+              className="mt-6 flex w-full items-center justify-between border-b border-rule pb-1.5 text-left text-eyebrow font-semibold uppercase text-secondary hover:text-heading">
+              Simulated town ({town.length})
+              <span aria-hidden="true">{open ? "−" : "+"}</span>
+            </button>
+            {open && (
+              <ol>
+                {town.map((c) => <CaseButton key={c.case_id} c={c} on={current?.case_id === c.case_id} onPick={() => setSelected(c.case_id)} />)}
+              </ol>
+            )}
+          </>
+        )}
+      </div>
+      {current && <CaseView key={current.case_id} row={current} paths={paths} />}
     </div>
   );
 }
@@ -316,6 +344,17 @@ export function CasesTab() {
       return "cases";
     }
   });
+  const [cases, setCases] = useState<CaseSummary[] | null>(null);
+  const [paths, setPaths] = useState<Map<string, RelayPath>>(new Map());
+  const load = useCallback(() => {
+    getJSON<CaseSummary[]>("/v1/cases?limit=200").then(setCases).catch(() => setCases((cur) => cur ?? []));
+    getJSON<RelayPath[]>("/v1/relay/paths?limit=200")
+      .then((rows) => setPaths(new Map(rows.map((p) => [p.tag_hash, p]))))
+      .catch(() => undefined);
+  }, []);
+  useEffect(load, [load]);
+  useEvents(["case_opened", "town", "upload"], load);
+
   const pick = (v: CasesView) => {
     setView(v);
     try {
@@ -326,10 +365,11 @@ export function CasesTab() {
   };
   return (
     <div className="pb-12">
-      <PageHeader title="Cases" subtitle="Proven fraud and the agent's review queue">
+      <PageHeader title="Cases" subtitle="Proven fraud and the agent's review queue"
+        takeaway={cases ? casesTakeaway(cases) : undefined}>
         <Tabs tabs={VIEWS} value={view} onChange={pick} />
       </PageHeader>
-      {view === "cases" ? <HardCases /> : view === "flags" ? <FlagsView /> : <OwnerFreezes />}
+      {view === "cases" ? <HardCases cases={cases} paths={paths} /> : view === "flags" ? <FlagsView /> : <OwnerFreezes />}
     </div>
   );
 }

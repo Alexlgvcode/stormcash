@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  accountsTakeaway,
   bankPill,
   itemsOf,
   openingNote,
@@ -70,6 +71,14 @@ test("the reconciled line counts only accounts that were read", () => {
   assert.equal(reconciledLine(result([], { nessie: { enabled: false, error: null } })).tone, "off");
 });
 
+test("the takeaway says whether the bank agrees", () => {
+  assert.equal(accountsTakeaway(result([checking, { ...checking, key: "c2" }])), "All 2 accounts match the bank.");
+  assert.equal(accountsTakeaway(result([checking])), "The 1 account in Nessie matches the bank.");
+  assert.equal(accountsTakeaway(result([checking, pool])), "1 of 2 accounts match the bank; 1 has a difference.");
+  assert.equal(accountsTakeaway(result([{ ...pool, status: "error" }])), "Capital One Nessie can't be read right now.");
+  assert.equal(accountsTakeaway(result([], { nessie: { enabled: false, error: null } })), "Nessie is switched off: every balance is ledger only.");
+});
+
 test("the opening says where each side's number comes from", () => {
   assert.equal(
     openingNote(checking.opening!),
@@ -88,7 +97,7 @@ test("pairs and outages are worded from the server's counts", () => {
   assert.equal(pairsLine({ checked: 0, complete: 0, problems: [], problems_total: 0 }).tone, "off");
   assert.equal(
     pairsLine({ checked: 3, complete: 3, problems: [], problems_total: 0 }).text,
-    "3 of 3 SC pairs complete (one withdrawal + one deposit) and matching the ledger ✓",
+    "3 of 3 transfers have both halves in Nessie (a withdrawal and a deposit) and match the ledger ✓",
   );
   const clock = (t: number) => `t=${t}`;
   assert.equal(unreachable(result([checking]), clock), null);

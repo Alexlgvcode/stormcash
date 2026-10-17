@@ -2,7 +2,7 @@
 // Nessie call summary split into a description and its amount.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { accountAndOwner, callLine, callStatus } from "./accounts.ts";
+import { accountAndOwner, callLine, callStatus, isMoneyMove } from "./accounts.ts";
 
 test("account and owner follow spec §11.4's mapping", () => {
   assert.deepEqual(accountAndOwner({ label: "Maya Checking", kind: "checking" }), { account: "Checking", owner: "Maya" });
@@ -33,6 +33,13 @@ test("a call's amount moves to its own column", () => {
   assert.deepEqual(call("Open account Guarantee Pool, $1000"), { description: "Open account Guarantee Pool", cents: 100000 });
   assert.deepEqual(call("Create customer Maya Rivera"), { description: "Create customer Maya Rivera", cents: null });
   assert.deepEqual(call(null), { description: "POST withdrawal", cents: null });
+});
+
+test("money movements apart from account setup", () => {
+  assert.equal(isMoneyMove({ path: "/accounts/abc/withdrawals" }), true);
+  assert.equal(isMoneyMove({ path: "/accounts/abc/deposits" }), true);
+  assert.equal(isMoneyMove({ path: "/customers/abc/accounts" }), false);
+  assert.equal(isMoneyMove({ path: "/customers" }), false);
 });
 
 test("call status words", () => {

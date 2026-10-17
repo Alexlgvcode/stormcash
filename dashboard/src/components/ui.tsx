@@ -22,14 +22,20 @@ export function Pill({ tone, title, children }: { tone: Tone; title?: string; ch
   );
 }
 
-/** A large title with a short grey subtitle on the same baseline, then the page's tabs. */
-export function PageHeader({ title, subtitle, children }: { title: string; subtitle?: string; children?: ReactNode }) {
+/** A large title with a short grey subtitle on the same baseline, the tab's one-line takeaway, then its tabs. */
+export function PageHeader({ title, subtitle, takeaway, children }: {
+  title: string;
+  subtitle?: string;
+  takeaway?: ReactNode;
+  children?: ReactNode;
+}) {
   return (
     <header className="mb-6">
       <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
         <h1 className="text-title font-medium text-heading">{title}</h1>
         {subtitle && <p className="text-ui text-secondary">{subtitle}</p>}
       </div>
+      {takeaway && <p className="mt-3 max-w-[90ch] text-section text-ink">{takeaway}</p>}
       {children && <div className="mt-5">{children}</div>}
     </header>
   );

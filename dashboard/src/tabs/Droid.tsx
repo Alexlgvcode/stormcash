@@ -17,8 +17,10 @@ import {
   duration,
   guardrailCount,
   guardrailCoverage,
+  GUARDRAIL_PLAIN,
   JOB_LABEL,
   modelText,
+  OUTCOME_PLAIN,
   OUTCOME_TONE,
   outputText,
   promptText,
@@ -35,6 +37,7 @@ import {
 import type { EvalsResponse } from "../evals";
 import { useEvents } from "../events";
 import { clockTime } from "../format";
+import { plainText } from "../plain";
 
 const VIEWS = [
   { id: "runs", label: "Runs" },
@@ -51,22 +54,17 @@ interface LiveRun {
   steps: Step[];
 }
 
-function startedText(ts: number): string {
-  const d = new Date(ts * 1000);
-  return d.toDateString() === new Date().toDateString()
-    ? clockTime(ts)
-    : d.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
-}
+const startedText = clockTime;
 
 function OutcomeBadge({ run }: { run: Pick<ConsoleRun, "outcome" | "outcome_label"> }) {
-  return <Pill tone={OUTCOME_TONE[run.outcome]}>{run.outcome_label}</Pill>;
+  return <Pill tone={OUTCOME_TONE[run.outcome]}>{OUTCOME_PLAIN[run.outcome] ?? run.outcome_label}</Pill>;
 }
 
 function HarnessLine({ h, builtin }: { h: Harness; builtin: string | null }) {
   // Who answers the next job (runner.make_runner): auto needs the SDK, the droid CLI and FACTORY_API_KEY.
-  const runner = h.runner_setting === "fake" ? "fake runner (STORMDESK_RUNNER=fake)"
+  const runner = h.runner_setting === "fake" ? "the rules-only stand-in (STORMDESK_RUNNER=fake)"
     : h.runner_setting === "droid" ? `Droid, model ${h.model_setting}`
-    : h.droid_available ? `Droid, model ${h.model_setting} (auto)` : "fake runner (auto: no FACTORY_API_KEY or droid CLI)";
+    : h.droid_available ? `Droid, model ${h.model_setting} (auto)` : "the rules-only stand-in (auto: no FACTORY_API_KEY or droid CLI)";
   const items = [
     `New jobs: ${runner}`,
     `Prompt v${h.prompt_version}${h.review_prompt_version != null ? ` · reviewer v${h.review_prompt_version}` : ""}`,
@@ -89,11 +87,6 @@ function HarnessLine({ h, builtin }: { h: Harness; builtin: string | null }) {
           Built-in still seen: {builtin}
         </span>
       )}
-      {h.cooldown_s > 0 && (
-        <Pill tone="warning">
-          Droid paused {Math.ceil(h.cooldown_s / 60)} min, fake runner answering: {h.cooldown_reason}
-        </Pill>
-      )}
     </div>
   );
 }
@@ -111,7 +104,7 @@ function LiveNow({ live, onSelect }: { live: LiveRun[]; onSelect: (id: number) =
                 <span className="h-2 w-2 animate-pulse rounded-full bg-accent" />
                 <span className="tabular-nums text-secondary">#{r.run_id}</span>
                 <span className="font-medium text-heading">{JOB_LABEL[r.job] ?? r.job}</span>
-                <span className="text-ink">{r.subject}</span>
+                <span className="text-ink">{plainText(r.subject)}</span>
                 <RunnerBadge runner={r.runner} />
                 {last && <span className="font-mono text-th text-secondary">{r.steps.length} · {last.tool}</span>}
               </button>
@@ -133,7 +126,6 @@ function RunsTable({ runs, selected, onSelect }: { runs: ConsoleRun[]; selected:
           <Th>Subject</Th>
           <Th num>Credits</Th>
           <Th num>Time</Th>
-          <Th num title="StormDesk's tool calls">Tools</Th>
           <Th>Outcome</Th>
         </tr>
       </thead>
@@ -150,13 +142,9 @@ function RunsTable({ runs, selected, onSelect }: { runs: ConsoleRun[]; selected:
               <Td className={`whitespace-nowrap ${on ? "font-semibold text-accent" : "font-medium text-heading"}`}>
                 {JOB_LABEL[r.job] ?? r.job}
               </Td>
-              <Td>
-                <div className="text-ink">{r.subject}</div>
-                <div className="text-th text-secondary">{[modelText(r), promptText(r)].filter(Boolean).join(" · ")}</div>
-              </Td>
+              <Td className="text-ink">{plainText(r.subject)}</Td>
               <Td num>{credits(r.factory_credits)}</Td>
               <Td num className="text-secondary">{duration(r.duration_ms)}</Td>
-              <Td num className="text-secondary">{r.tool_calls}</Td>
               <Td className="pr-3"><OutcomeBadge run={r} /></Td>
             </tr>
           );
@@ -200,7 +188,7 @@ function RunView({ run, live, version, onSelect }: {
     </>
   )]);
   facts.push(["Tool calls", `${run.tool_calls} ${run.job === "author" ? "in the sandbox" : "read-only"}${
-    run.tool_errors ? ` (${run.tool_errors} answered with an error)` : ""}${other ? ` + ${other}` : ""}`]);
+    run.tool_errors ? ` (${run.tool_errors} answered with an error)` : ""}${other ? ` + ${other.replace(/ToolSearch/g, "loading its tools")}` : ""}`]);
   facts.push([run.job === "author" ? "Re-run" : "Citations", run.job === "author"
     ? (run.outcome === "valid" ? "our server re-ran the tests and the eval: every claim matched ✓"
       : run.outcome === "rerun_rejected" ? "our re-run didn't match Droid's claims: no pull request ✗" : "not checked")
@@ -211,7 +199,7 @@ function RunView({ run, live, version, onSelect }: {
     facts.push(["Permission denials", String(run.permission_denials ?? "not recorded yet")]);
   }
   if (run.appeal) facts.push(["Appeal", appealTurnText(run.appeal)]);
-  if (run.fallback_reason) facts.push(["Why fake runner", <span className="text-warning">Droid couldn't run: {run.fallback_reason}</span>]);
+  if (run.fallback_reason) facts.push(["Why the stand-in answered", <span className="text-warning">Droid couldn't run: {run.fallback_reason}</span>]);
   if (run.reviewed_run_id != null) {
     facts.push(["Reviews", (
       <button onClick={() => onSelect(run.reviewed_run_id!)} className="text-accent hover:underline">
@@ -230,7 +218,7 @@ function RunView({ run, live, version, onSelect }: {
           <OutcomeBadge run={run} />
           <RunnerBadge runner={run.runner} model={run.model} modelRequested={run.model_requested} usage={usage} />
         </div>
-        <p className="mt-2 text-ink">{run.subject}{run.verdict ? ` → ${run.verdict}` : ""}</p>
+        <p className="mt-2 text-ink">{plainText(run.subject)}{run.verdict ? ` → ${plainText(run.verdict)}` : ""}</p>
       </div>
       <Facts rows={facts} />
       {text && (
@@ -280,8 +268,8 @@ function JobTable({ rows, verdicts, appeals }: { rows: (Totals & { job: string }
             <Th>Valid</Th>
             <Th num>Mean credits</Th>
             <Th num>Mean time</Th>
-            <Th num title="Not Droid: never in the success rate">Fake runner</Th>
-            <Th num title="Droid couldn't run; the fake runner answered">Fallbacks</Th>
+            <Th num title="Not Droid: never in the success rate">Stand-in</Th>
+            <Th num title="Droid couldn't run; the stand-in answered">Fallbacks</Th>
           </tr>
         </thead>
         <tbody>
@@ -309,17 +297,18 @@ function Guardrails({ items, droidRuns, onSelect }: { items: Guardrail[]; droidR
       <ul className="border-t border-rule">
         {items.map((g) => {
           const coverage = guardrailCoverage(g, droidRuns);
+          const plain = GUARDRAIL_PLAIN[g.key] ?? { label: g.label, about: g.about };
           return (
             <li key={g.key} className="grid grid-cols-[minmax(0,1fr)_auto] gap-6 border-b border-rule py-3">
               <div className="min-w-0">
-                <div className="font-medium text-heading">{g.label}</div>
-                <div className="text-secondary">{g.about}{coverage ? ` (${coverage})` : ""}</div>
+                <div className="font-medium text-heading">{plain.label}</div>
+                <div className="text-secondary">{plain.about}{coverage ? ` (${coverage})` : ""}</div>
                 {g.events.length > 0 && (
                   <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1">
                     {g.events.slice(0, 12).map((e) => (
                       <button key={e.run_id} onClick={() => onSelect(e.run_id)} title={e.detail ?? undefined}
                         className="text-th text-accent hover:underline">
-                        #{e.run_id}{e.runner === "fake" ? " · fake" : ""}
+                        #{e.run_id}{e.runner === "fake" ? " · stand-in" : ""}
                       </button>
                     ))}
                     {g.events.length > 12 && <span className="text-th text-secondary">+{g.events.length - 12} more</span>}
@@ -412,8 +401,12 @@ export function DroidTab() {
   });
   useEvents(["flag"], reloadSoon);
 
+  const t0 = data?.totals;
+  const takeaway = t0 && (t0.droid_runs === 0 ? "No Droid runs yet."
+    : `Droid ran ${t0.droid_runs} ${t0.droid_runs === 1 ? "time" : "times"} in the product: ${t0.valid} gave valid answers, for ${
+      credits(t0.credits_total)} Factory credits in all. A person approves anything it proposes.`);
   const header = (
-    <PageHeader title="Droid" subtitle="Every Droid run, what it cost, and the guardrails that fired">
+    <PageHeader title="Droid" subtitle="Every Droid run, what it cost, and the guardrails that fired" takeaway={takeaway || undefined}>
       <Tabs tabs={VIEWS} value={view} onChange={setView} />
     </PageHeader>
   );
@@ -438,31 +431,31 @@ export function DroidTab() {
       {header}
       <div className="space-y-3">
         <Strip items={[
-          { label: "Droid runs", value: (
-            <span className="tabular-nums">
-              {t.droid_runs}{" "}
-              <span className="text-th text-secondary">
-                + {t.fake_runs} fake runner · {t.fallback_runs} fallback{t.fallback_runs === 1 ? "" : "s"}, not scored
-              </span>
-            </span>
-          ) },
-          { label: "Valid outputs", value: t.success_rate == null ? "No Droid runs yet" : (
-            <span className="tabular-nums">
-              {t.valid} of {t.droid_runs}{" "}
-              <span className="text-th text-secondary">({Math.round(t.success_rate * 100)}%, citations checked)</span>
-            </span>
-          ) },
-          { label: "Factory credits", value: (
-            <span className="tabular-nums">
-              {credits(t.credits_total)}
-              {t.mean_credits != null && <span className="text-th text-secondary"> · mean {credits(t.mean_credits)}</span>}
-            </span>
-          ) },
-          { label: "Mean run time", value: <span className="tabular-nums">{duration(t.mean_duration_ms)}</span> },
-          { label: "Invalid citations rejected", value: <span className="tabular-nums">{invalid ? guardrailCount(invalid) : "—"}</span> },
-          { label: "Write tools", value: data.harness.author_on ? "None outside the author sandbox" : "None" },
+          { label: "Droid runs", value: <span className="tabular-nums">{t.droid_runs}</span> },
+          { label: "Valid answers", value: t.success_rate == null ? "None yet" : <span className="tabular-nums">{t.valid} of {t.droid_runs}</span> },
+          { label: "Factory credits", value: <span className="tabular-nums">{credits(t.credits_total)}</span> },
+          { label: "Average time", value: <span className="tabular-nums">{duration(t.mean_duration_ms)}</span> },
         ]} />
-        <HarnessLine h={data.harness} builtin={builtin} />
+        {data.harness.cooldown_s > 0 && (
+          <p className="text-warning">
+            Droid is paused for {Math.ceil(data.harness.cooldown_s / 60)} min; the rules-only stand-in answers new jobs.
+          </p>
+        )}
+        <details>
+          <summary className="cursor-pointer py-1 text-accent">Technical details</summary>
+          <div className="mt-2 space-y-2">
+            <p className="text-th text-secondary">
+              Not scored: {t.fake_runs} rules-only stand-in run{t.fake_runs === 1 ? "" : "s"} and {t.fallback_runs} fallback
+              {t.fallback_runs === 1 ? "" : "s"}. Answers rejected for a missing record:{" "}
+              {invalid ? guardrailCount(invalid) : "—"}. Write tools: {data.harness.author_on ? "none outside the detector-writing sandbox" : "none"}.
+              {t.mean_credits != null ? ` Mean ${credits(t.mean_credits)} credits per run (${t.credits_runs} recorded).` : ""}
+            </p>
+            <HarnessLine h={data.harness} builtin={builtin} />
+            {data.harness.cooldown_s > 0 && data.harness.cooldown_reason && (
+              <p className="text-th text-secondary">Why Droid is paused: {data.harness.cooldown_reason}</p>
+            )}
+          </div>
+        </details>
       </div>
 
       <div className="mt-10">
@@ -471,7 +464,7 @@ export function DroidTab() {
             <div>
               <p className="text-section text-ink">No StormDesk runs yet.</p>
               <p className="mt-1 text-secondary">
-                They appear here as soon as the worker picks up a hard case or a detector candidate, live as each tool
+                They appear here as soon as the worker picks up a proven case or a suspicion, live as each tool
                 call streams.
               </p>
             </div>
@@ -480,19 +473,19 @@ export function DroidTab() {
         ) : view === "runs" ? (
           <div className="space-y-10">
             <LiveNow live={liveRuns} onSelect={select} />
-            <div className="grid items-start gap-10 xl:grid-cols-[minmax(0,1fr)_29rem]">
+            <div className="grid items-start gap-10 xl:grid-cols-[minmax(0,1fr)_26rem]">
               <Section
                 title={withFake ? "All runs" : "Droid's runs"}
                 right={
                   <label className="flex items-center gap-2 text-th text-ink">
                     <input type="checkbox" checked={withFake} onChange={(e) => setWithFake(e.target.checked)}
                       className="h-4 w-4 accent-accent" />
-                    Show fake-runner runs{!withFake && hidden > 0 ? ` (${hidden} hidden)` : ""}
+                    Show stand-in runs{!withFake && hidden > 0 ? ` (${hidden} hidden)` : ""}
                   </label>
                 }
               >
                 {runs.length === 0 ? (
-                  <p className="py-2.5 text-secondary">No Droid runs yet: every stored run so far is the fake runner's.</p>
+                  <p className="py-2.5 text-secondary">No Droid runs yet: every stored run so far is the stand-in's.</p>
                 ) : (
                   <div className={withFake ? "max-h-[36rem] overflow-y-auto" : undefined}>
                     <RunsTable runs={runs} selected={selected} onSelect={select} />

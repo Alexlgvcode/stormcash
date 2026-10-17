@@ -47,6 +47,11 @@ export function callLine(c: { method: string; path: string; summary: string | nu
   return { description: m[1] + (m[4] ?? ""), cents: Number(m[2]) * 100 + Number(m[3] ?? 0) };
 }
 
+/** A deposit or withdrawal moves money; opening an account or creating a customer is setup. */
+export function isMoneyMove(c: { path: string }): boolean {
+  return /\/(deposits|withdrawals)\/?$/.test(c.path);
+}
+
 /** completed, HTTP <code>, or timeout (no answer). */
 export function callStatus(status: number | null): { ok: boolean; text: string } {
   if (status === null) return { ok: false, text: "timeout" };

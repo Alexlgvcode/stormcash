@@ -115,6 +115,19 @@ export function reconciledLine(r: Reconciliation): { tone: Tone; text: string } 
   return { tone: errors ? "error" : ok === read.length && read.length > 0 ? "ok" : "diff", text: parts.join(" · ") };
 }
 
+/** The Accounts tab's one-line takeaway: "All 5 accounts match the bank." */
+export function accountsTakeaway(r: Reconciliation): string {
+  if (!r.nessie.enabled) return "Nessie is switched off: every balance is ledger only.";
+  const read = r.accounts.filter((a) => a.status === "reconciled" || a.status === "difference");
+  const ok = read.filter((a) => a.status === "reconciled").length;
+  const errors = r.accounts.filter((a) => a.status === "error").length;
+  if (read.length === 0) return errors ? "Capital One Nessie can't be read right now." : "No account in Nessie yet.";
+  const head = ok === read.length
+    ? read.length === 1 ? "The 1 account in Nessie matches the bank." : `All ${read.length} accounts match the bank.`
+    : `${ok} of ${read.length} accounts match the bank; ${read.length - ok} ${read.length - ok === 1 ? "has" : "have"} a difference.`;
+  return errors ? `${head} ${errors} couldn't be read.` : head;
+}
+
 /** How the opening balance is represented on each side. */
 export function openingNote(o: Opening): string {
   const nessie = `Nessie keeps ${usd(o.nessie_cents)} as the account's fixed opening balance`;
@@ -131,11 +144,11 @@ export function simulatedNote(s: { cents: number; txns: number; label: string })
 }
 
 export function pairsLine(p: Reconciliation["pairs"]): { tone: Tone; text: string } {
-  if (p.checked === 0) return { tone: "off", text: "No SC pairs in Nessie on these accounts yet" };
+  if (p.checked === 0) return { tone: "off", text: "No transfers in Nessie on these accounts yet" };
   const all = p.complete === p.checked;
   return {
     tone: all ? "ok" : "diff",
-    text: `${p.complete} of ${p.checked} SC pairs complete (one withdrawal + one deposit) and matching the ledger${
+    text: `${p.complete} of ${p.checked} transfers have both halves in Nessie (a withdrawal and a deposit) and match the ledger${
       all ? " ✓" : ""
     }`,
   };

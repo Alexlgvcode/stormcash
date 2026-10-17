@@ -36,8 +36,8 @@ test("a restarted session and the per-message fallback are named as such", () =>
 
 test("a fake-runner turn is labelled and never counted as a Droid session", () => {
   const fake = { ...base, runner: "fake", session_id: "fake-abc", session: null, turn: null, factory_credits: null, reply_sent: false };
-  assert.equal(turnLabel(fake), "Fake runner · rules only");
-  assert.equal(turnLabel({ ...fake, fallback_from_droid: "model_usage_exhausted" }), "Fake runner · rules only (Droid couldn't run)");
+  assert.equal(turnLabel(fake), "Rules-only stand-in");
+  assert.equal(turnLabel({ ...fake, fallback_from_droid: "model_usage_exhausted" }), "Rules-only stand-in (Droid couldn't run)");
   assert.equal(sessionSummary([fake]), null);
   assert.equal(heldBack(fake), null);
 });

@@ -24,9 +24,9 @@ import { Button, Pill, Section, Table, Td, TextInput, Th } from "./ui";
 
 const KIND = "region_dark"; // the gap the held-out eval found first
 const KIND_TITLE: Record<string, string> = {
-  region_dark: "Dark regions",
+  region_dark: "Dark areas",
   merchant_silence: "Quiet shops",
-  cap_drain: "Drained certificates",
+  cap_drain: "Fast-drained wallets",
 };
 
 function operatorName(): string {
@@ -100,7 +100,7 @@ function ResultCard({ run }: { run: AuthorRun }) {
       {run.output && (
         <div>
           <p className="font-medium text-heading">
-            <span className="font-mono">{run.output.name}</span> · judges {run.output.kind} candidates
+            <span className="font-mono">{run.output.name}</span> · judges {(KIND_TITLE[run.output.kind] ?? run.output.kind).toLowerCase()}
           </p>
           <p className="mt-1 max-w-[90ch] text-ink">{run.output.rationale}</p>
         </div>
@@ -108,7 +108,7 @@ function ResultCard({ run }: { run: AuthorRun }) {
       <div>
         <p className="font-medium text-heading">Measured by our re-run, after Droid finished</p>
         <p className="mb-2 text-th text-secondary">
-          Labelled simulator candidates (the Chalk eval datasets). Droid saw the dev rows, never a held-out row.
+          Labelled cases from the simulated towns (the Chalk eval datasets). Droid saw the dev rows, never a held-out row.
         </p>
         <MetricsTable run={run} />
         {!t?.verified?.eval && <p className="mt-2 text-secondary">No re-run numbers: the run stopped before the eval.</p>}
@@ -251,7 +251,7 @@ export function AuthorPanel({ dev, heldout }: { dev: EvalRun | null; heldout: Ev
         <div>
           <p className="text-ink">
             <span className="font-medium text-heading">{KIND_TITLE[KIND]}:</span> StormDesk caught {ratio(g.dev)} on dev
-            rows and {ratio(g.heldout)} on held-out rows. The rules-only baseline flags every quiet region too.
+            rows and {ratio(g.heldout)} on held-out rows. The rules-only baseline flags every quiet area too.
           </p>
           {g.examples.length > 0 && (
             <p className="mt-1 text-th text-secondary">
@@ -272,7 +272,11 @@ export function AuthorPanel({ dev, heldout }: { dev: EvalRun | null; heldout: Ev
             </span>
           )}
         </div>
-        {state && !state.enabled && <p className="text-warning">Off on this server: {state.reasons.join("; ")}.</p>}
+        {state && !state.enabled && (
+          <p className="text-warning" title={state.reasons.join("; ")}>
+            Writing detectors is switched off on this server, so this button does nothing here.{run ? " The last run is below." : ""}
+          </p>
+        )}
         {error && <p className="text-danger">{error}</p>}
         {running && (
           <div className="space-y-2">

@@ -20,8 +20,8 @@ function useOwnerFreezes(certId?: string) {
 }
 
 function freezeLine(f: OwnerFreeze): string {
-  const policy = f.policy_ver != null ? `, listed in POLICY v${f.policy_ver}` : "";
-  return `${f.display_name} texted FREEZE at ${clockTime(f.owner_freeze_at)}: certificate ${f.status}${policy}.`;
+  const policy = f.policy_ver != null ? `, on freeze list v${f.policy_ver}` : "";
+  return `${f.display_name} texted FREEZE at ${clockTime(f.owner_freeze_at)}: wallet ${f.status}${policy}.`;
 }
 
 /** Under a flag whose subject is a cert: did the owner ask for the freeze by text? */
@@ -35,8 +35,8 @@ export function OwnerFreezeNote({ certId, seenByDetector }: { certId: string; se
       </StatusItem>
       <p className="mt-1 pl-6 text-th text-secondary">
         {seenByDetector
-          ? "The detector saw it: owner_freeze_request is true in this candidate's features."
-          : "It came after this candidate was created, so its features say owner_freeze_request: false."}
+          ? "The detector saw it: this suspicion includes the owner's request to freeze."
+          : "It came after this suspicion was raised, so the detector didn't see it."}
       </p>
     </div>
   );
@@ -95,7 +95,7 @@ export function OwnerFreezes() {
           <tr>
             <Th className="pl-3">Resident</Th>
             <Th>Texted FREEZE</Th>
-            <Th>Certificate</Th>
+            <Th>Wallet certificate</Th>
             <Th>Status</Th>
             <Th>Freeze list</Th>
           </tr>
@@ -112,7 +112,7 @@ export function OwnerFreezes() {
                 <Td>
                   <Pill tone={r.status === "frozen" ? "danger" : "neutral"}>{r.status}</Pill>
                 </Td>
-                <Td className="pr-3 text-secondary">{r.policy_ver != null ? `POLICY v${r.policy_ver}` : "not listed yet"}</Td>
+                <Td className="pr-3 text-secondary">{r.policy_ver != null ? `v${r.policy_ver}` : "not listed yet"}</Td>
               </tr>
             );
           })}
