@@ -1,2 +1,5 @@
 node_modules/
 dist/
+
+# Optional intro photo (see README); we may not have the rights to commit it.
+/public/intro.*

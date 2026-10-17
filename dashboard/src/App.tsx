@@ -1,7 +1,9 @@
 // One page, four tabs, persistent header (spec §18). The tab lives in the URL
-// hash so a reload lands on the same tab.
+// hash so a reload lands on the same tab. `#intro` (or the I key) lays the
+// opening slide over the dashboard; the live stream stays connected under it.
 import { useEffect, useState } from "react";
 import { Header } from "./components/Header";
+import { Intro } from "./components/Intro";
 import { EventsProvider } from "./events";
 import { ProofPage } from "./proof/ProofPage";
 import { AccountsTab } from "./tabs/Accounts";
@@ -22,6 +24,18 @@ function tabFromHash(): TabId {
   return TABS.some((t) => t.id === id) ? (id as TabId) : "accounts";
 }
 
+const introFromHash = () => location.hash === "#intro";
+const closeIntro = () => {
+  location.hash = "accounts";
+};
+
+// I opens the intro, unless the operator is typing (e.g. the operator name on a flag).
+function onIntroKey(e: KeyboardEvent) {
+  if (e.key.toLowerCase() !== "i" || e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
+  if (e.target instanceof Element && e.target.closest("input, textarea, select, [contenteditable]")) return;
+  location.hash = "intro";
+}
+
 export default function App() {
   const proof = location.pathname.match(/^\/proof\/(\d+)\/?$/);
   if (proof) {
@@ -37,16 +51,24 @@ export default function App() {
 
 function Dashboard() {
   const [tab, setTab] = useState<TabId>(tabFromHash);
+  const [intro, setIntro] = useState(introFromHash);
 
   useEffect(() => {
-    const onHash = () => setTab(tabFromHash());
+    const onHash = () => {
+      setTab(tabFromHash());
+      setIntro(introFromHash());
+    };
     addEventListener("hashchange", onHash);
-    return () => removeEventListener("hashchange", onHash);
+    addEventListener("keydown", onIntroKey);
+    return () => {
+      removeEventListener("hashchange", onHash);
+      removeEventListener("keydown", onIntroKey);
+    };
   }, []);
 
   return (
     <EventsProvider>
-      <div className="min-h-screen bg-slate-950 text-slate-100">
+      <div className="min-h-screen bg-slate-950 text-slate-100" inert={intro}>
         <Header />
         <nav className="flex gap-1 border-b border-slate-800 px-6">
           {TABS.map((t) => (
@@ -68,6 +90,7 @@ function Dashboard() {
           {tab === "evals" && <EvalsTab />}
         </main>
       </div>
+      {intro && <Intro onClose={closeIntro} />}
     </EventsProvider>
   );
 }
