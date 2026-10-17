@@ -5,6 +5,7 @@ import QRCode from "qrcode";
 import { useCallback, useEffect, useState } from "react";
 import { getJSON, type CaseDetail, type CaseSummary, type Health } from "../api";
 import { RULE_TEXT, TagCard, TagPair, VerifyPanel } from "../components/Evidence";
+import { CaseStormDesk, FlagsView } from "../components/StormDesk";
 import { useEvents } from "../events";
 import { clockTime, dollars } from "../format";
 
@@ -40,13 +41,16 @@ function CaseView({ caseId }: { caseId: number }) {
   const [detail, setDetail] = useState<CaseDetail | null>(null);
   const [serverPub, setServerPub] = useState<string | null>(null);
   const [showQR, setShowQR] = useState(false);
+  const reload = useCallback(() => {
+    getJSON<CaseDetail>(`/v1/cases/${caseId}`).then(setDetail);
+  }, [caseId]);
 
   useEffect(() => {
     setDetail(null);
     setShowQR(false);
-    getJSON<CaseDetail>(`/v1/cases/${caseId}`).then(setDetail);
+    reload();
     getJSON<Health>("/v1/health").then((h) => setServerPub(h.server_pub));
-  }, [caseId]);
+  }, [caseId, reload]);
 
   if (!detail) return <p className="text-slate-400">Loading case…</p>;
   const { case: c, cert, tag_a: a, tag_b: b, log_entries } = detail;
@@ -120,6 +124,8 @@ function CaseView({ caseId }: { caseId: number }) {
         </div>
       )}
 
+      <CaseStormDesk caseId={c.case_id} onFiled={reload} />
+
       <div className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
         <h3 className="mb-2 text-lg font-semibold text-white">Case file (StormDesk)</h3>
         {c.case_file_md ? (
@@ -133,6 +139,38 @@ function CaseView({ caseId }: { caseId: number }) {
 }
 
 export function CasesTab() {
+  const [view, setView] = useState<"cases" | "flags">(() => {
+    try {
+      return localStorage.getItem("sc-cases-view") === "flags" ? "flags" : "cases";
+    } catch {
+      return "cases";
+    }
+  });
+  const pick = (v: "cases" | "flags") => {
+    setView(v);
+    try {
+      localStorage.setItem("sc-cases-view", v);
+    } catch {
+      // private window: fine
+    }
+  };
+  return (
+    <div>
+      <div className="flex gap-2 px-6 pt-4">
+        {(["cases", "flags"] as const).map((v) => (
+          <button key={v} onClick={() => pick(v)}
+            className={`rounded-full px-4 py-2 text-base font-semibold ${
+              view === v ? "bg-sky-500 text-slate-950" : "bg-slate-800 text-slate-300 hover:bg-slate-700"}`}>
+            {v === "cases" ? "Hard cases" : "StormDesk flags"}
+          </button>
+        ))}
+      </div>
+      {view === "cases" ? <HardCases /> : <FlagsView />}
+    </div>
+  );
+}
+
+function HardCases() {
   const [cases, setCases] = useState<CaseSummary[] | null>(null);
   const [selected, setSelected] = useState<number | null>(null);
 

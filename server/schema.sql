@@ -206,7 +206,7 @@ CREATE TABLE payouts (
   amount_cents INT NOT NULL,
   source TEXT NOT NULL CHECK (source IN ('escrow','pool')),
   nessie_transfer_id TEXT,              -- [v4.2] deposit id of the Nessie withdrawal + deposit pair
-  status TEXT NOT NULL CHECK (status IN ('queued','pending','executed','failed','ledger_only')),
+  status TEXT NOT NULL CHECK (status IN ('queued','pending','executed','failed','ledger_only','held')),  -- [v4.3] held: an approved hold_pool_payout
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
