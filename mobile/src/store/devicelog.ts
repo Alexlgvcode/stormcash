@@ -35,3 +35,9 @@ export function logEntries(limit = 50): Dlog[] {
     .getAllSync<{ entry_json: string }>('SELECT entry_json FROM device_log ORDER BY seq DESC LIMIT ?', limit)
     .map((r) => JSON.parse(r.entry_json) as Dlog);
 }
+
+export function logCounts(): { accepted: number; refused: number; contacts: number } {
+  const rows = getDb().getAllSync<{ kind: string; n: number }>('SELECT kind, COUNT(*) AS n FROM device_log GROUP BY kind');
+  const n = (k: string) => rows.find((r) => r.kind === k)?.n ?? 0;
+  return { accepted: n('ACCEPT'), refused: n('REFUSE'), contacts: n('CONTACT') };
+}

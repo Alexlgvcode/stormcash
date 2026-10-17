@@ -37,10 +37,23 @@ export function Scanner({ onScan, continuous }: { onScan: (data: string) => void
           onScan(data);
         }}
       />
+      <View pointerEvents="none" style={styles.overlay}>
+        <View style={[styles.corner, styles.tl]} />
+        <View style={[styles.corner, styles.tr]} />
+        <View style={[styles.corner, styles.bl]} />
+        <View style={[styles.corner, styles.br]} />
+      </View>
     </View>
   );
 }
 
+const C = 44; // corner bracket length
 const styles = StyleSheet.create({
-  frame: { width: '100%', aspectRatio: 1, borderRadius: 16, overflow: 'hidden', backgroundColor: '#000' },
+  frame: { width: '100%', aspectRatio: 1, borderRadius: 20, overflow: 'hidden', backgroundColor: '#000' },
+  overlay: { position: 'absolute', top: 36, left: 36, right: 36, bottom: 36 },
+  corner: { position: 'absolute', width: C, height: C, borderColor: '#fff' },
+  tl: { top: 0, left: 0, borderTopWidth: 5, borderLeftWidth: 5, borderTopLeftRadius: 12 },
+  tr: { top: 0, right: 0, borderTopWidth: 5, borderRightWidth: 5, borderTopRightRadius: 12 },
+  bl: { bottom: 0, left: 0, borderBottomWidth: 5, borderLeftWidth: 5, borderBottomLeftRadius: 12 },
+  br: { bottom: 0, right: 0, borderBottomWidth: 5, borderRightWidth: 5, borderBottomRightRadius: 12 },
 });

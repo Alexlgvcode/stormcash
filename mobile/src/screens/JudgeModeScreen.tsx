@@ -1,50 +1,67 @@
 // Judge mode: the attacker tool (§19.3). Rolls the wallet back so the judge can try to spend twice.
+import * as Haptics from 'expo-haptics';
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { Big, Body, Button, colors, Muted, Screen, wholeDollars } from '../components/ui';
+import { Big, Button, Card, colors, Field, Label, Muted, Screen, wholeDollars } from '../components/ui';
 import { useNav } from '../nav';
 import { latestCert, rollBack, walletState, type RollbackMode } from '../store/wallet';
 
 export function JudgeModeScreen() {
   const nav = useNav();
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const state = walletState();
   const cert = latestCert();
   const left = cert && state ? cert.cap_cents - state.cumCents : 0;
 
   const run = (mode: RollbackMode) => {
     const ok = rollBack(mode);
+    Haptics.notificationAsync(ok ? Haptics.NotificationFeedbackType.Warning : Haptics.NotificationFeedbackType.Error)
+      .catch(() => {});
     setMessage(
       !ok
-        ? 'Nothing to roll back yet. Make a payment first.'
+        ? { ok, text: 'Nothing to roll back yet. Make a payment first.' }
         : mode === 'reuse'
-          ? 'Wallet restored to before the last payment. Same money, same counter. Try spending it next door.'
-          : 'Wallet restored and the counter skipped ahead. Try spending it next door.',
+          ? { ok, text: 'Wallet restored to before the last payment: same money, same counter. Now try spending it next door.' }
+          : { ok, text: 'Wallet restored and the counter skipped ahead. Now try spending it next door.' },
     );
     nav.refresh();
   };
 
   return (
-    <Screen>
+    <Screen tone="dark">
       <View style={styles.banner}>
         <Text style={styles.bannerText}>Demo: attacker tool</Text>
       </View>
-      <Big>{wholeDollars(left)} left</Big>
-      <Muted>Counter {state?.counter ?? 0}</Muted>
-      <Body>This is what a modified app or a restored backup could do.</Body>
+      <Text style={styles.lead}>You're Maya, and you're cheating. Roll the wallet back and spend the same money again.</Text>
 
-      <Button title="Roll back wallet: Reuse the money" kind="danger" onPress={() => run('reuse')} />
-      <Button title="Roll back wallet: Be clever (skip the counter)" kind="danger" onPress={() => run('clever')} />
+      <Card style={{ backgroundColor: '#13263A' }}>
+        <Label color="#9DB4FF">Wallet now</Label>
+        <Big color="#fff">{wholeDollars(left)}</Big>
+        <Field light label="Counter" value={String(state?.counter ?? 0)} />
+        <Field light label="Spent" value={wholeDollars(state?.cumCents ?? 0)} last />
+      </Card>
 
-      {message ? <Body color={colors.red}>{message}</Body> : null}
+      <Button title="Reuse the money" subtitle="Restore the wallet to before the last payment" kind="danger" big onPress={() => run('reuse')} />
+      <Button title="Be clever" subtitle="Restore, then skip the counter ahead" kind="danger" big onPress={() => run('clever')} />
 
-      <Button title="Pay" onPress={() => nav.go({ name: 'pay' })} />
-      <Button title="Back" kind="secondary" onPress={nav.home} />
+      {message ? (
+        <View style={[styles.note, { borderColor: message.ok ? '#FDB022' : colors.red }]}>
+          <Text style={styles.noteText}>{message.text}</Text>
+        </View>
+      ) : null}
+
+      <Muted color="#98A2B3">This is what a modified app or a restored backup could do. Every offline system has to handle it.</Muted>
+
+      <Button title="Pay a shop" kind="light" big onPress={() => nav.go({ name: 'pay' })} />
+      <Button title="Back" kind="light" onPress={nav.home} />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  banner: { backgroundColor: colors.red, padding: 12, borderRadius: 10 },
-  bannerText: { color: '#fff', fontSize: 20, fontWeight: '800', textAlign: 'center' },
+  banner: { backgroundColor: colors.red, paddingVertical: 12, borderRadius: 12 },
+  bannerText: { color: '#fff', fontSize: 20, fontWeight: '900', textAlign: 'center', letterSpacing: 0.5, textTransform: 'uppercase' },
+  lead: { color: '#fff', fontSize: 22, lineHeight: 29, fontWeight: '700' },
+  note: { borderWidth: 1.5, borderRadius: 14, padding: 14, backgroundColor: '#FFFFFF0D' },
+  noteText: { color: '#fff', fontSize: 16, lineHeight: 22 },
 });

@@ -1,6 +1,6 @@
 // Records (§19.2): items carried by kind, nearby peers, last sync, last upload + hops, QR sync.
 import { useEffect, useReducer } from 'react';
-import { Button, Body, Muted, Screen, Title } from '../components/ui';
+import { Big, Button, Card, Field, Label, Muted, Pill, Row, Screen, Section, Title } from '../components/ui';
 import { useOnline } from '../hooks';
 import { useNav } from '../nav';
 import { countsByKind } from '../store/items';
@@ -24,44 +24,71 @@ export function RecordsScreen() {
   const { connected, lastSync, lastError, uploading } = syncManager.status;
   const up = lastUpload();
 
+  const KIND_NAMES: Record<string, [string, string]> = {
+    PAY: ['payment', 'payments'], TAG: ['spend tag', 'spend tags'], PROOF: ['proof', 'proofs'],
+    DLOG: ['log entry', 'log entries'], POLICY: ['policy', 'policies'], RCPT: ['receipt', 'receipts'],
+    CERT: ['certificate', 'certificates'], RENEW: ['renewal', 'renewals'],
+  };
+  const kindName = (k: string, n: number) => (KIND_NAMES[k] ? KIND_NAMES[k][n === 1 ? 0 : 1] : k);
+
   return (
     <Screen>
       <Title>Records</Title>
-      <Body>Carrying {total} records</Body>
-      <Muted>
-        {Object.entries(counts).map(([k, n]) => `${k} ${n}`).join(' · ') || 'Nothing to deliver'}
-      </Muted>
+      <Muted>This phone carries records shop to shop until any phone finds a signal and uploads them.</Muted>
 
-      <Body>Nearby phones</Body>
-      <Muted>{connected.length ? connected.map((p) => p.name).join(', ') : 'None connected'}</Muted>
-      {recentPeers(5).map((p) => (
-        <Muted key={p.peer_pub}>
-          {p.label ?? p.peer_pub.slice(0, 8)} · {p.sessions} syncs · last {ago(p.last_seen)}
-        </Muted>
-      ))}
+      <Card>
+        <Row style={{ justifyContent: 'space-between' }}>
+          <Label>Carrying</Label>
+          <Big>{String(total)}</Big>
+        </Row>
+        <Row>
+          {Object.entries(counts).length
+            ? Object.entries(counts).map(([k, n]) => (
+              <Pill key={k} text={`${n} ${kindName(k, n ?? 0)}`} tone={k === 'PROOF' ? 'red' : k === 'PAY' ? 'blue' : 'neutral'} />
+            ))
+            : <Muted>Nothing to deliver</Muted>}
+        </Row>
+      </Card>
 
-      <Body>Last sync</Body>
-      <Muted>
-        {lastSync
-          ? `${lastSync.peerLabel ?? lastSync.peerPub.slice(0, 8)} · got ${lastSync.received}, sent ${lastSync.sent}` +
-            `${lastSync.rejected ? `, rejected ${lastSync.rejected}` : ''} · ${ago(lastSync.ts)}`
-          : 'Not yet'}
-      </Muted>
-      {lastError ? <Muted>{lastError}</Muted> : null}
+      <Section title="Nearby phones" right={<Pill text={connected.length ? `${connected.length} connected` : 'None'} tone={connected.length ? 'green' : 'neutral'} dot />}>
+        <Card>
+          {recentPeers(5).length === 0 ? <Muted>No phones met yet. Keep the app open near other phones.</Muted> : null}
+          {recentPeers(5).map((p, i, all) => (
+            <Field
+              key={p.peer_pub}
+              label={p.label ?? p.peer_pub.slice(0, 8)}
+              value={`${p.sessions} syncs · ${ago(p.last_seen)}`}
+              last={i === all.length - 1}
+            />
+          ))}
+        </Card>
+      </Section>
 
-      <Body>Last upload</Body>
-      <Muted>
-        {up ? `${up.sent} records · ${up.receipted} receipted · up to ${Math.max(0, up.maxHops - 1)} hops · ${ago(up.ts)}` : 'Not yet'}
-      </Muted>
+      <Section title="Sync">
+        <Card>
+          <Field
+            label="Last sync"
+            value={lastSync
+              ? `${lastSync.peerLabel ?? lastSync.peerPub.slice(0, 8)} · +${lastSync.received} / ${lastSync.sent} sent · ${ago(lastSync.ts)}`
+              : 'Not yet'}
+          />
+          {lastSync?.rejected ? <Field label="Rejected" value={`${lastSync.rejected} invalid items`} /> : null}
+          <Field
+            label="Last upload"
+            value={up ? `${up.sent} records · ${Math.max(0, up.maxHops - 1)} hops · ${ago(up.ts)}` : 'Not yet'}
+            last
+          />
+          {lastError ? <Pill text={lastError} tone="red" /> : null}
+        </Card>
+      </Section>
 
       <Button
         title={uploading ? 'Uploading…' : online ? 'Upload now' : 'Upload needs internet'}
-        kind="secondary"
         disabled={!online || uploading}
         onPress={() => syncManager.upload()}
       />
       <Button title="Sync by QR" kind="secondary" onPress={() => nav.go({ name: 'qrsync' })} />
-      <Button title="Back" kind="secondary" onPress={nav.home} />
+      <Button title="Back" kind="ghost" onPress={nav.home} />
     </Screen>
   );
 }

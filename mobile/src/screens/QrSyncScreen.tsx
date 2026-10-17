@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { QrCode } from '../components/QrCode';
 import { Scanner } from '../components/Scanner';
-import { Body, Button, Muted, Screen, Title } from '../components/ui';
+import { Body, Button, Card, Meter, Muted, Pill, Screen, Title } from '../components/ui';
 import { useNav } from '../nav';
 import { syncManager } from '../sync/manager';
 import { FrameCollector, toFrames } from '../sync/qrframes';
@@ -86,8 +86,11 @@ export function QrSyncScreen() {
     return (
       <Screen>
         <Title>Let the other phone scan</Title>
-        <QrCode value={frames[frameIdx] ?? ''} />
-        <Muted>Frame {frameIdx + 1} of {frames.length}</Muted>
+        <Card style={{ alignItems: 'center', padding: 12 }}>
+          <QrCode value={frames[frameIdx] ?? ''} />
+        </Card>
+        <Meter value={frameIdx + 1} max={frames.length} />
+        <Muted>Frame {frameIdx + 1} of {frames.length} · keep the other phone pointed here</Muted>
         {result ? <Body>{result}</Body> : null}
         <Button
           title={result ? 'Done' : 'Next: scan their code'}
@@ -101,6 +104,7 @@ export function QrSyncScreen() {
       <Screen>
         <Title>Scan the other phone</Title>
         <Scanner continuous onScan={onFrame} />
+        <Meter value={collector.current.received} max={Math.max(1, collector.current.total)} />
         <Muted>{progress || 'Waiting for frames…'}</Muted>
         <Button title="Cancel" kind="secondary" onPress={() => nav.go({ name: 'records' })} />
       </Screen>
@@ -109,6 +113,7 @@ export function QrSyncScreen() {
   return (
     <Screen>
       <Title>QR sync</Title>
+      <Pill text={result?.startsWith('Failed') ? 'Not synced' : 'Synced'} tone={result?.startsWith('Failed') ? 'red' : 'green'} dot />
       <Body>{result ?? 'Finished.'}</Body>
       <Button title="Back to records" onPress={() => nav.go({ name: 'records' })} />
     </Screen>
