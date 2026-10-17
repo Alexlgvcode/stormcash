@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 
 from psycopg.types.json import Jsonb
 
@@ -19,7 +20,9 @@ from ..db import one, scalar
 from ..jsonutil import jsonable
 from .citations import citations_valid
 from .prompt import investigate_prompt, respond_prompt, triage_prompt
-from .runner import Job, RunOutcome, Steps, make_runner
+from .runner import FakeRunner, Job, RunOutcome, Steps, make_runner
+
+DROID_COOLDOWN_S = 300  # after Droid couldn't run, use the fake runner this long before trying again
 
 
 class StormDeskError(ValueError):
@@ -63,7 +66,7 @@ def _prepare(deps, job: Job) -> tuple[str, int]:
     return prompt, run_id
 
 
-def _store(deps, job: Job, run_id: int, outcome: RunOutcome, steps: Steps) -> dict:
+def _store(deps, job: Job, run_id: int, outcome: RunOutcome, steps: Steps, fallback: str | None = None) -> dict:
     output = outcome.output
     with deps.pool.connection() as conn:
         missing: list[str] = []
@@ -73,7 +76,7 @@ def _store(deps, job: Job, run_id: int, outcome: RunOutcome, steps: Steps) -> di
             valid, missing = citations_valid(conn, list(output.evidence_ids), required=needs_ids)
         status = "succeeded" if output is not None and valid else "invalid" if output is not None else "failed"
         transcript = {"runner": outcome.runner, "steps": steps.transcript, "missing_citations": missing,
-                      "error": outcome.error}
+                      "error": outcome.error, "fallback_from_droid": fallback}
         run = one(
             conn,
             """UPDATE stormdesk_runs SET runner = %s, status = %s, output = %s, citations_valid = %s, transcript = %s,
@@ -82,7 +85,7 @@ def _store(deps, job: Job, run_id: int, outcome: RunOutcome, steps: Steps) -> di
              outcome.session_id, outcome.error, run_id),
         )
         result = {"run_id": run_id, "runner": outcome.runner, "status": status, "citations_valid": valid,
-                  "missing_citations": missing, "error": outcome.error,
+                  "missing_citations": missing, "error": outcome.error, "fallback_from_droid": fallback,
                   "output": output.model_dump() if output else None}
         if job.kind == "triage":
             result["flag"] = _save_flag(conn, job, output, valid, outcome, run, transcript)
@@ -138,9 +141,17 @@ class StormDesk:
     def __init__(self, deps, concurrency: int = 4) -> None:
         self.deps = deps
         self.slots = asyncio.Semaphore(concurrency)
+        self.droid_down_until = 0.0
+        self.droid_down_reason: str | None = None
+
+    def pick_runner(self):
+        runner = make_runner(self.deps)
+        if runner.name == "droid" and time.monotonic() < self.droid_down_until:
+            return FakeRunner(self.deps)
+        return runner
 
     async def run(self, job: Job, runner=None) -> dict:
-        runner = runner or make_runner(self.deps)
+        runner = runner or self.pick_runner()
         prompt, run_id = await asyncio.to_thread(_prepare, self.deps, job)
         subject = f"case #{job.case_id}" if job.case_id else f"candidate #{job.candidate_id}" \
             if job.candidate_id else f"merchant {job.merchant_id}"
@@ -152,12 +163,23 @@ class StormDesk:
             })
 
         steps = Steps(on_step=on_step)
+        fallback = None
         async with self.slots:
             try:
                 outcome = await runner.run(job, prompt, steps)
             except Exception as exc:  # e.g. Droid unreachable: a failed run, stored like any other
-                outcome = RunOutcome(runner.name, None, None, f"{type(exc).__name__}: {exc}")
-        result = await asyncio.to_thread(_store, self.deps, job, run_id, outcome, steps)
+                outcome = RunOutcome(runner.name, None, None, f"{type(exc).__name__}: {exc}",
+                                     unavailable=runner.name == "droid")
+            if outcome.unavailable and runner.name == "droid":
+                # Droid couldn't run at all (no credits, CLI gone): answer with the labelled fake runner
+                # now, skip Droid for a while, and record why.
+                fallback = outcome.error
+                self.droid_down_until = time.monotonic() + DROID_COOLDOWN_S
+                self.droid_down_reason = fallback
+                runner = FakeRunner(self.deps)
+                steps = Steps(on_step=on_step)
+                outcome = await runner.run(job, prompt, steps)
+        result = await asyncio.to_thread(_store, self.deps, job, run_id, outcome, steps, fallback)
         self.deps.events.publish("stormdesk_step", {"run_id": run_id, "job": job.kind, "subject": subject,
                                                     "runner": runner.name, "done": True, "status": result["status"]})
         if result.get("flag"):
