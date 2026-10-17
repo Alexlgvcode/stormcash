@@ -23,6 +23,7 @@ from . import town
 
 REMOTE_SPOTS = ((0, 1), (0, 22))  # west-asheville map edge (trap_remote_shop)
 SCRIPTED_AMOUNT = 3500  # of a $50 cap: the re-spend needs $20 of pool money
+COLLUDER_RESPENDS = 3  # cheaters per colluder, each re-spending at it while it is silent
 DARK_REGION, QUIET_REGION = "swannanoa", "black-mountain"
 
 
@@ -118,21 +119,27 @@ def plant(sim) -> Plan:
         label_cert(r, "double_spender", "hard_case", "freeze_cert",
                    ["SAME_COUNTER" if r.idx % 2 == 0 else "TOTAL_BACKWARDS"], "frozen automatically when caught")
 
-    # colluder ×2: gossip and uplink off for 6 h, the app skips C2/C6, takes a pool-funded double spend.
+    # colluder ×2: gossip and uplink off for 6 h, the app skips C2/C6 and takes pool-funded double spends
+    # from 3 cheaters. No paired contact brings the shop a conflicting tag and nothing is in held_ids, so R5
+    # can't prove it knew: the pool pays the shop, the hard rules only catch each cheater, and only the soft
+    # merchant_silence signal points at the shop.
     other_colluder = clustered[rng.randrange(len(clustered))]
     for shop, start_h in ((corner, 26.0), (other_colluder, 50.0)):
         shop.lenient = True
         window = (H(start_h), H(start_h + 6))
         shop.gossip_off.append(window)
         shop.uplink_off.append(window)
-        [r] = residents(1)
-        scripted_double_spend(r, shop, start_h + 0.5, start_h + 2, start_h + 6.5, "colluder")
+        for k, r in enumerate(residents(COLLUDER_RESPENDS)):
+            scripted_double_spend(r, shop, start_h + 0.5 + 0.5 * k, start_h + 1.5 + 1.5 * k, start_h + 6.5,
+                                  "colluder")
         label_shop(shop, "colluder", "merchant_silence", "hold_pool_payout",
-                   ["MERCHANT_KNEW"] if shop is corner else [], "silent 6 h while taking pool money")
+                   ["MERCHANT_KNEW"] if shop is corner else [],
+                   f"silent 6 h while taking pool money from {COLLUDER_RESPENDS} cheaters' re-spends")
 
     # Planted R5 (§16.4, seed 42 demo): a paired contact delivers the conflicting tag to Corner Store,
     # then Corner Store accepts the rolled-back payment anyway and logs that it held the tag.
-    d, courier = residents(1)[0], residents(1)[0]
+    # The courier uploads at T+35 h, so it never lives in the dark region (that upload would light it up).
+    d, courier = residents(1)[0], residents(1, lambda r: r.region != DARK_REGION)[0]
     cheater(d)
     courier.scripted, courier.role = True, "courier"
     label_cert(d, "double_spender", "hard_case", "freeze_cert", ["SAME_COUNTER"], "planted MERCHANT_KNEW at Corner Store")

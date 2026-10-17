@@ -42,11 +42,27 @@ def test_seed_42_plants_every_scenario(sim_deps, tmp_path):
         )
         candidates = all_rows(conn, "SELECT kind, subject_id FROM candidates")
         corner_eligible = scalar(conn, "SELECT pool_eligible FROM merchants WHERE display_name = 'Corner Store'")
+        corner_pool = all_rows(
+            conn,
+            """SELECT p.cert_id, p.status, p.funded_pool_cents FROM payments p JOIN merchants m USING (merchant_id)
+               WHERE m.display_name = 'Corner Store' AND p.funded_pool_cents > 0""",
+        )
+        corner_silence = all_rows(
+            conn,
+            """SELECT c.features FROM candidates c JOIN merchants m ON encode(m.merchant_id, 'hex') = c.subject_id
+               WHERE c.kind = 'merchant_silence' AND m.display_name = 'Corner Store'""",
+        )
 
     # Hard cases: the double spenders (R1/R2/R3) and the planted MERCHANT_KNEW.
     assert {"SAME_COUNTER", "TOTAL_BACKWARDS", "MERCHANT_KNEW"} <= rules
     assert knew == [{"display_name": "Corner Store", "clause": "HELD_IDS", "status": "denied_knowing"}]
     assert corner_eligible is False
+    # The colluder story (§16.4): while silent, Corner Store took pool money from 3 cheaters' re-spends that
+    # R5 can't deny (no paired contact, nothing in held_ids). Only merchant_silence points at the shop.
+    assert len({bytes(r["cert_id"]) for r in corner_pool}) >= 3
+    assert all(r["status"] != "denied_knowing" for r in corner_pool)
+    assert sum(r["funded_pool_cents"] for r in corner_pool) >= 6000
+    assert any(c["features"]["distinct_cheater_certs"] >= 3 for c in corner_silence)
 
     # Soft signals: all three kinds, every one on a labeled subject.
     assert {c["kind"] for c in candidates} == {"merchant_silence", "cap_drain", "region_dark"}
