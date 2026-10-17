@@ -41,17 +41,31 @@ if(STORMCASH_BUILD_TESTS)
   FetchContent_MakeAvailable(googletest)
 endif()
 
-# OpenSSL 3 from the system: SHA-256 and ECDSA P-256 verification.
-# Homebrew doesn't link openssl@3 into /opt/homebrew, so ask brew where it is.
-if(APPLE AND NOT OPENSSL_ROOT_DIR AND NOT DEFINED ENV{OPENSSL_ROOT_DIR})
-  execute_process(
-    COMMAND brew --prefix openssl@3
-    OUTPUT_VARIABLE _stormcash_brew_openssl
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-    RESULT_VARIABLE _stormcash_brew_rc
-    ERROR_QUIET)
-  if(_stormcash_brew_rc EQUAL 0 AND EXISTS "${_stormcash_brew_openssl}")
-    set(OPENSSL_ROOT_DIR "${_stormcash_brew_openssl}")
+if(STORMCASH_CRYPTO STREQUAL "portable")
+  # p256-m (Apache-2.0): P-256 ECDSA verification for the portable backend,
+  # upstream (github.com/mpg/p256-m) at its latest commit, the code Mbed TLS
+  # ships in 3rdparty/p256-m. One C file; verify/CMakeLists.txt compiles it
+  # through verify/src/p256m_sec1.c. SOURCE_SUBDIR points at a folder with no
+  # CMakeLists.txt: download only.
+  FetchContent_Declare(p256m
+    URL https://github.com/mpg/p256-m/archive/44af59e0cff5d3b1d653bc333814077ef830e1bd.tar.gz
+    URL_HASH SHA256=cdac85d7586a39e9424ae5ebc46f2541aa568ed87a6f26827dde6a9adc38a6e2
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+    SOURCE_SUBDIR download-only)
+  FetchContent_MakeAvailable(p256m)
+else()
+  # OpenSSL 3 from the system: SHA-256 and ECDSA P-256 verification.
+  # Homebrew doesn't link openssl@3 into /opt/homebrew, so ask brew where it is.
+  if(APPLE AND NOT OPENSSL_ROOT_DIR AND NOT DEFINED ENV{OPENSSL_ROOT_DIR})
+    execute_process(
+      COMMAND brew --prefix openssl@3
+      OUTPUT_VARIABLE _stormcash_brew_openssl
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+      RESULT_VARIABLE _stormcash_brew_rc
+      ERROR_QUIET)
+    if(_stormcash_brew_rc EQUAL 0 AND EXISTS "${_stormcash_brew_openssl}")
+      set(OPENSSL_ROOT_DIR "${_stormcash_brew_openssl}")
+    endif()
   endif()
+  find_package(OpenSSL 3.0 REQUIRED COMPONENTS Crypto)
 endif()
-find_package(OpenSSL 3.0 REQUIRED COMPONENTS Crypto)

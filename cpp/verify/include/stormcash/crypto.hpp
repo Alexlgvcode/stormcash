@@ -1,4 +1,7 @@
-// SHA-256 and ECDSA P-256 verification (spec §7.1), on OpenSSL 3.
+// SHA-256 and ECDSA P-256 verification (spec §7.1). The math comes from one of
+// two backends chosen at configure time: OpenSSL 3 (the native default) or a
+// portable one (p256-m and a built-in SHA-256) that also builds to
+// WebAssembly. Both pass the same tests and vectors (src/crypto_backend.hpp).
 //
 // - Signatures are raw 64 bytes r || s, big-endian, 32 bytes each.
 // - The signed message is the 32-byte SHA-256 digest of the canonical string
@@ -25,6 +28,9 @@ class CryptoError : public std::runtime_error {
  public:
   using std::runtime_error::runtime_error;
 };
+
+// Which backend this build uses, e.g. "OpenSSL 3".
+const char* crypto_backend();
 
 Bytes sha256(const Bytes& data);
 

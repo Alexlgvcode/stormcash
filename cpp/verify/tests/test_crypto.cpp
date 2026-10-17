@@ -22,6 +22,24 @@ SignedDigest low_s_vector() {
 TEST(Sha256, NistVectors) {
   EXPECT_EQ(to_hex(sha256(to_bytes("abc"))), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
   EXPECT_EQ(to_hex(sha256({})), "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+  // 56 bytes: the length no longer fits in the first block, so padding takes two.
+  EXPECT_EQ(to_hex(sha256(to_bytes("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq"))),
+            "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1");
+  EXPECT_EQ(to_hex(sha256(Bytes(1000000, 'a'))), "cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0");
+}
+
+TEST(Sha256, EveryLengthAcrossPaddingBoundaries) {
+  // The digests of every length from 0 to 299 bytes of (7i + 3) mod 256,
+  // concatenated and hashed once more. The reference is Python's hashlib:
+  //   b"".join(sha256(bytes((7*i+3) & 0xff for i in range(n))).digest() for n in range(300))
+  Bytes all;
+  for (std::size_t n = 0; n < 300; ++n) {
+    Bytes msg(n);
+    for (std::size_t i = 0; i < n; ++i) msg[i] = static_cast<std::uint8_t>((7 * i + 3) & 0xff);
+    Bytes d = sha256(msg);
+    all.insert(all.end(), d.begin(), d.end());
+  }
+  EXPECT_EQ(to_hex(sha256(all)), "7b074096cabb18dd0d1b468a173cb2f97f80e952525bca29542e606fd6d0753a");
 }
 
 TEST(PublicKey, CompressedPointsOnly) {
@@ -36,6 +54,24 @@ TEST(PublicKey, CompressedPointsOnly) {
   off_curve[0] = 0x02;
   off_curve[32] = 0x01;
   EXPECT_FALSE(is_valid_public_key(off_curve));
+}
+
+TEST(PublicKey, XMustBeBelowP) {
+  // x = p and x = 2^256 − 1 are 32-byte values but not field elements.
+  Bytes x_is_p = hex("02ffffffff00000001000000000000000000000000ffffffffffffffffffffffff");
+  EXPECT_FALSE(is_valid_public_key(x_is_p));
+  Bytes x_max(33, 0xff);
+  x_max[0] = 0x03;
+  EXPECT_FALSE(is_valid_public_key(x_max));
+}
+
+TEST(PublicKey, OtherParityIsTheOtherPoint) {
+  // Flipping 0x02/0x03 gives the negated point: still a valid key, not the signer's.
+  auto v = low_s_vector();
+  Bytes flipped = v.pub;
+  flipped[0] ^= 0x01;
+  EXPECT_TRUE(is_valid_public_key(flipped));
+  EXPECT_FALSE(verify_digest(flipped, v.digest, v.sig));
 }
 
 TEST(Verify, ValidSignature) {
@@ -106,6 +142,38 @@ TEST(Der, IsStrict) {
   EXPECT_THROW(der_to_raw(long_form), CryptoError);
   EXPECT_THROW(der_to_raw({0x30, 0x00}), CryptoError);
   EXPECT_THROW(der_to_raw({}), CryptoError);
+}
+
+TEST(Der, RejectsWhatOnlyBerAllows) {
+  Bytes der = hex(test::vector("der", "der_high_s").at("der"));
+  // A redundant leading zero on r.
+  Bytes padded = {0x30, static_cast<std::uint8_t>(der[1] + 1), 0x02, static_cast<std::uint8_t>(der[3] + 1), 0x00};
+  padded.insert(padded.end(), der.begin() + 4, der.end());
+  EXPECT_THROW(der_to_raw(padded), CryptoError);
+  // A negative integer, an empty one, and a long-form integer length.
+  EXPECT_THROW(der_to_raw(hex("3006020180020101")), CryptoError);
+  EXPECT_THROW(der_to_raw(hex("30050200020101")), CryptoError);
+  EXPECT_THROW(der_to_raw(hex("300702810101020101")), CryptoError);
+  // Something after s inside the SEQUENCE.
+  EXPECT_THROW(der_to_raw(hex("30080201010201010500")), CryptoError);
+  // A 33-byte r (too big for P-256), and r = 0.
+  EXPECT_THROW(der_to_raw(hex("3026022101" + std::string(64, '0') + "020101")), CryptoError);
+  EXPECT_THROW(der_to_raw(hex("3006020100020101")), CryptoError);
+  // r = n: strict DER, but out of range.
+  EXPECT_THROW(der_to_raw(hex("3026022100" + kOrderHex + "020101")), CryptoError);
+  EXPECT_EQ(to_hex(der_to_raw(hex("3006020101020101"))), std::string(62, '0') + "01" + std::string(62, '0') + "01");
+}
+
+TEST(Der, EncodesMinimalIntegers) {
+  // r = 1, s with its top bit set (needs a 0x00 sign byte).
+  Bytes raw(64, 0);
+  raw[31] = 0x01;
+  std::fill(raw.begin() + 32, raw.end(), 0x80);
+  Bytes der = raw_to_der(raw);
+  std::string s_hex;
+  for (int i = 0; i < 32; ++i) s_hex += "80";
+  EXPECT_EQ(to_hex(der), "3026020101022100" + s_hex);
+  EXPECT_EQ(der_to_raw(der), raw);
 }
 
 TEST(LowS, NormalizeIsIdempotent) {

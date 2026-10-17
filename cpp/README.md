@@ -7,7 +7,7 @@ Two tools, both off the demo path (nothing in the server, phones or dashboard de
 
 ## Build and run
 
-Needs CMake ≥ 3.25, a C++20 compiler and OpenSSL 3. On macOS, `brew install cmake openssl@3` (CMake finds Homebrew's OpenSSL by itself); on Ubuntu, `apt install cmake g++ libssl-dev`. The other dependencies are fetched at configure time, pinned to a release and its SHA-256: nlohmann/json 3.12.0, utf8proc 2.9.0 and GoogleTest 1.17.0.
+Needs CMake ≥ 3.25, a C++20 compiler and, for the default crypto backend, OpenSSL 3. On macOS, `brew install cmake openssl@3` (CMake finds Homebrew's OpenSSL by itself); on Ubuntu, `apt install cmake g++ libssl-dev`. The other dependencies are fetched at configure time, pinned to a release or commit and its SHA-256: nlohmann/json 3.12.0, utf8proc 2.9.0, GoogleTest 1.17.0, p256-m (portable backend only) and one Project Wycheproof test file (tests only).
 
 ```bash
 cmake -S cpp -B cpp/build -DCMAKE_BUILD_TYPE=Release
@@ -29,7 +29,13 @@ cpp/build/verify/stormcash-verify vectors spec/vectors.json --strict
 cpp/build/scale/stormcash-scale run --residents 100000 --replicates 20
 ```
 
-CI (the `cpp` job) builds in Debug with AddressSanitizer, UndefinedBehaviorSanitizer and `-Werror`, runs the unit tests and the vectors, then builds Release with `-Werror` to catch warnings that only appear with optimization. The options are `-DSTORMCASH_SANITIZE=ON` and `-DSTORMCASH_WERROR=ON`.
+To build without OpenSSL, on the portable backend (see [Crypto backends](#crypto-backends)):
+
+```bash
+cmake -S cpp -B cpp/build-portable -DSTORMCASH_CRYPTO=portable
+```
+
+CI (the `cpp` job, once per crypto backend) builds in Debug with AddressSanitizer, UndefinedBehaviorSanitizer and `-Werror`, runs the unit tests and the vectors, then builds Release with `-Werror` to catch warnings that only appear with optimization. The options are `-DSTORMCASH_SANITIZE=ON`, `-DSTORMCASH_WERROR=ON` and `-DSTORMCASH_CRYPTO=openssl|portable`.
 
 ## `stormcash-verify vectors`
 
@@ -105,12 +111,31 @@ What a `/v1/proof` file can't show, and the tool says so instead of passing it:
 - **Who the merchant is.** The ACCEPT entry is checked against its own device key; the file has no MCERT tying that key to a shop.
 - **OVER_CAP and LOG_TAMPER.** These cases have no tag pair, and `/v1/proof` answers 404 for them.
 
+## Crypto backends
+
+SHA-256 and the P-256 math sit behind a small interface (`verify/src/crypto_backend.hpp`) with two implementations, chosen when the build is configured:
+
+| `STORMCASH_CRYPTO` | File | SHA-256 | ECDSA P-256 | Used by |
+|---|---|---|---|---|
+| `openssl` (default) | `crypto_openssl.cpp` | OpenSSL 3 | OpenSSL 3 | native builds |
+| `portable` | `crypto_portable.cpp` | written here, from FIPS 180-4 | [p256-m](https://github.com/mpg/p256-m) | native builds, and the WebAssembly build on the proof page |
+
+Everything the two have in common lives in `crypto.cpp`, in front of the interface: lengths, the `0x02`/`0x03` prefix, 0 < r, s < n, and low-S. So a backend only has to get the curve and the hash right. The semantics are the same either way: the 32-byte digest is verified as the prehashed message, signatures are raw r‖s, high-S verifies, keys are SEC1 compressed with x < p and on the curve, and DER must be strict.
+
+Both backends pass every unit test and all 124 vectors, and CI runs both. They also pass all 262 of [Project Wycheproof](https://github.com/C2SP/wycheproof)'s ECDSA P-256 / SHA-256 tests in P1363 form (raw r‖s, our format). Those include the inputs where implementations go wrong: r or s out of range, s = 1 or n − 1, a hash of 0, keys with extreme coordinates, and points that double partway through the multiplication.
+
+**The portable backend.** p256-m is Manuel Pégourié-Gonnard's small P-256 implementation, the one Mbed TLS ships in `3rdparty/p256-m`. It is used at the upstream commit, unmodified. Its `p256_ecdsa_verify` range-checks r and s, accepts high-S, and validates the key. p256-m takes keys uncompressed, so `p256m_sec1.c` adds SEC1 decompression on top of p256-m's own field arithmetic: y = (x³ − 3x + b)^((p+1)/4) mod p, checking that y² equals the right-hand side. A wrong root can only make a key fail p256-m's own on-curve check, never pass it. Upstream p256-m selects 32-bit Arm assembly on any CPU that defines `__ARM_ARCH_PROFILE`, Apple silicon included; Mbed TLS's copy adds a guard. Here the macro is undefined for that one file, so every build runs p256-m's portable C, the same code the browser runs. The SHA-256 is about 60 lines of `crypto_portable.cpp`. It is tested on NIST's examples and on every length from 0 to 299 bytes against Python's `hashlib`, which crosses each padding boundary. DER is parsed by hand with the rules the OpenSSL backend applies.
+
+**Why not micro-ecc.** micro-ecc 1.1 was tried first, since it decompresses keys itself. It rejected 2 of Wycheproof's 173 valid signatures: tcId 60 ("Edge case for Shamir multiplication") and tcId 210 ("extreme value for k and s^-1"). Its verify computes u₁G + u₂Q in one pass (Shamir's trick) with an addition formula that has no doubling case. It accepted none of the 89 invalid signatures, but a verifier that rejects valid ones can't be the second opinion on a proof page. p256-m computes u₁G and u₂Q separately and adds them with a full add-or-double.
+
+**Licenses.** p256-m is Apache-2.0 (upstream; Mbed TLS's copy is Apache-2.0 OR GPL-2.0-or-later). The Wycheproof test file is Apache-2.0. Both are downloaded at a pinned commit and checked against a SHA-256, not copied into this repository.
+
 ## Design
 
 ```
 bytes.hpp         hex, strict base64url                         (§7.2, §7.3)
 encoding.hpp      field renderers, canonical(), digest()        (§7.2)
-crypto.hpp        SHA-256, ECDSA P-256 verify, DER, low-S       (§7.1)   OpenSSL 3
+crypto.hpp        SHA-256, ECDSA P-256 verify, DER, low-S       (§7.1)   OpenSSL 3 or p256-m
 objects.hpp       field tables, Object, typed views, ids        (§7.4, §9.2, §10.2)
 rules.hpp         tag validity, R1–R3, C1–C6, R4, R5, R6        (§8.2, §8.3, §9.4, §9.5)
 vectors.hpp       the spec/vectors.json runner                  (§20)
@@ -126,16 +151,17 @@ Decisions worth knowing:
 - **If an Object exists, it is valid.** Construction renders every field, so a negative integer, a 49-code-point string or a 15-byte cert id can't be held at all, let alone verified. This is the same invariant the Python dataclasses keep.
 - **Strict decoding.** Hex is lowercase only. base64url must be unpadded, use the URL alphabet, and round-trip, which rejects a last character with stray low bits (`Zh` for `Zg`). Transport objects with a missing or unknown key are rejected. Integers must be JSON integers in [0, 2^53 − 1] (no booleans, floats or strings).
 - **Strings.** NFC comes from utf8proc 2.9.0 (Unicode 15.1, the same version as Python 3.13's `unicodedata`). Length is counted in code points after NFC. Lists of strings are sorted by UTF-8 bytes, not by UTF-16 units: `StringsSortByUtf8BytesNotUtf16Units` is a case where the two orders differ. utf8proc's own `utf8proc_map` does pointer arithmetic on NULL while sizing its buffer, and UBSan flags it, so `encoding.cpp` calls `utf8proc_decompose` and `utf8proc_reencode` with a buffer it sizes from a hard bound.
-- **ECDSA.** The digest is verified as the prehashed message with `EVP_PKEY_verify`, with no digest set on the context, so OpenSSL doesn't hash it again. r and s are range-checked against the group order explicitly. High-S is accepted. Low-S normalization (n − s) is plain 32-byte big-endian arithmetic, so those rules are visible in the code. Keys are SEC1 compressed, decompressed by OpenSSL and then checked with `EVP_PKEY_public_check`. A malformed input is "not valid", never an exception.
-- **DER** is parsed with OpenSSL and then re-encoded, and the result must equal the input byte for byte. That rejects BER forms such as long-form lengths, and trailing bytes.
+- **ECDSA.** The digest is verified as the prehashed message: with OpenSSL, `EVP_PKEY_verify` with no digest set on the context, so OpenSSL doesn't hash it again; with p256-m, `p256_ecdsa_verify` with the digest as the hash. r and s are range-checked against the group order explicitly, before either backend sees them. High-S is accepted. Low-S normalization (n − s) is plain 32-byte big-endian arithmetic, so those rules are visible in the code. Keys are SEC1 compressed, decompressed and then checked on the curve (OpenSSL's `EVP_PKEY_public_check`, or p256-m's own point check). A malformed input is "not valid", never an exception.
+- **DER** is parsed with OpenSSL and then re-encoded, and the result must equal the input byte for byte. That rejects BER forms such as long-form lengths, and trailing bytes. The portable backend parses it by hand and rejects the same forms.
 - **Rules follow the spec's precedence.** For a pair, R1, then R2, then R3, and the lowest-numbered rule is reported. C6 takes stored tags in (counter, tag_hash) order and reports the first conflict, then COUNTER_NOT_NEW. R5 checks clause (a) before (b), dates a contact by the merchant's own entry, and needs it to be paired. R6 checks links only where the previous entry is known, and reports a fork before a broken link.
 
 ## Tests
 
-`ctest` runs 89 tests for the verifier (and 17 for Scale Lab, see [`scale/README.md`](scale/README.md)):
+`ctest` runs 95 tests for the verifier (and 17 for Scale Lab, see [`scale/README.md`](scale/README.md)), with either crypto backend:
 
 - **Unit tests** for each layer (`verify/tests/test_*.cpp`). They cover RFC 4648 base64 vectors, NIST SHA-256 vectors, every encoding edge (NFC, astral characters, embedded NUL, invalid UTF-8, sort order), a key that isn't on the curve (x = 1), BER and trailing-byte DER, codec strictness, and each equivocation condition on hand-built tags.
 - **All of `spec/vectors.json`**, with 124 vectors and nothing skipped.
+- **Project Wycheproof's** 262 ECDSA P-256 / SHA-256 signatures in P1363 form, at a pinned commit (`verify/tests/test_wycheproof.cpp`).
 - **Mutation tests.** 22 single-field corruptions of the vectors file (a canonical string, a flipped `valid`, a different reason token, R2/R3 precedence, a one-sided contact claimed to fire R5, and so on). Each one must be reported as a mismatch. A runner that can't fail proves nothing.
 - **Real proofs.** `verify/tests/fixtures/proof_*.json` are `GET /v1/proof` responses captured from the real server app (FastAPI, settlement, Postgres) by `fixtures/capture_proofs.py`, for SAME_COUNTER, BROKEN_LINK, TOTAL_BACKWARDS and both MERCHANT_KNEW clauses. Tampered copies must fail: a changed signed field, a displayed field that differs from the signed one, a changed canonical string, the wrong rule, the wrong holder key, the wrong server key, and an edited log entry.
 - **The CLI**, end to end: `stormcash-verify vectors spec/vectors.json --strict`.
@@ -157,5 +183,5 @@ All of these differences are stricter, and none of them changes a vector outcome
 ## Limits
 
 - **This toolkit only verifies.** It has no signing code. The test keys' private halves in `vectors.json` are never read.
-- **It is independent at the protocol layer.** The encoding, codecs and rules are a separate implementation. SHA-256 and ECDSA come from OpenSSL 3, and Python's `cryptography` also links OpenSSL, so the elliptic-curve math is not independent of the server's. The TypeScript phones use a separate library (noble).
+- **It is independent at the protocol layer.** The encoding, codecs and rules are a separate implementation. With the default backend, SHA-256 and ECDSA come from OpenSSL 3, and Python's `cryptography` also links OpenSSL, so that build's elliptic-curve math is not independent of the server's. The portable backend (p256-m and the SHA-256 here) shares no crypto code with OpenSSL, with noble (the phones) or with a browser's WebCrypto. That is the build the proof page runs.
 - **NFC depends on the Unicode version.** utf8proc 2.9.0 is Unicode 15.1; the CI's Python 3.11 is Unicode 14.0. NFC is stable for characters both versions know, so the two can only differ on a character assigned after Unicode 14 that has a decomposition. No vector has one.

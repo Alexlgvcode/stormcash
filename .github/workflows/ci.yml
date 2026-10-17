@@ -50,13 +50,21 @@ jobs:
         run: npm ci && npm test --if-present
 
   cpp:
+    # Every test and the shared vectors with each crypto backend (cpp/README.md):
+    # OpenSSL 3, and the portable one (p256-m) that the WebAssembly build uses.
+    name: cpp (${{ matrix.crypto }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        crypto: [openssl, portable]
     steps:
       - uses: actions/checkout@v4
       - name: Install OpenSSL 3 headers
+        if: matrix.crypto == 'openssl'
         run: sudo apt-get update && sudo apt-get install -y libssl-dev
       - name: Configure (Debug, ASan + UBSan, warnings as errors)
-        run: cmake -S cpp -B cpp/build -DCMAKE_BUILD_TYPE=Debug -DSTORMCASH_SANITIZE=ON -DSTORMCASH_WERROR=ON
+        run: cmake -S cpp -B cpp/build -DCMAKE_BUILD_TYPE=Debug -DSTORMCASH_SANITIZE=ON -DSTORMCASH_WERROR=ON -DSTORMCASH_CRYPTO=${{ matrix.crypto }}
       - name: Build
         run: cmake --build cpp/build -j 4
       - name: Unit tests
@@ -69,7 +77,7 @@ jobs:
         run: cpp/build/verify/stormcash-verify vectors spec/vectors.json --strict
       - name: Release build (optimizer-only warnings, as errors)
         run: |
-          cmake -S cpp -B cpp/build-release -DCMAKE_BUILD_TYPE=Release -DSTORMCASH_WERROR=ON -DSTORMCASH_BUILD_TESTS=OFF
+          cmake -S cpp -B cpp/build-release -DCMAKE_BUILD_TYPE=Release -DSTORMCASH_WERROR=ON -DSTORMCASH_BUILD_TESTS=OFF -DSTORMCASH_CRYPTO=${{ matrix.crypto }}
           cmake --build cpp/build-release -j 4
           cpp/build-release/verify/stormcash-verify vectors spec/vectors.json --strict
           cpp/build-release/scale/stormcash-scale run --residents 10000 --replicates 4
