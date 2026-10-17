@@ -33,7 +33,7 @@ def pipelined(pool: ConnectionPool) -> Iterator[psycopg.Connection]:
     """One transaction in pipeline mode: statements whose results nobody reads
     yet don't wait for the server, so a transaction costs one round trip per
     point where the code needs a result (plus one at the end), not one per
-    statement. That matters on a hosted database (~35 ms a round trip).
+    statement. That matters on a hosted database (~30 ms a round trip).
 
     psycopg waits for BEGIN's reply before it pipelines anything, so BEGIN and
     COMMIT go as plain statements on an autocommit connection. Inside the block,

@@ -5,6 +5,7 @@
 > **v4.1 (Oct 16):** work split rebalanced: Person A also reviews the TypeScript half of WS0, owns WS7 Photon, and records the backup video (§4, §22). Marked **[v4.1]**.
 > **v4.2 (Oct 16):** Nessie integration rewritten after the hour-1 VERIFY (§11.4): money moves as withdrawal + deposit pairs, balances are computed from Nessie transactions, Nessie amounts are whole dollars, base URL is HTTPS. Marked **[v4.2]**.
 > **v4.3 (Oct 16):** WS2 server core (#13): every Nessie money movement is a `nessie_moves` row executed after commit and replayed until both halves exist; signed API writes spelled out; fallback switches `NESSIE_DISABLED` and `API_SIG_REQUIRED` (§6.3, §11.1, §11.4, §12, §22.4). Marked **[v4.3]**.
+> **v4.4 (Oct 16):** seed-town against the hosted DB takes ~45 s instead of ~46 min: each upload is one pipelined transaction (uploads one at a time) instead of one transaction per item, with the same results (§11.2, §16.5). Marked **[v4.4]**.
 > **Builds on:** "StormCash: The 10/10 Build" v3 (Oct 16, Alexandre Lugovoi, on Brian Maina's Oct 11 draft). Everything new since v3 is marked **[v4]**.
 
 ---
@@ -928,7 +929,8 @@ For each item, in priority order:
 After ingest, call `detectors.run_incremental()` (§13), which may create candidates, which enqueue StormDesk jobs.
 
 **[v4.3] Ingest details (`settlement.py`).**
-- Order: priority, and within priority 3 `DLOG` → `PAY` → `RENEW`, so a merchant's `REFUSE` entry (and its contacts, for R5) is stored before its PAY. Each item is verified and stored in its own transaction; an invalid item is dropped and left out of the RCPT.
+- Order: priority, and within priority 3 `DLOG` → `PAY` → `RENEW`, so a merchant's `REFUSE` entry (and its contacts, for R5) is stored before its PAY. **[v4.4]** An upload is stored in one transaction, one upload at a time (an advisory lock); every item is checked before anything of it is written and runs under its own savepoint, so an invalid item is dropped, left out of the RCPT and leaves nothing behind. (Before v4.4 each item had its own transaction.)
+- **[v4.4] Round trips.** The hosted DB costs ~30 ms a round trip, so the upload's transaction runs in pipeline mode (`db.pipelined`): DLOG entries are inserted as one batch, everything the PAY and TAG checks read is fetched once per upload and kept current as items are stored, the R5 re-check's reads go with the DLOG batch, and the detectors' reads go with the COMMIT (evaluated after it, so a detector failure still can't fail a sync). Paths that open a case use the plain per-query code and read again after it. A seed-42 town stored this way is identical, table by table, to one stored item by item.
 - A verified PAY whose tag fails single-tag validity is stored with status `invalid` and not paid (a merchant skipped C5/C6). A PAY over the cap is settled like any other, so R4 can catch it after payment. A PAY whose tag the same merchant logged as `REFUSE` is `refused_evidence` and not paid. PAYs naming an unregistered merchant are dropped.
 - `escrow_avail` is the escrow's ledger balance, which equals `max_cap − already_paid_from_escrow` until a refund on close lowers it.
 - `payments.hops = len(path) − 1`; `relay_device` is the uploader.
@@ -1434,7 +1436,7 @@ One simulator feeds four things: the Town tab backdrop, StormDesk's data, the Ch
 - Writes everything into Postgres through `ingest_items()` (uploads happen when simulated relays get uplink).
 - `sim/out/<seed>/labels.json`: ground truth per subject.
 - `sim/out/<seed>/stats.json`: share of double spends refused offline, caught at settlement, mean loss per cheater, median time to settlement, hops histogram. These feed the Town tab charts.
-- `POST /v1/demo/seed-town {seed}` runs seed 42 into the live DB with the planted demo cases: **Corner Store** = colluder (with the real Photon handle), one stolen phone, `swannanoa` dark. **[v4.3]** Operator header required; answers 202 and runs in the background (72 h ending now; Nessie off; simulated events go to a quiet broker), `GET /v1/demo/seed-town` reports `{status, progress, summary}`, and a `town` SSE event fires when it's done. Body: `{seed, hours, residents, corner_store_contact?: {channel, handle}}`. Against the hosted DB it is slower than the ~10 s locally: seed it ahead of judging.
+- `POST /v1/demo/seed-town {seed}` runs seed 42 into the live DB with the planted demo cases: **Corner Store** = colluder (with the real Photon handle), one stolen phone, `swannanoa` dark. **[v4.3]** Operator header required; answers 202 and runs in the background (72 h ending now; Nessie off; simulated events go to a quiet broker), `GET /v1/demo/seed-town` reports `{status, progress, summary}`, and a `town` SSE event fires when it's done. Body: `{seed, hours, residents, corner_store_contact?: {channel, handle}}`. **[v4.4]** Seed 42 takes ~45 s against the hosted Neon DB (it was ~46 min with a transaction per item) and ~8 s locally; still seed before the judging slot.
 
 ### 16.6 Sliders (Town tab)
 

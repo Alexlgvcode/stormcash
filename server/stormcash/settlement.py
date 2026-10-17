@@ -7,7 +7,7 @@ upload at a time. Every item is checked before anything of it is written and
 runs under its own savepoint, so an invalid item is dropped, counted and leaves
 no trace. Nessie moves and SSE events run after the transaction commits.
 
-Round trips: on the hosted database each one costs ~35 ms and seed-town makes
+Round trips: on the hosted database each one costs ~30 ms and seed-town makes
 ~300 uploads, so the transaction runs in pipeline mode (db.pipelined) and only
 waits where the code needs an answer. DLOG entries are stored as one batch, and
 what the PAY and TAG checks read is fetched once per upload (`_Lookups`) and
