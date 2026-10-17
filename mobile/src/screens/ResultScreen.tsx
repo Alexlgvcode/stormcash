@@ -3,7 +3,8 @@ import * as Haptics from 'expo-haptics';
 import { useEffect } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Button, colors, wholeDollars } from '../components/ui';
+import { Icon } from '../components/Icon';
+import { Button, colors, font, wholeDollars } from '../components/ui';
 import { useNav } from '../nav';
 import type { CheckResult, Pay, ReasonToken } from '../protocol';
 
@@ -40,7 +41,7 @@ export function ResultScreen({ result, pay, capCents }: { result: CheckResult; p
     <SafeAreaView style={[styles.fill, { backgroundColor: ok ? colors.green : colors.red }]} edges={['top', 'bottom']}>
       <View style={styles.body}>
         <View style={styles.markRing}>
-          <Text style={styles.mark}>{ok ? '✓' : '✕'}</Text>
+          <Icon name={ok ? 'check' : 'x'} size={76} color="#fff" strokeWidth={2.75} />
         </View>
         <Text style={styles.head} accessibilityRole="header">{ok ? 'Verified' : 'Refused'}</Text>
         {ok ? (
@@ -72,14 +73,13 @@ const styles = StyleSheet.create({
   fill: { flex: 1 },
   body: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28, gap: 14 },
   markRing: {
-    width: 132, height: 132, borderRadius: 66, borderWidth: 6, borderColor: '#FFFFFF66',
+    width: 136, height: 136, borderRadius: 68, backgroundColor: '#FFFFFF26',
     alignItems: 'center', justifyContent: 'center', marginBottom: 8,
   },
-  mark: { fontSize: 72, color: '#fff', fontWeight: '900' },
-  head: { fontSize: 48, color: '#fff', fontWeight: '900', letterSpacing: -1 },
-  amount: { fontSize: 40, color: '#fff', fontWeight: '800', fontVariant: ['tabular-nums'] },
-  copy: { fontSize: 24, lineHeight: 32, color: '#fff', textAlign: 'center', fontWeight: '600' },
+  head: { fontFamily: font.heavy, fontSize: 52, lineHeight: 56, color: '#fff', letterSpacing: -1.5 },
+  amount: { fontFamily: font.heavy, fontSize: 44, lineHeight: 48, color: '#fff', letterSpacing: -1, fontVariant: ['tabular-nums'] },
+  copy: { fontFamily: font.semibold, fontSize: 24, lineHeight: 31, color: '#fff', textAlign: 'center', letterSpacing: -0.3 },
   detail: { backgroundColor: '#00000022', borderRadius: 14, paddingHorizontal: 14, paddingVertical: 10, marginTop: 8 },
-  detailText: { fontSize: 15, color: '#FFFFFFE6', textAlign: 'center' },
+  detailText: { fontFamily: font.medium, fontSize: 15, lineHeight: 20, color: '#FFFFFFE6', textAlign: 'center' },
   footer: { paddingHorizontal: 20, paddingBottom: 12 },
 });

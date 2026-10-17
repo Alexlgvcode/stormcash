@@ -1,7 +1,7 @@
 // Merchant home: shop name, today's tally from the device log, Charge.
-import { StyleSheet, Text } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { Header } from '../components/Header';
-import { Big, Button, Card, colors, Field, Label, Muted, Pill, Row, Screen } from '../components/ui';
+import { Big, Button, Card, colors, Field, font, Label, Muted, Screen, Status } from '../components/ui';
 import { useNav } from '../nav';
 import { logCounts } from '../store/devicelog';
 import { countsByKind } from '../store/items';
@@ -13,43 +13,44 @@ export function MerchantHomeScreen() {
   if (!mc) return null;
   const carrying = Object.values(countsByKind()).reduce((a, b) => a + (b ?? 0), 0);
   const { accepted, refused, contacts } = logCounts();
+  const region = mc.region_id.replace(/-/g, ' ');
   return (
     <Screen>
       <Header />
       <Card tone="navy" style={{ gap: 12 }}>
-        <Row style={{ justifyContent: 'space-between' }}>
-          <Label color="#9DB4FF">Shop · {mc.region_id.replace(/-/g, ' ')}</Label>
-          <Pill text="Verified by StormCash" tone="green" dot />
-        </Row>
-        <Big color="#fff">{mc.display_name}</Big>
-        <Muted color="#C7D2FE">Takes StormCash payments with no internet. Every payment is checked on this phone.</Muted>
+        <Label color={colors.onNavyMuted}>Shop in {region.charAt(0).toUpperCase() + region.slice(1)}</Label>
+        <Big color={colors.onNavy}>{mc.display_name}</Big>
+        <Muted color={colors.onNavyMuted}>Takes StormCash payments with no internet. Every payment is checked on this phone.</Muted>
+        <Status text="Verified by StormCash" tone="green" light />
       </Card>
 
       <Button title="Charge a customer" subtitle="Enter an amount, show your code" big onPress={() => nav.go({ name: 'charge' })} />
 
-      <Row style={{ flexWrap: 'nowrap' }}>
-        <Stat label="Accepted" value={accepted} />
-        <Stat label="Refused" value={refused} tone={refused ? 'red' : undefined} />
-        <Stat label="Met" value={contacts} />
-      </Row>
+      <Card style={{ flexDirection: 'row', paddingVertical: 18 }}>
+        <Tally label="Accepted" value={accepted} />
+        <Tally label="Refused" value={refused} alert={refused > 0} />
+        <Tally label="Phones met" value={contacts} />
+      </Card>
 
       <Card>
-        <Field label="Records carried" value={String(carrying)} last />
-        <Button title="Records & sync" kind="ghost" onPress={() => nav.go({ name: 'records' })} />
+        <Field label="Records carried" value={String(carrying)} />
+        <Button title="Records and sync" kind="secondary" onPress={() => nav.go({ name: 'records' })} />
       </Card>
     </Screen>
   );
 }
 
-function Stat({ label, value, tone }: { label: string; value: number; tone?: 'red' }) {
+function Tally({ label, value, alert }: { label: string; value: number; alert?: boolean }) {
   return (
-    <Card style={{ flex: 1, gap: 2, padding: 16, alignItems: 'center' }}>
-      <Text style={[styles.stat, tone === 'red' && value > 0 && { color: colors.red }]}>{value}</Text>
-      <Label>{label}</Label>
-    </Card>
+    <View style={styles.tally} accessible accessibilityLabel={`${label}: ${value}`}>
+      <Text style={[styles.value, alert && { color: colors.red }]}>{value}</Text>
+      <Text style={styles.label} numberOfLines={1}>{label}</Text>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  stat: { fontSize: 36, fontWeight: '800', color: colors.ink, fontVariant: ['tabular-nums'] },
+  tally: { flex: 1, alignItems: 'center', gap: 2 },
+  value: { fontFamily: font.heavy, fontSize: 36, lineHeight: 40, color: colors.ink, fontVariant: ['tabular-nums'] },
+  label: { fontFamily: font.medium, fontSize: 14, color: colors.muted },
 });

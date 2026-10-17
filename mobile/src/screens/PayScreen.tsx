@@ -1,10 +1,10 @@
 // Resident pays (§19.2): scan REQ → "Pay <shop> $X.XX" → Face ID → show PAY QR.
 import { useState } from 'react';
-import { Alert, View } from 'react-native';
+import { View } from 'react-native';
 import { confirmWithFaceId } from '../auth';
 import { QrCode } from '../components/QrCode';
 import { Scanner } from '../components/Scanner';
-import { Big, Body, Button, Card, Field, Label, Muted, Pill, Row, Screen, Title, wholeDollars } from '../components/ui';
+import { Big, Body, Button, Card, ErrorNote, Field, Muted, Screen, Status, Title, wholeDollars } from '../components/ui';
 import { deviceKey } from '../keys';
 import { useNav } from '../nav';
 import { payQr, preparePayment, signPayment } from '../payments';
@@ -21,6 +21,8 @@ type Step =
 export function PayScreen() {
   const nav = useNav();
   const [step, setStep] = useState<Step>({ s: 'scan' });
+  const [error, setError] = useState<string | null>(null);
+  const [scanKey, setScanKey] = useState(0); // remounts the scanner for another try
   const cert = latestCert();
   const state = walletState();
   const left = cert && state ? cert.cap_cents - state.cumCents : 0;
@@ -28,9 +30,11 @@ export function PayScreen() {
   const onScan = (data: string) => {
     const prep = preparePayment(data, getServerPub(), nowS());
     if (!prep.ok) {
-      Alert.alert('Cannot pay', prep.message, [{ text: 'OK', onPress: nav.home }]);
+      setError(prep.message);
+      setScanKey((k) => k + 1);
       return;
     }
+    setError(null);
     setStep({ s: 'confirm', request: prep.request });
   };
 
@@ -46,7 +50,8 @@ export function PayScreen() {
       <Screen>
         <Title>Scan the shop's code</Title>
         <Muted>Point the camera at the code on the shop's phone. No internet needed.</Muted>
-        <Scanner onScan={onScan} />
+        {error ? <ErrorNote text={error} /> : null}
+        <Scanner key={scanKey} onScan={onScan} />
         <Button title="Cancel" kind="secondary" onPress={nav.home} />
       </Screen>
     );
@@ -58,13 +63,13 @@ export function PayScreen() {
       <Screen>
         <Title>Confirm payment</Title>
         <Card style={{ alignItems: 'center', paddingVertical: 28 }}>
-          <Pill text="Verified shop" tone="green" dot />
           <Body>Pay {mc.display_name}</Body>
           <Big>{wholeDollars(rq.amount_cents)}</Big>
+          <Status text="Shop verified by StormCash" tone="green" />
         </Card>
         <Card>
           <Field label="Left now" value={wholeDollars(left)} />
-          <Field label="Left after" value={wholeDollars(left - rq.amount_cents)} last />
+          <Field label="Left after" value={wholeDollars(left - rq.amount_cents)} />
         </Card>
         <Button title="Pay with Face ID" big onPress={() => pay(step.request)} />
         <Button title="Cancel" kind="secondary" onPress={nav.home} />
@@ -74,16 +79,13 @@ export function PayScreen() {
 
   return (
     <Screen>
-      <Row style={{ justifyContent: 'space-between' }}>
-        <Title>Show to {step.shop}</Title>
-        <Pill text="Signed" tone="green" dot />
-      </Row>
+      <Title>Show this to {step.shop}</Title>
       <Card style={{ alignItems: 'center', padding: 12 }}>
         <QrCode value={step.qr} />
       </Card>
       <View style={{ alignItems: 'center', gap: 4 }}>
-        <Label>Payment</Label>
         <Big>{wholeDollars(step.amount)}</Big>
+        <Status text="Signed on this phone" tone="green" />
         <Muted>{wholeDollars(step.leftAfter)} left in your wallet</Muted>
       </View>
       <Button title="Done" onPress={nav.home} />

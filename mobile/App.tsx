@@ -2,6 +2,9 @@ import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import {
+  Geist_400Regular, Geist_500Medium, Geist_600SemiBold, Geist_700Bold, Geist_800ExtraBold, useFonts,
+} from '@expo-google-fonts/geist';
 import { getDeviceKey } from './src/keys';
 import { NavContext, type Nav, type Route } from './src/nav';
 import { getRole } from './src/settings';
@@ -19,13 +22,17 @@ import { SetupScreen } from './src/screens/SetupScreen';
 import { WalletScreen } from './src/screens/WalletScreen';
 
 export default function App() {
-  const [ready, setReady] = useState(false);
+  const [keyReady, setKeyReady] = useState(false);
+  const [fontsLoaded, fontError] = useFonts({
+    Geist_400Regular, Geist_500Medium, Geist_600SemiBold, Geist_700Bold, Geist_800ExtraBold,
+  });
+  const ready = keyReady && (fontsLoaded || !!fontError); // a font failure falls back to the system face
   const [route, setRoute] = useState<Route>({ name: 'home' });
   const [, setVersion] = useState(0);
 
   useEffect(() => {
     getDb();
-    getDeviceKey().then(() => setReady(true));
+    getDeviceKey().then(() => setKeyReady(true));
   }, []);
 
   const nav = useMemo<Nav>(() => ({

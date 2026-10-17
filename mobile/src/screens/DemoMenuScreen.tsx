@@ -14,6 +14,7 @@ import { resetDb, setSetting } from '../store/db';
 import { syncManager } from '../sync/manager';
 
 const LABELS: DemoLabel[] = ['MAYA', 'PHARMACY', 'GAS_STATION'];
+const LABEL_NAMES: Record<DemoLabel, string> = { MAYA: 'Maya', PHARMACY: 'Pharmacy', GAS_STATION: 'Gas Station' };
 
 // Dev-build previews of the result screen (the simulator camera can't scan). Not in Release builds.
 const PREVIEW_TAG = {
@@ -79,7 +80,7 @@ export function DemoMenuScreen() {
 
       <Section title="Demo phone">
         <Row>
-          {LABELS.map((l) => <Chip key={l} text={l.replace('_', ' ')} active={label === l} onPress={() => pickLabel(l)} />)}
+          {LABELS.map((l) => <Chip key={l} text={LABEL_NAMES[l]} active={label === l} onPress={() => pickLabel(l)} />)}
         </Row>
         <Card>
           <Row style={{ justifyContent: 'space-between', flexWrap: 'nowrap' }}>

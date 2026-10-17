@@ -7,7 +7,7 @@ import { register } from '../registration';
 import {
   getApiBase, getServerPub, setApiBase, setDemoLabel, setServerPub, type DemoLabel, type Role,
 } from '../settings';
-import { Body, Button, Card, Chip, colors, Label, Muted, radius, Row, Screen, Section } from '../components/ui';
+import { Body, Button, Card, Chip, colors, ErrorNote, font, Label, Muted, radius, Row, Screen, Section } from '../components/ui';
 
 const PRESETS: { label: DemoLabel; role: Role; name: string }[] = [
   { label: 'MAYA', role: 'resident', name: 'Maya' },
@@ -24,6 +24,7 @@ export function SetupScreen() {
   const [serverPub, setServerPubState] = useState(getServerPub());
   const [busy, setBusy] = useState(false);
   const [advanced, setAdvanced] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const pickPreset = (p: (typeof PRESETS)[number]) => {
     setLabel(p.label);
@@ -32,7 +33,8 @@ export function SetupScreen() {
   };
 
   const submit = async () => {
-    if (!name.trim()) return Alert.alert('Enter a name');
+    if (!name.trim()) return setError('Enter a name for this phone.');
+    setError(null);
     setBusy(true);
     try {
       setApiBase(apiBase.trim());
@@ -42,7 +44,7 @@ export function SetupScreen() {
       if (warnings.length) Alert.alert('Registered', warnings.join('\n'));
       nav.home();
     } catch (e) {
-      Alert.alert('Registration failed', e instanceof Error ? e.message : String(e));
+      setError(`Registration failed: ${e instanceof Error ? e.message : String(e)}. Check the server URL and that this phone is online.`);
     } finally {
       setBusy(false);
     }
@@ -89,7 +91,7 @@ export function SetupScreen() {
       </Section>
 
       <Pressable onPress={() => setAdvanced(!advanced)}>
-        <Label color={colors.primary}>{advanced ? 'Hide' : 'Show'} server settings</Label>
+        <Text style={styles.link}>{advanced ? 'Hide' : 'Show'} server settings</Text>
       </Pressable>
       {advanced ? (
         <Card>
@@ -102,23 +104,22 @@ export function SetupScreen() {
         </Card>
       ) : null}
 
-      <Button title={busy ? 'Registering…' : 'Register this phone'} big onPress={submit} disabled={busy || !name.trim()} />
+      {error ? <ErrorNote text={error} /> : null}
+      <Button title="Register this phone" big onPress={submit} busy={busy} disabled={!name.trim()} />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  hero: { fontSize: 26, lineHeight: 32, fontWeight: '800', color: '#fff', letterSpacing: -0.4 },
-  option: {
-    flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16, borderRadius: radius.md,
-    backgroundColor: colors.card, borderWidth: 1.5, borderColor: colors.line,
-  },
-  optionActive: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
+  hero: { fontFamily: font.bold, fontSize: 30, lineHeight: 34, color: '#fff', letterSpacing: -0.9 },
+  option: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 18, borderRadius: radius.lg, backgroundColor: colors.card },
+  optionActive: { backgroundColor: colors.primarySoft },
   radio: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: colors.faint },
   radioOn: { borderColor: colors.primary, borderWidth: 7 },
   input: {
-    borderWidth: 1, borderColor: colors.line, borderRadius: radius.sm, padding: 14, fontSize: 17,
-    backgroundColor: colors.card, color: colors.ink,
+    borderWidth: 1, borderColor: colors.line, borderRadius: radius.md, padding: 16, fontSize: 17,
+    fontFamily: font.medium, backgroundColor: colors.card, color: colors.ink,
   },
   mono: { fontFamily: 'Menlo', fontSize: 13 },
+  link: { fontFamily: font.semibold, fontSize: 16, color: colors.primary, paddingVertical: 12 },
 });

@@ -2,10 +2,11 @@
 // Demo payments are whole dollars (Nessie moves whole dollars, §11.4), so the keypad enters dollars.
 import * as Haptics from 'expo-haptics';
 import { useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Icon } from '../components/Icon';
 import { QrCode } from '../components/QrCode';
 import { Scanner } from '../components/Scanner';
-import { Button, Card, Chip, colors, Label, Meter, Muted, Row, Screen, Title, radius } from '../components/ui';
+import { Button, Card, Chip, colors, ErrorNote, font, Label, Meter, Muted, Row, Screen, Title, radius } from '../components/ui';
 import { useTick } from '../hooks';
 import { deviceKey } from '../keys';
 import { useNav } from '../nav';
@@ -25,6 +26,8 @@ export function ChargeScreen() {
   const nav = useNav();
   const [amount, setAmount] = useState(0); // whole dollars
   const [step, setStep] = useState<Step>({ s: 'amount' });
+  const [error, setError] = useState<string | null>(null);
+  const [scanKey, setScanKey] = useState(0);
   const now = Math.floor(useTick(1000) / 1000);
   const mc = merchantCert();
   if (!mc) return null;
@@ -44,9 +47,11 @@ export function ChargeScreen() {
   const onScan = (data: string) => {
     const r = receivePayment(data, mc, deviceKey(), getServerPub(), nowS());
     if (!r.parsed) {
-      Alert.alert('Not a payment', r.message, [{ text: 'Scan again', onPress: () => setStep({ s: 'scan' }) }]);
+      setError(r.message);
+      setScanKey((k) => k + 1);
       return;
     }
+    setError(null);
     nav.go({ name: 'result', result: r.result, pay: r.pay, capCents: r.pay.c.cap_cents });
   };
 
@@ -70,7 +75,9 @@ export function ChargeScreen() {
               style={({ pressed }) => [styles.key, pressed && { backgroundColor: colors.primarySoft }]}
               accessibilityLabel={k === '⌫' ? 'Delete' : k === 'C' ? 'Clear' : k}
             >
-              <Text style={[styles.keyText, (k === 'C' || k === '⌫') && { color: colors.muted }]}>{k}</Text>
+              {k === '⌫'
+                ? <Icon name="delete" size={28} color={colors.ink} />
+                : <Text style={[styles.keyText, k === 'C' && { color: colors.muted }]}>{k}</Text>}
             </Pressable>
           ))}
         </View>
@@ -113,18 +120,16 @@ export function ChargeScreen() {
     <Screen>
       <Title>Scan customer's code</Title>
       <Muted>Every check runs on this phone. No internet needed.</Muted>
-      <Scanner onScan={onScan} />
+      {error ? <ErrorNote text={error} /> : null}
+      <Scanner key={scanKey} onScan={onScan} />
       <Button title="Cancel" kind="secondary" onPress={cancel} />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  amount: { fontSize: 72, fontWeight: '800', color: colors.ink, letterSpacing: -2, fontVariant: ['tabular-nums'] },
+  amount: { fontFamily: font.heavy, fontSize: 76, lineHeight: 84, color: colors.ink, letterSpacing: -3, fontVariant: ['tabular-nums'] },
   pad: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 10 },
-  key: {
-    width: '31.5%', height: 64, borderRadius: radius.md, backgroundColor: colors.card, alignItems: 'center',
-    justifyContent: 'center', borderWidth: 1, borderColor: colors.line,
-  },
-  keyText: { fontSize: 28, fontWeight: '600', color: colors.ink },
+  key: { width: '31.5%', height: 64, borderRadius: radius.pill, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' },
+  keyText: { fontFamily: font.semibold, fontSize: 28, color: colors.ink, fontVariant: ['tabular-nums'] },
 });
