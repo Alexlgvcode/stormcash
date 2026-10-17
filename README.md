@@ -194,6 +194,10 @@ Details: [`server/stormcash/photon/README.md`](server/stormcash/photon/README.md
 | **Person A — Mobile** (Mac 1) | Brian Maina ([@brianmmaina](https://github.com/brianmmaina)) | `mobile/`, WS0 TypeScript review, WS7 Photon, backup video |
 | **Person B — Server, dashboard, integration** (Mac 2) | Alexandre Lugovoi ([@Alexlgvcode](https://github.com/Alexlgvcode)) | `server/`, `dashboard/`, `sim/`, `chalk/`, WS0 Python review |
 
+## C++ toolkit
+
+[`cpp/`](cpp/README.md) holds `stormcash-verify`, a third implementation of the protocol's checking side next to the Python server and the TypeScript phones, written in C++20 from the spec. It reproduces all 124 shared test vectors (canonical strings, digests, transport JSON, signatures and every rule from C1–C6 and R1–R6), and checks a case proof from `GET /v1/proof/{case_id}` offline: `stormcash-verify proof proof.json --server-pub <key>`. CI builds it with sanitizers in the `cpp` job. It is off the demo path.
+
 ## Repo layout
 
 | Folder | What | Workstream |
@@ -204,6 +208,7 @@ Details: [`server/stormcash/photon/README.md`](server/stormcash/photon/README.md
 | `dashboard/` | React dashboard and public proof page | WS3 |
 | `sim/` | 40-shop town simulator | WS4 |
 | `chalk/` | Chalk features, resolvers and evals | WS6 |
+| `cpp/` | C++ toolkit: `stormcash-verify`, an independent verifier for the vectors and case proofs | — |
 | `fixtures/` | Replayed NWS alerts | — |
 
 ## Workflow

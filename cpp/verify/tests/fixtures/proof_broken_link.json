@@ -1,0 +1,75 @@
+{
+  "case_id": 1,
+  "rule": "BROKEN_LINK",
+  "server_pub": "A1zUzsxCSJ6Y7T_3FJgFH3gPNkhtTUTYZ9mYGFeE59pX",
+  "cert": {
+    "type": "CERT",
+    "json": {
+      "ci": "_BemvM1gG14TpswszGbpMw",
+      "cv": 1,
+      "hp": "AnAKxj09s9YfycNW15uoKf3JsjSmsFN54sdqED6m_IgA",
+      "cap": 2000,
+      "ia": 1792250158,
+      "ea": 1792509358,
+      "er": "00000000000000000000a003",
+      "sig": "c8Rnr5is1VYbcxFHpiNFewJOF6g2xNG8CtsDGmrkfnZCEKO5fTFrc8qa0s4ir2bV21zv8qgPX522xgQsMjU2Bg"
+    },
+    "fields": {
+      "cert_id": "fc17a6bccd601b5e13a6cc2ccc66e933",
+      "cert_ver": 1,
+      "holder_pub": "02700ac63d3db3d61fc9c356d79ba829fdc9b234a6b05379e2c76a103ea6fc8800",
+      "cap_cents": 2000,
+      "issued_at": 1792250158,
+      "expires_at": 1792509358,
+      "escrow_ref": "00000000000000000000a003"
+    },
+    "canonical": "SC1|CERT|fc17a6bccd601b5e13a6cc2ccc66e933|1|02700ac63d3db3d61fc9c356d79ba829fdc9b234a6b05379e2c76a103ea6fc8800|2000|1792250158|1792509358|00000000000000000000a003",
+    "digest": "b5aaa626f63c2bf96ec0f0945dc96e3f91dcba79c991c898d361dcb43055d690"
+  },
+  "tag_a": {
+    "type": "TAG",
+    "json": {
+      "ci": "_BemvM1gG14TpswszGbpMw",
+      "k": 1,
+      "ph": "ZCBE0I5uhgRbkaZvaiOAyhMMYqsOtxvcSvmy1ciWoWM",
+      "amt": 1200,
+      "cum": 1200,
+      "dh": "o5j3XPqOdCzOm7S3MwMz6M-s9xkO_qGCUdnDR9haY0s",
+      "sig": "MAvhNDffVV9p8X4TRIMjFBQUshp60FdanDf70RQjflU1D9g-N-Zlht2XoQnWVuaW2BzcZV2e1j8fpnUkZxAh4g"
+    },
+    "fields": {
+      "cert_id": "fc17a6bccd601b5e13a6cc2ccc66e933",
+      "counter": 1,
+      "prev_hash": "642044d08e6e86045b91a66f6a2380ca130c62ab0eb71bdc4af9b2d5c896a163",
+      "amount_cents": 1200,
+      "cum_cents": 1200,
+      "details_hash": "a398f75cfa8e742cce9bb4b7330333e8cfacf7190efea18251d9c347d85a634b"
+    },
+    "canonical": "SC1|TAG|fc17a6bccd601b5e13a6cc2ccc66e933|1|642044d08e6e86045b91a66f6a2380ca130c62ab0eb71bdc4af9b2d5c896a163|1200|1200|a398f75cfa8e742cce9bb4b7330333e8cfacf7190efea18251d9c347d85a634b",
+    "digest": "9fe2f671411e684a4cf7fa2635a04c48ac9035296f785e721920cb9d5499b842"
+  },
+  "tag_b": {
+    "type": "TAG",
+    "json": {
+      "ci": "_BemvM1gG14TpswszGbpMw",
+      "k": 2,
+      "ph": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+      "amt": 800,
+      "cum": 2000,
+      "dh": "bXwXsZjvAQg3mtXIcLGhS2K3-mg6ORQQt-Y6wUD37zk",
+      "sig": "kgccUTnP8xAYgDdc6m2cwhKoVXfUWXl2JpwhlG0QHKgfOjl0NRj4zViypowLypUbn09csbo2h0Bn8eJ_3uM2dw"
+    },
+    "fields": {
+      "cert_id": "fc17a6bccd601b5e13a6cc2ccc66e933",
+      "counter": 2,
+      "prev_hash": "0101010101010101010101010101010101010101010101010101010101010101",
+      "amount_cents": 800,
+      "cum_cents": 2000,
+      "details_hash": "6d7c17b198ef0108379ad5c870b1a14b62b7fa683a391410b7e63ac140f7ef39"
+    },
+    "canonical": "SC1|TAG|fc17a6bccd601b5e13a6cc2ccc66e933|2|0101010101010101010101010101010101010101010101010101010101010101|800|2000|6d7c17b198ef0108379ad5c870b1a14b62b7fa683a391410b7e63ac140f7ef39",
+    "digest": "ff61dd2131fe50b63937a04a7dfc84ea865ae1529d2e5a0b86a6ccf2d38c5d5b"
+  },
+  "holder_pub": "AnAKxj09s9YfycNW15uoKf3JsjSmsFN54sdqED6m_IgA",
+  "log_entries": []
+}

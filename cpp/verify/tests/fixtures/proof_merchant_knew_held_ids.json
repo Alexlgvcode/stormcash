@@ -1,0 +1,106 @@
+{
+  "case_id": 2,
+  "rule": "MERCHANT_KNEW",
+  "server_pub": "A1zUzsxCSJ6Y7T_3FJgFH3gPNkhtTUTYZ9mYGFeE59pX",
+  "cert": {
+    "type": "CERT",
+    "json": {
+      "ci": "L79PWE4y-_nNM_Y58J8cGQ",
+      "cv": 1,
+      "hp": "AnAKxj09s9YfycNW15uoKf3JsjSmsFN54sdqED6m_IgA",
+      "cap": 2000,
+      "ia": 1792250159,
+      "ea": 1792509359,
+      "er": "00000000000000000000a003",
+      "sig": "sANZFGBTgjkcNWDW5uoyhyYpb1Q3WJeapLdWZxBglEthvoWLtb8zLvFQAoCwkPY7gcMP3yUUOYcnfryULvBb8Q"
+    },
+    "fields": {
+      "cert_id": "2fbf4f584e32fbf9cd33f639f09f1c19",
+      "cert_ver": 1,
+      "holder_pub": "02700ac63d3db3d61fc9c356d79ba829fdc9b234a6b05379e2c76a103ea6fc8800",
+      "cap_cents": 2000,
+      "issued_at": 1792250159,
+      "expires_at": 1792509359,
+      "escrow_ref": "00000000000000000000a003"
+    },
+    "canonical": "SC1|CERT|2fbf4f584e32fbf9cd33f639f09f1c19|1|02700ac63d3db3d61fc9c356d79ba829fdc9b234a6b05379e2c76a103ea6fc8800|2000|1792250159|1792509359|00000000000000000000a003",
+    "digest": "30c2d774a8e3ab36b04cdd0dda275bf44d0094bc6179674fc54654f69413c487"
+  },
+  "tag_a": {
+    "type": "TAG",
+    "json": {
+      "ci": "L79PWE4y-_nNM_Y58J8cGQ",
+      "k": 1,
+      "ph": "dFsA2F1ers0l3TWbx9NhF6JGfj8Ub1Wym2YSbKwTpz0",
+      "amt": 1200,
+      "cum": 1200,
+      "dh": "zsAg2dGY-Uf_zOorJ-wsYhzULzgIQSEbLfe4VwiGK-c",
+      "sig": "WkXp9VertkGXo2V6h9EvRnePJo5ZxcXDNZ4aNgxpB-ZdKS_ku5MhH0pHxuo46DMsDflLPqwwR-wErm4CiXTKYA"
+    },
+    "fields": {
+      "cert_id": "2fbf4f584e32fbf9cd33f639f09f1c19",
+      "counter": 1,
+      "prev_hash": "745b00d85d5eaecd25dd359bc7d36117a2467e3f146f55b29b66126cac13a73d",
+      "amount_cents": 1200,
+      "cum_cents": 1200,
+      "details_hash": "cec020d9d198f947ffccea2b27ec2c621cd42f380841211b2df7b85708862be7"
+    },
+    "canonical": "SC1|TAG|2fbf4f584e32fbf9cd33f639f09f1c19|1|745b00d85d5eaecd25dd359bc7d36117a2467e3f146f55b29b66126cac13a73d|1200|1200|cec020d9d198f947ffccea2b27ec2c621cd42f380841211b2df7b85708862be7",
+    "digest": "9433151ed4d1949745207ca935bb7e4f6042c9c74c2fe0e541cc46fc2b934f5b"
+  },
+  "tag_b": {
+    "type": "TAG",
+    "json": {
+      "ci": "L79PWE4y-_nNM_Y58J8cGQ",
+      "k": 1,
+      "ph": "dFsA2F1ers0l3TWbx9NhF6JGfj8Ub1Wym2YSbKwTpz0",
+      "amt": 1200,
+      "cum": 1200,
+      "dh": "lt37tCsf9QL4D--5SYHh-_i-H-bX9fahq_6QWNOY6Fo",
+      "sig": "cLcCWjFVtZuTsbOLHYELt-99our34YUt-r854WrXvcwP-dGwO5FEKVKActn41ZavGzcwD-tLDwQhcxExSrdU0Q"
+    },
+    "fields": {
+      "cert_id": "2fbf4f584e32fbf9cd33f639f09f1c19",
+      "counter": 1,
+      "prev_hash": "745b00d85d5eaecd25dd359bc7d36117a2467e3f146f55b29b66126cac13a73d",
+      "amount_cents": 1200,
+      "cum_cents": 1200,
+      "details_hash": "96ddfbb42b1ff502f80fefb94981e1fbf8be1fe6d7f5f6a1abfe9058d398e85a"
+    },
+    "canonical": "SC1|TAG|2fbf4f584e32fbf9cd33f639f09f1c19|1|745b00d85d5eaecd25dd359bc7d36117a2467e3f146f55b29b66126cac13a73d|1200|1200|96ddfbb42b1ff502f80fefb94981e1fbf8be1fe6d7f5f6a1abfe9058d398e85a",
+    "digest": "3134ff40cc79729f02f5188179afeea61158a98b8db16b97dcc61a8ac7c493fa"
+  },
+  "holder_pub": "AnAKxj09s9YfycNW15uoKf3JsjSmsFN54sdqED6m_IgA",
+  "log_entries": [
+    {
+      "type": "DLOG",
+      "json": {
+        "dp": "Avcep4khmMkzW4CZvMTz-1SGiMd4a-nvRUUDaM7bA2lz",
+        "q": 1,
+        "ph": "T-tBIQWnIImz4ULBovCK2J82Bz06j-nUPxyRLtazcQI",
+        "ts": 1792250159,
+        "kd": "ACCEPT",
+        "th": "MTT_QMx5cp8C9RiBea_uphFYqYuNsWuX3MYaisfEk_o",
+        "ci": "L79PWE4y-_nNM_Y58J8cGQ",
+        "hi": [
+          "lDMVHtTRlJdFIHypNbt-T2BCycdML-DlQcxG_CuTT1s"
+        ],
+        "sig": "hoCbjuQtYqx8qUwvlOqSRkD6k4uDRuwUQvXNz7GKYpB5MNDISqTDKBX6Uf3RQXNn1WjXtUsfWSV9Jnnzo_Flqg"
+      },
+      "fields": {
+        "device_pub": "02f71ea7892198c9335b8099bcc4f3fb548688c7786be9ef45450368cedb036973",
+        "seq": 1,
+        "prev_hash": "4feb412105a72089b3e142c1a2f08ad89f36073d3a8fe9d43f1c912ed6b37102",
+        "ts": 1792250159,
+        "kind": "ACCEPT",
+        "tag_hash": "3134ff40cc79729f02f5188179afeea61158a98b8db16b97dcc61a8ac7c493fa",
+        "cert_id": "2fbf4f584e32fbf9cd33f639f09f1c19",
+        "held_ids": [
+          "9433151ed4d1949745207ca935bb7e4f6042c9c74c2fe0e541cc46fc2b934f5b"
+        ]
+      },
+      "canonical": "SC1|DLOG|02f71ea7892198c9335b8099bcc4f3fb548688c7786be9ef45450368cedb036973|1|4feb412105a72089b3e142c1a2f08ad89f36073d3a8fe9d43f1c912ed6b37102|1792250159|ACCEPT|3134ff40cc79729f02f5188179afeea61158a98b8db16b97dcc61a8ac7c493fa|2fbf4f584e32fbf9cd33f639f09f1c19|9433151ed4d1949745207ca935bb7e4f6042c9c74c2fe0e541cc46fc2b934f5b",
+      "digest": "db578aa003f6e3b301b0736d205c70a2ffc9e2490623fb4d41be877a48ea7c9c"
+    }
+  ]
+}
