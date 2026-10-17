@@ -535,3 +535,28 @@ def test_a_repeated_request_reuses_its_job(fake_server):
             break
         threading.Event().wait(0.02)
     assert len(seen) == 2
+
+
+def test_review_dataset_keeps_a_complete_droid_runs_outputs():
+    import build_review_dataset as brd
+
+    base = {"seed": 1, "kind": "cap_drain", "subject_id": "s", "subject_name": "R", "window_start": 0, "window_end": 1,
+            "features": "{}", "label_kind": "none", "label_action": "none", "label_scenario": "trap_stockup",
+            "label_note": "", "honest_subject": True, "output_error": None}
+    v2 = droid_out(flag(kind="none", proposed_action="none"), run_id=7, session_id="sid")
+    rows = brd.review_rows([{**base, "row_id": "1:2", "candidate_id": 2, "output": v2},
+                            {**base, "row_id": "1:1", "candidate_id": 1, "output": v2}])
+    assert [r["row_id"] for r in rows] == ["1:1", "1:2"] and rows[0]["v2_output"] == v2
+    assert rows[0]["v2_server_run_id"] == 7 and rows[0]["v2_session_id"] == "sid"
+    with pytest.raises(SystemExit):
+        brd.review_rows([{**base, "row_id": "1:1", "candidate_id": 1, "output": None, "output_error": "boom"}])
+    with pytest.raises(SystemExit):
+        brd.review_rows([{**base, "row_id": "1:1", "candidate_id": 1, "output": out(flag(), runner="fake")}])
+
+
+def test_the_frozen_review_dataset_is_run_bs_droid_outputs():
+    rows = [json.loads(line) for line in (EVALS / "dataset" / "stormdesk_review_heldout_v2.jsonl").read_text().splitlines()]
+    meta = json.loads((EVALS / "dataset" / "meta_review_heldout_v2.json").read_text())
+    assert meta["source_run_id"] == "51b74f56-d8d8-466b-a07c-3ddf8baa8064" and len(rows) == meta["rows"] == 20
+    assert meta["prompt_versions"] == [2] and meta["models"] == ["claude-sonnet-5-5"]
+    assert all(json.loads(r["v2_output"])["_run"]["runner"] == "droid" for r in rows)
