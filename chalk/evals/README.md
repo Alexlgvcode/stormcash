@@ -135,6 +135,34 @@ Seed 1 has 11 rows, seed 2 has 9, seed 3 has 10 (30 rows, 16 honest; seed 2's co
 
   At ≈45k a row and ≈1.06M left, that's seed 1 (11 rows). Rules-only runs on exactly B's rows first (free), so the held-out section compares the same rows.
 
+## Second-opinion reviewer eval (§14.7b, Oct 17)
+
+"v2 alone" vs "v2 + reviewer" on the 20 held-out rows of run B (seeds 1 and 2). Only the reviewer was run:
+- `build_review_dataset.py` froze run B's scored prompt-v2 outputs from its Chalk result dataset (`dataset/stormdesk_review_heldout_v2.jsonl`). All 20 matched the stored proposals in the eval databases.
+- `run_review.py review` sent each frozen Flag to `POST /v1/stormdesk/review` on its seed's server, one row at a time, from this machine. The endpoint isn't idempotent: a row is written to the progress file before it is sent and is never sent again.
+  - Guards per reply: Droid, `claude-sonnet-5-5` (server and session files), reviewer prompt v1, no fallback.
+  - A row is admitted only if it fits the cap at 1.25× the average review.
+- `run_review.py score` uploaded the rows with both outputs and ran two Chalk Evaluations on that one revision (`review_eval.py`). Their replay tasks route each row the way `service.after_review` does: kind and action never change, and a valid agent disagreement keeps or reopens a row for a person.
+- Results go to `results/review/`, outside the Evals tab's triage columns.
+
+**Run, Oct 17** (`results/review/20261017T175320Z-review-heldout-v2.json`): Chalk runs `28f97eca-0402-4c86-9c76-5e380eae6dc0` (v2 alone) and `e3ecc828-c97e-41d3-9cf8-d7185b3d8013` (v2 + reviewer).
+- 20/20 reviews valid; every one Droid on `claude-sonnet-5-5`, reviewer prompt v1, no fallback.
+- 799,185 Factory credits (20 sessions, no retries). Reviews took 32.7 s on average, 89.6 s at most.
+
+| | v2 alone | v2 + reviewer |
+|---|---|---|
+| Real cases that reach a person | 6/9 | 8/9 |
+| Honest subjects that reach a person | 0/11 | 0/11 |
+| Kind and action correct (never changed by the reviewer) | 17/20 | 17/20 |
+
+- **Reviewer verdicts:** 17 agree, 1 disagree, 2 insufficient evidence; 3 rows escalated.
+  - Both Swannanoa dark regions v2 had dismissed now reach a person.
+  - It disagreed with v2's correct `hold_pool_payout` on Corner Store (a colluder). That row was already in front of a person, now with the reviewer arguing for dismissal.
+  - It agreed with v2's wrong dismissal of Downtown Pet Supply (a colluder).
+  - None of its 3 suggestions matched the label.
+  - No review had invalid citations, so none reached a person invalid.
+- **Honesty:** the reviewer prompt was written and committed before any review ran and before its author read a held-out row; they knew run B's aggregate scores. These are the same 20 rows run B was scored on.
+
 ## Results file (for the Evals tab, #38)
 
 ```jsonc

@@ -1,0 +1,20 @@
+{
+  "name": "stormdesk-review-heldout-v2",
+  "note": "A finished StormDesk run's outputs, frozen for the second-opinion reviewer. Every subject is simulated.",
+  "source_run_id": "51b74f56-d8d8-466b-a07c-3ddf8baa8064",
+  "source_evaluation": "StormDesk triage: server (Droid) \u00b7 prompt v2 \u00b7 held-out seeds 1, 2",
+  "source_dataset_revision_id": "1c93fc70-e0ad-4292-a324-62ae93cf5a21",
+  "prompt_versions": [
+    2
+  ],
+  "models": [
+    "claude-sonnet-5-5"
+  ],
+  "rows": 20,
+  "honest_rows": 11,
+  "seeds": [
+    1,
+    2
+  ],
+  "sha256": "965c83e41bd17b26b38f8967bb8c1fc7f2aaf38e3a7f456c65f10515894ea84d"
+}

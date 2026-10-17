@@ -535,3 +535,161 @@ def test_a_repeated_request_reuses_its_job(fake_server):
             break
         threading.Event().wait(0.02)
     assert len(seen) == 2
+
+
+def test_review_dataset_keeps_a_complete_droid_runs_outputs():
+    import build_review_dataset as brd
+
+    base = {"seed": 1, "kind": "cap_drain", "subject_id": "s", "subject_name": "R", "window_start": 0, "window_end": 1,
+            "features": "{}", "label_kind": "none", "label_action": "none", "label_scenario": "trap_stockup",
+            "label_note": "", "honest_subject": True, "output_error": None}
+    v2 = droid_out(flag(kind="none", proposed_action="none"), run_id=7, session_id="sid")
+    rows = brd.review_rows([{**base, "row_id": "1:2", "candidate_id": 2, "output": v2},
+                            {**base, "row_id": "1:1", "candidate_id": 1, "output": v2}])
+    assert [r["row_id"] for r in rows] == ["1:1", "1:2"] and rows[0]["v2_output"] == v2
+    assert rows[0]["v2_server_run_id"] == 7 and rows[0]["v2_session_id"] == "sid"
+    with pytest.raises(SystemExit):
+        brd.review_rows([{**base, "row_id": "1:1", "candidate_id": 1, "output": None, "output_error": "boom"}])
+    with pytest.raises(SystemExit):
+        brd.review_rows([{**base, "row_id": "1:1", "candidate_id": 1, "output": out(flag(), runner="fake")}])
+
+
+def test_the_frozen_review_dataset_is_run_bs_droid_outputs():
+    rows = [json.loads(line) for line in (EVALS / "dataset" / "stormdesk_review_heldout_v2.jsonl").read_text().splitlines()]
+    meta = json.loads((EVALS / "dataset" / "meta_review_heldout_v2.json").read_text())
+    assert meta["source_run_id"] == "51b74f56-d8d8-466b-a07c-3ddf8baa8064" and len(rows) == meta["rows"] == 20
+    assert meta["prompt_versions"] == [2] and meta["models"] == ["claude-sonnet-5-5"]
+    assert all(json.loads(r["v2_output"])["_run"]["runner"] == "droid" for r in rows)
+
+
+# Reviewer eval -----------------------------------------------------------------------------------
+
+import review_eval  # noqa: E402
+import run_review  # noqa: E402
+
+GOOD_SESSION = {"models_used": ["claude-sonnet-5-5"], "factory_credits": 30000, "configured_model": None}
+
+
+def reply(verdict="agree", status="succeeded", after_status="dismissed", disagree=False, **over):
+    base = {"runner": "droid", "fallback_from_droid": None, "model": "claude-sonnet-5-5", "prompt_version": 1,
+            "status": status, "citations_valid": status == "succeeded", "session_id": SID, "run_id": 9,
+            "usage": {"factory_credits": 30000.0}, "duration_s": 35.0,
+            "output": {"verdict": verdict, "reasons": ["r"], "evidence_ids": [], "suggested_kind": "cap_drain",
+                       "suggested_action": "freeze_cert"},
+            "after_review": {"status": after_status, "agents_disagree": disagree, "kind": "none",
+                             "proposed_action": "none"}}
+    return {**base, **over}
+
+
+def test_review_guard_lets_only_droid_on_the_model_with_reviewer_v1_through():
+    assert run_review.guard(reply(), "claude-sonnet-5-5", GOOD_SESSION) is None
+    assert "fake" in run_review.guard(reply(runner="fake"), "claude-sonnet-5-5", GOOD_SESSION)
+    assert "fell back" in run_review.guard(reply(fallback_from_droid="x"), "claude-sonnet-5-5", GOOD_SESSION)
+    assert "droid-core" in run_review.guard(reply(model="droid-core"), "claude-sonnet-5-5", GOOD_SESSION)
+    assert "prompt_version 2" in run_review.guard(reply(prompt_version=2), "claude-sonnet-5-5", GOOD_SESSION)
+    assert "session" in run_review.guard(reply(), "claude-sonnet-5-5", {"models_used": ["droid-core"]})
+    assert "session" in run_review.guard(reply(), "claude-sonnet-5-5", None)
+
+
+@pytest.fixture
+def review_env(tmp_path, monkeypatch):
+    """A fake seed server for /v1/stormdesk/review, a stack.json pointing at it, and a 3-row dataset."""
+    calls, state = [], {"replies": []}
+
+    class Server(BaseHTTPRequestHandler):
+        def do_POST(self):  # noqa: N802
+            body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            calls.append((self.path, self.headers["X-SC-Operator"], body["candidate_id"]))
+            data = json.dumps(state["replies"].pop(0) if state["replies"] else reply()).encode()
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def log_message(self, *args):
+            pass
+
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), Server)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    (tmp_path / "stack.json").write_text(json.dumps({"runner": "droid", "model": "claude-sonnet-5-5",
+                                                     "servers": {"1": f"http://127.0.0.1:{httpd.server_port}"}}))
+    rows = [{"row_id": f"1:{i}", "seed": 1, "candidate_id": i, "v2_output": out(flag(kind="none", proposed_action="none"),
+                                                                              runner="droid")} for i in (1, 2, 3)]
+    monkeypatch.setattr(run_review, "STATE", tmp_path)
+    monkeypatch.setattr(run_review, "dataset_rows", lambda name: (rows, {}))
+    monkeypatch.setattr(run_review.gateway, "find_session", lambda sid, root=None: GOOD_SESSION)
+    yield calls, state
+    httpd.shutdown()
+
+
+def args_for(**kw):
+    import argparse
+    return argparse.Namespace(**{"name": "t", "max_credits": 10**6, "limit": None, **kw})
+
+
+def test_review_sends_each_row_once_and_resumes_without_resending(review_env):
+    calls, _ = review_env
+    run_review.review(args_for(limit=1))
+    assert [c[2] for c in calls] == [1] and calls[0][:2] == ("/v1/stormdesk/review", "eval")
+    run_review.review(args_for())
+    run_review.review(args_for())  # nothing left: no call
+    assert [c[2] for c in calls] == [1, 2, 3]
+
+
+def test_a_row_sent_without_a_reply_is_never_sent_again(review_env):
+    calls, _ = review_env
+    run_review.record("t", {"event": "sent", "row_id": "1:1"})  # e.g. the driver died mid-review
+    with pytest.raises(SystemExit, match="never sent again"):
+        run_review.review(args_for())
+    assert calls == []
+
+
+def test_review_stops_at_the_first_rule_break_and_before_the_cap(review_env):
+    calls, state = review_env
+    state["replies"] = [reply(), reply(model="droid-core")]
+    with pytest.raises(SystemExit, match="broke the rules"):
+        run_review.review(args_for())
+    assert [c[2] for c in calls] == [1, 2]
+    with pytest.raises(SystemExit, match="broke the rules"):  # and it stays stopped
+        run_review.review(args_for())
+    assert len(calls) == 2
+
+
+def test_review_refuses_a_row_that_would_not_fit_the_cap(review_env):
+    calls, _ = review_env
+    run_review.review(args_for(limit=1, max_credits=70000))  # first row at the 65k estimate fits
+    with pytest.raises(SystemExit, match="stopping before 1:2"):  # 30000 + 1.25 x 30000 > 60000
+        run_review.review(args_for(max_credits=60000))
+    assert len(calls) == 1
+
+
+def test_review_summary_routes_rows_with_and_without_the_reviewer(monkeypatch):
+    monkeypatch.setattr(run_review.gateway, "find_session", lambda sid, root=None: GOOD_SESSION)
+    dismiss, freeze = flag(kind="none", proposed_action="none"), flag(kind="cap_drain", proposed_action="freeze_cert")
+    cases = [  # (label scenario, honest, label kind/action, v2 flag, reply)
+        ("stolen_phone", False, "cap_drain", "freeze_cert", dismiss,
+         reply(verdict="disagree", after_status="open", disagree=True)),  # a real case v2 missed, now seen
+        ("trap_stockup", True, "none", "none", dismiss, reply()),  # honest, left alone
+        ("trap_victim_shop", True, "none", "none", freeze,
+         reply(verdict="disagree", after_status="open", disagree=True,
+               after_review={"status": "open", "agents_disagree": True, "kind": "cap_drain",
+                             "proposed_action": "freeze_cert"})),  # v2's false flag, escalated
+    ]
+    v2_rows, rev_rows, replies = [], [], {}
+    for i, (scenario, honest, kind, action, f, rep) in enumerate(cases):
+        base = {"row_id": f"1:{i}", "seed": 1, "candidate_id": i, "subject_name": "S", "label_scenario": scenario,
+                "honest_subject": honest, "label_kind": kind, "label_action": action}
+        v2 = out(f, runner="droid")
+        v2_rows.append({**base, "output": review_eval.v2_alone(v2), "routing-correct_value": 1.0})
+        rev_rows.append({**base, "output": review_eval.v2_with_reviewer(v2, json.dumps(rep)), "routing-correct_value": 1.0})
+        replies[base["row_id"]] = rep
+    s = run_review.summarize(v2_rows, rev_rows, replies, model="claude-sonnet-5-5", chalk={}, dataset={}, now=0)
+    assert s["complete"] is True
+    assert s["v2_alone"]["real_reach_a_person"] == {"n": 0, "of": 1}
+    assert s["v2_with_reviewer"]["real_reach_a_person"] == {"n": 1, "of": 1}
+    assert s["v2_alone"]["honest_reach_a_person"] == {"n": 1, "of": 2}
+    assert s["v2_with_reviewer"]["honest_reach_a_person"] == {"n": 1, "of": 2}  # kind and action never change
+    r = s["reviewer"]
+    assert (r["escalated"], r["escalated_where_v2_was_wrong"], r["real_cases_v2_dismissed_now_seen"]) == (2, 2, 1)
+    assert r["honest_dismissals_reopened"] == 0 and r["suggestion_matches_label_when_escalated"] == 1
+    assert r["factory_credits"] == 90000.0 and r["guard_breaks"] == {}
