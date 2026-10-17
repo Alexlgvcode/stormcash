@@ -4,6 +4,10 @@ A candidate without a flag and a hard case without a case file are queued
 jobs (§13.3a). The worker polls for them, so nothing in settlement has to know
 about it and a restart loses nothing. A job that keeps failing stops after
 `MAX_ATTEMPTS` runs.
+
+Cases and candidates of the demo dry run's test identities (display names
+starting "Dry-run ", §21.6) are never queued, so a dry run never starts Droid
+(or writes a run). `POST /v1/stormdesk/run` still runs anything on request.
 """
 
 from __future__ import annotations
@@ -12,6 +16,7 @@ import asyncio
 import logging
 
 from ..db import all_rows
+from ..demo import DRY_RUN_PREFIX
 from .runner import Job
 from .service import StormDesk
 
@@ -23,21 +28,31 @@ BATCH = 20
 
 
 def pending_jobs(deps) -> list[Job]:
+    params = {"attempts": MAX_ATTEMPTS, "batch": BATCH, "dry": DRY_RUN_PREFIX}
     with deps.pool.connection() as conn:
         cases = all_rows(
             conn,
             """SELECT c.case_id FROM cases c WHERE c.case_file_md IS NULL
-               AND (SELECT count(*) FROM stormdesk_runs r WHERE r.case_id = c.case_id) < %s
-               ORDER BY c.case_id LIMIT %s""",
-            (MAX_ATTEMPTS, BATCH),
+               AND (SELECT count(*) FROM stormdesk_runs r WHERE r.case_id = c.case_id) < %(attempts)s
+               AND NOT EXISTS (SELECT 1 FROM residents d JOIN certificates ce ON ce.resident_id = d.resident_id
+                               WHERE starts_with(d.display_name, %(dry)s)
+                               AND (ce.cert_id = c.cert_id OR d.holder_pub = c.device_pub))
+               AND NOT EXISTS (SELECT 1 FROM merchants d WHERE starts_with(d.display_name, %(dry)s)
+                               AND (d.merchant_id = c.merchant_id OR d.merchant_pub = c.device_pub))
+               ORDER BY c.case_id LIMIT %(batch)s""",
+            params,
         )
         candidates = all_rows(
             conn,
             """SELECT k.candidate_id FROM candidates k
                WHERE NOT EXISTS (SELECT 1 FROM flags f WHERE f.candidate_id = k.candidate_id)
-               AND (SELECT count(*) FROM stormdesk_runs r WHERE r.candidate_id = k.candidate_id) < %s
-               ORDER BY k.candidate_id LIMIT %s""",
-            (MAX_ATTEMPTS, BATCH),
+               AND (SELECT count(*) FROM stormdesk_runs r WHERE r.candidate_id = k.candidate_id) < %(attempts)s
+               AND NOT EXISTS (SELECT 1 FROM residents d JOIN certificates ce ON ce.resident_id = d.resident_id
+                               WHERE starts_with(d.display_name, %(dry)s) AND encode(ce.cert_id, 'hex') = k.subject_id)
+               AND NOT EXISTS (SELECT 1 FROM merchants d WHERE starts_with(d.display_name, %(dry)s)
+                               AND encode(d.merchant_id, 'hex') = k.subject_id)
+               ORDER BY k.candidate_id LIMIT %(batch)s""",
+            params,
         )
     return [Job("investigate", case_id=r["case_id"]) for r in cases] + [
         Job("triage", candidate_id=r["candidate_id"]) for r in candidates]

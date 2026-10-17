@@ -48,6 +48,28 @@ uvicorn --factory stormcash.app:create_app --host 0.0.0.0 --port 8000
 
 Fallback switches in `.env` (spec §22.4): `NESSIE_DISABLED=1` keeps money ledger-only, `API_SIG_REQUIRED=0` accepts unsigned phone writes.
 
+## Demo dry run
+
+`stormcash/dryrun.py` (spec §21.6) is a pre-flight check for the judge demo. It plays the server side of the 2:30 script against a running server, about 15 s against the hosted database:
+
+```bash
+python -m stormcash.dryrun --base-url http://localhost:8000
+```
+
+It reads `server/.env` (or the environment):
+
+- `DATABASE_URL`, to check the schema and what the API stored. It writes nothing there itself; everything goes through the API.
+- `NESSIE_API_KEY`, to read Nessie directly and see what the bank recorded.
+- `SERVER_PUB_HEX`, the key the phones pin. Override it with `--server-pub`; without either, it uses `mobile/src/config.ts`.
+
+Its identities are "Dry-run Maya", "Dry-run Pharmacy" and "Dry-run Gas Station", with fresh keys each run. They register real Nessie accounts and act as the phones with the protocol library: requests and payments as QR payloads, C1–C6 as the merchant's phone runs them, judge mode's two rollbacks, sync sessions that carry items with their `path`, and the gas station's upload.
+
+- **No Factory credits.** StormDesk's worker never queues a case or candidate whose resident or shop name starts with `Dry-run `. Before writing anything, the dry run asks `GET /v1/demo/dry-run` and refuses a server that can't answer. Step 9 fails if any StormDesk run touches dry-run data.
+- **Cleanup.** It ends with `POST /v1/demo/reset`, which removes every dry-run identity first (`demo.clear_dry_run`: their certificates, payments, payouts, Nessie moves and call-log lines, cases, logs, ledger transactions). Register Maya's phone again afterwards, as after any reset. `--keep` skips the cleanup; the next reset removes what it left.
+- **C++ check.** Step 7 also runs `cpp/build/verify/stormcash-verify proof` when it's built (`--verify-bin` to point elsewhere) and says it skipped otherwise.
+
+Exit code 0 only when every step passed.
+
 ## Tests
 
 Protocol tests need nothing. DB tests create their own `stormcash_test` database on the Postgres at `TEST_DATABASE_URL` (default `postgresql://postgres:postgres@localhost:5432/postgres`, the CI service) and never touch `DATABASE_URL`. Without a reachable Postgres they are skipped locally (and fail in CI). Without Docker, `pip install pgserver` gives a local Postgres:

@@ -103,6 +103,21 @@ curl -X POST localhost:8000/v1/demo/seed-town -H 'X-SC-Operator: alex' -H 'conte
 curl -X POST localhost:8000/v1/demo/reset -H 'X-SC-Operator: alex'
 ```
 
+**Pre-flight before every judge (demo dry run).** Run it before each judging slot and after any merge, before a phone is touched. Three labelled test identities ("Dry-run Maya", "Dry-run Pharmacy", "Dry-run Gas Station") play the phones' side of the 2:30 script through the real API. They use the real protocol library and keys of their own, never the real Maya's. Each beat prints ✓ or ✗:
+
+- the server key matches `SERVER_PUB` and the schema is current
+- registration, and Storm Mode's $20 → $50 in Nessie
+- the $12 payment through C1–C6
+- both judge-mode rollbacks refused by C6
+- the gas station's 2-hop upload: settled in Nessie, case opened, cert frozen, new POLICY
+- the proof, and the town's Corner Store flag
+
+It takes about 15 s against the hosted database and ends with the demo reset, so register Maya's phone again afterwards. It never starts StormDesk: the worker skips dry-run identities, and the dry run refuses a server that can't confirm that. The exit code is 0 only when every step passed, and `--keep` skips the cleanup. Details in [`server/README.md`](server/README.md#demo-dry-run):
+
+```bash
+cd server && python -m stormcash.dryrun --base-url http://localhost:8000
+```
+
 **Fallback switches** (`server/.env`):
 
 | Switch | Effect |

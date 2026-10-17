@@ -19,6 +19,7 @@
 > **v4.15 (Oct 17):** a reviewer Droid (§14.7b): a second session tries to refute each triage Flag with the same read-only tools before a person sees it; a valid disagreement marks the flag "agents disagree" and keeps it open for a person, who still decides. `STORMDESK_REVIEW`, `POST /v1/stormdesk/review`, `flags.review` / `agents_disagree`, `stormdesk_runs.job = 'review'` (§6.3, §11.1, §12.1, §14.1, §22.4). Migration `005_stormdesk_review.sql`. Marked **[v4.15]**.
 > **v4.16 (Oct 17):** the reviewer Droid evaluated on held-out rows (§15.3, §14.7b): "v2 alone" vs "v2 + reviewer" as two Chalk Evaluations on run B's frozen outputs; a one-row-at-a-time driver that never sends a review twice. Marked **[v4.16]**.
 > **v4.17 (Oct 17):** live reconciliation of the ledger with Nessie's own records (§11.4a): `GET /v1/accounts/reconcile` and a "Reconciled with Capital One Nessie" panel on the Accounts tab (§12.1, §18.2). Balances and the check share one ≤ 10 s cache of each account's records. Marked **[v4.17]**.
+> **v4.18 (Oct 17):** a demo dry run (§21.6): `python -m stormcash.dryrun` plays the server side of the 2:30 script as three labelled test identities and prints ✓ or ✗ per beat, before every judge. StormDesk's worker skips dry-run identities and a demo reset removes them; `GET /v1/demo/dry-run` (§12.1, §14.7a). Marked **[v4.18]**.
 > **Builds on:** "StormCash: The 10/10 Build" v3 (Oct 16, Alexandre Lugovoi, on Brian Maina's Oct 11 draft). Everything new since v3 is marked **[v4]**.
 
 ---
@@ -1093,9 +1094,10 @@ All JSON. Byte fields base64url. Prefix `/v1`. Auth for demo: none on reads; res
 | `POST /v1/photon/resident-contact` **[v4.13]** | `{resident_id \| display_name, channel, handle}` | the resident and the saved handle. Operator header; `display_name` must match exactly one real (not simulated) resident, e.g. Maya | WS7 |
 | `GET /v1/photon/messages` **[v4.13]** | `?merchant_id=` or `?resident_id=` | `{messages}`: one shop's or resident's Photon thread, oldest first | WS7 |
 | `GET /v1/photon/freezes` **[v4.13]** | `?cert_id&limit` | certs whose owner texted FREEZE: `[{cert_id, status, frozen_at, owner_freeze_at, resident_id, display_name, policy_ver}]`, `policy_ver` = the first POLICY listing the cert | WS7 |
-| `POST /v1/demo/reset` | | clears real-device demo data, reissues Maya's cert, keeps the simulated town | WS2 |
+| `POST /v1/demo/reset` | | clears real-device demo data, reissues Maya's cert, keeps the simulated town. **[v4.18]** Removes the dry run's identities first (§21.6) and returns `dry_run_removed` | WS2 |
 |  |  | **[v4.3]** Operator header. Deletes what touches a real resident or shop (payments, tags, cases, candidates, logs, contacts, uploads, payouts, whole ledger transactions, queued moves), opens fresh Nessie accounts under the same customers (checking $500, escrow $0, shops $0; Nessie balances can't be edited), reissues each real resident a new cert (new `cert_id`, $20 locked), restores the shops' pool eligibility and publishes a POLICY without the old certs. The phone gets its new cert by registering again. Optional `{storm_cap_cents: 5000}` pre-stages Storm Mode. Measured live: under 1 s. |  |
 | `POST /v1/demo/seed-town` | `{seed}` | runs the simulator into the DB (§16) | WS4 |
+| `GET /v1/demo/dry-run` **[v4.18]** | | `{prefix, stormdesk_skips_dry_run, stormdesk_worker, stormdesk_runner, stormdesk_review}`: what the dry run checks before it writes anything (§21.6) | WS2 |
 | `GET /v1/stream` | | SSE | WS2 |
 
 ### 12.2 `POST /v1/sync` example
@@ -1352,7 +1354,7 @@ Reject = flag `rejected`, nothing executes. Every approval writes an `approvals`
 - **Runners.** `STORMDESK_RUNNER=droid|fake|auto` (auto = Droid only when the SDK, the `droid` CLI and `FACTORY_API_KEY` are present). `DroidRunner` uses `droid-sdk` 0.5.0: our tools are an in-process MCP server named `stormdesk`, `SessionConfig(system_prompt, mcp_servers, disabled_tools, disable_builtin_skills=True)`, `Session.stream(prompt, output=Model)`, `ToolCall`/`ToolResult` events become steps, and a failed structured output is retried once. The permission handler allows only `McpToolAction`s from the `stormdesk` server naming one of our 11 tools and cancels everything else. The `disabled_tools` list is every built-in tool id (verified with `list_tools()`, §14.2). If Droid can't run at all, the fake runner answers the job and the run records `fallback_from_droid` (§14.2). `FakeRunner` calls the same tools and applies the rules-only baseline (every candidate gets its default action; case files from `verify_tags` + `get_cert_chain`). Its triage also calls `query_features` with `as_of` = the candidate's `window_end` and says in the reasoning whether Chalk or the Postgres fallback answered; it reports those values but doesn't weigh them. Its summaries start with "Fake runner", its session ids with `fake-`, and every run records its runner, so a fake result is never shown as an agent's judgement (§0 rule 3).
 - **Storage.** Every run is a `stormdesk_runs` row (§11.1) with its transcript. Triage writes one `flags` row per candidate (`dismissed` for kind `none`, `invalid` on a citation miss or no output). A re-run updates it unless an operator already approved or rejected it. An investigation writes `cases.case_file_md` only when its citations hold.
 - **Citations** (§14.7) accept tag/payment hashes, device-log entry hashes, contact ids, cert ids, merchant ids (hex, optional `kind:` prefix) and weather alert ids. A flag of a real kind must cite at least one; a dismissal may cite none.
-- **Worker.** Polls every 5 s for candidates without a flag and cases without a case file (at most 2 runs each), up to 4 at a time (the same limit covers `POST /v1/stormdesk/run`). `STORMDESK_AUTO=0` turns it off.
+- **Worker.** Polls every 5 s for candidates without a flag and cases without a case file (at most 2 runs each), up to 4 at a time (the same limit covers `POST /v1/stormdesk/run`). `STORMDESK_AUTO=0` turns it off. **[v4.18]** It never queues a case or candidate of the demo dry run's identities (display names starting `Dry-run `, §21.6), so a dry run never starts Droid or writes a run.
 - **SSE `stormdesk_step`:** `{run_id, job, subject, runner, index, tool, input_summary, ok}` per tool call, then `{run_id, done, status}`. A `flag` event follows triage.
 - `query_features` asks Chalk (§15.2) **[v4.6]**; the Postgres fallback (§22.4: the detectors' frozen features) answers when Chalk is off or fails.
 - Checked on the seeded town with the fake runner: all 22 hard cases and 12 candidates give valid outputs with verified citations.
@@ -1866,6 +1868,16 @@ If judging slots are < 3 min, drop the Town beat from the core and show StormDes
 3. Nessie down → queued payouts visible, ledger moving.
 4. Everything broken → 2-minute recorded video on Mac 2.
 
+### 21.6 Demo dry run (pre-flight) [v4.18]
+
+`cd server && python -m stormcash.dryrun --base-url http://localhost:8000`, before every judging slot and after any merge. It plays the server side of §21.2 headlessly, about 15 s against the hosted database, and prints ✓ or ✗ with a one-line reason and the time for each step. Exit code 0 only when every step passed.
+
+- **Identities.** "Dry-run Maya", "Dry-run Pharmacy" and "Dry-run Gas Station", each with a fresh key, registered through the API (real Nessie accounts). It never signs as the real Maya: her key is on her phone. It acts as the phones with the real protocol library (`stormcash/dryrun.py`): QR payloads through the transport codec, C1–C6 run locally as the merchant's phone does, judge mode's rollback as `mobile/src/store/wallet.ts` does it, sync sessions that carry items with their `path` and write CONTACT entries.
+- **Steps.** (1) server up, the database has every table, column and CHECK value of `schema.sql`, the server key equals `SERVER_PUB` (`--server-pub`, else `SERVER_PUB_HEX` in `server/.env`, else `mobile/src/config.ts`; a stale app constant is a note), and the server says StormDesk skips dry-run data; (2) register: CERT and MCERTs under `SERVER_PUB`, Nessie checking $480, escrow $20, shops $0; (3) Storm Mode: escrow $20 → $50 in Nessie (computed from its transactions), cert version up; (4) $12 at the pharmacy passes C1–C6; (5) "Reuse the money" → C6 SAME_COUNTER, "Be clever" → C6 BROKEN_LINK (and TOTAL_BACKWARDS) at the gas station, which holds the pharmacy's tag via Maya; (6) the gas station's `/v1/sync` carries the pharmacy's PAY 2 hops: it settles from escrow as a Nessie withdrawal + deposit pair (read from Nessie directly), the case opens (found offline), the cert is frozen and a new POLICY lists it, the relay path names the three phones; (7) `/v1/proof/{case_id}` verifies in Python against the pinned key, and with `cpp/build/verify/stormcash-verify proof` when it's built; (8) the seeded town has a Droid flag on the Corner Store, with the reviewer's verdict; (9) cleanup.
+- **No Factory credits.** The only automatic StormDesk trigger is the worker (triage chains the review); it skips dry-run identities. The dry run refuses a server without `GET /v1/demo/dry-run` (it can't say so) before writing anything, and fails step 9 if any StormDesk run touches dry-run data.
+- **Cleanup.** `POST /v1/demo/reset`, which first removes every dry-run identity and everything that touches it, including the Nessie call-log lines (`demo.clear_dry_run`), so the table ends exactly as a reset leaves it: register Maya's phone again afterwards. The simulated town is never written. The dry-run Nessie customers stay in the sandbox, unreferenced. `--keep` skips the cleanup for debugging; the next reset removes what it left.
+- **Not covered:** the phones, Multipeer, the dashboard's rendering and Photon. The phones are tested separately on the real hardware.
+
 ---
 
 ## 22. Build plan, cut order, checklists
@@ -1940,6 +1952,7 @@ If judging slots are < 3 min, drop the Town beat from the core and show StormDes
 - [ ] `seed-town 42` loaded; planted StormDesk runs replayable
 - [ ] Final Chalk eval run rendered on the Evals tab
 - [ ] Demo reset < 30 s, tested 3 times
+- [ ] **[v4.18]** `python -m stormcash.dryrun` all ✓ before each judging slot (§21.6)
 - [ ] 2-minute backup video recorded
 - [ ] README: pitch, setup, honest limits, "Where Droid runs", "How we use Chalk", "How we use Nessie", "How we use Photon"
 - [ ] Devpost skeleton + architecture image
