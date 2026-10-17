@@ -126,7 +126,7 @@ def save_results(evaluation, run, droid_audit: dict | None = None) -> Path:
     rows = named_scores(chalkcompute.DatasetClient().read(run.result_dataset).to_pylist(), evaluation)
     rows.sort(key=lambda r: (r["seed"], r["candidate_id"]))
     meta = json.loads((EVALS / "dataset" / meta_file).read_text())
-    seeds = evaluation.metadata.get("seeds") or [m["seed"] for m in meta["seeds"]]
+    seeds = [int(x) for x in evaluation.metadata.get("seeds") or [m["seed"] for m in meta["seeds"]]]  # JSON floats
     scenarios: dict[str, int] = {}
     for r in rows:
         scenarios[r["label_scenario"]] = scenarios.get(r["label_scenario"], 0) + 1

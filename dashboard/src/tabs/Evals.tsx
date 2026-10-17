@@ -12,6 +12,7 @@ import {
   type Cell,
   type EvalRow,
   type EvalRun,
+  type EvalSection,
   type EvalsResponse,
 } from "../evals";
 import { dollars } from "../format";
@@ -211,6 +212,29 @@ function Traps({ rules, desk }: { rules: EvalRun | null; desk: EvalRun | null })
   );
 }
 
+function HeldOut({ section }: { section: EvalSection }) {
+  const { rules_only: rules, stormdesk: desk } = section.columns;
+  const shown = desk ?? rules;
+  if (!shown) return null;
+  return (
+    <section className="space-y-4 rounded-2xl border border-amber-700/60 bg-slate-900/40 p-5">
+      <div>
+        <h3 className="text-2xl font-semibold text-amber-200">Held-out seeds {shown.dataset.seeds.join(", ")}</h3>
+        <p className="mt-1 text-lg text-slate-300">
+          Chosen before the run and never seen while the prompt was written. {shown.dataset.rows} rows, scored apart
+          from the comparison above.
+        </p>
+      </div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <RunCard title="Rules-only baseline" run={rules} empty="No rules-only run on these rows yet." />
+        <RunCard title="StormDesk (Droid)" run={desk} empty="No StormDesk run on the held-out seeds yet." />
+      </div>
+      <Comparison rules={rules} desk={desk} />
+      <Scenarios rules={rules} desk={desk} />
+    </section>
+  );
+}
+
 export function EvalsTab() {
   const [data, setData] = useState<EvalsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -274,11 +298,13 @@ export function EvalsTab() {
         </>
       )}
 
-      {data.other_runs.length > 0 && (
+      {data.heldout && <HeldOut section={data.heldout} />}
+
+      {[...data.other_runs, ...(data.heldout?.other_runs ?? [])].length > 0 && (
         <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
           <h3 className="text-xl font-semibold text-slate-200">Other saved runs (not shown as scores)</h3>
           <ul className="mt-2 space-y-2 text-base text-slate-300">
-            {data.other_runs.map((r) => (
+            {[...data.other_runs, ...(data.heldout?.other_runs ?? [])].map((r) => (
               <li key={r.file}>
                 {r.timestamp ? when(r.timestamp) : r.file} · {r.reason}
                 {r.mode ? ` (${MODE_LABEL[r.mode] ?? r.mode})` : ""} ·{" "}

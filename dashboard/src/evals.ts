@@ -102,9 +102,14 @@ export interface RunSummary {
   reason: string;
 }
 
-export interface EvalsResponse {
+export interface EvalSection {
   columns: { rules_only: EvalRun | null; stormdesk: EvalRun | null };
   other_runs: RunSummary[];
+}
+
+export interface EvalsResponse extends EvalSection {
+  /** Held-out seeds (chosen before the run, never used to write a prompt): a section of their own. */
+  heldout?: EvalSection;
   errors: { file: string; error: string }[];
   runs_found: number;
 }

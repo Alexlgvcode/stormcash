@@ -510,3 +510,15 @@ def test_heldout_results_name_their_own_eval():
                           chalk={}, dataset={}, mode="chalk_task", git_sha=None, now=0,
                           eval_name="stormdesk-triage-heldout")
     assert s["eval"] == "stormdesk-triage-heldout"
+
+
+def test_breaker_trips_on_another_prompt_version(tmp_path, fake_server):
+    server_url, _, state = fake_server
+    write_session(tmp_path / "-eval", SID, ["m"], 10)
+    state["run"] = {**RUN, "runner": "droid", "flag": {"agent_session_id": SID}, "prompt_version": 1}
+    jobs = gateway.Jobs({42: server_url}, "m", require_model="m", max_credits=10**6,
+                        sessions_dir=str(tmp_path / "-eval"), sessions_root=str(tmp_path), require_prompt_version=2)
+    run_one(jobs)
+    assert "a row ran prompt_version 1, not 2" in jobs.tripped
+    with pytest.raises(gateway.Refused):
+        jobs.start(42, 6)
