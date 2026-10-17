@@ -137,6 +137,100 @@ def test_runner_selection(deps):
     assert isinstance(make_runner(deps2), DroidRunner)
 
 
+def test_builtin_tools_are_the_verified_droid_list():
+    # From Session.list_tools() against droid CLI 0.244.0 (§14.2); every one is switched off.
+    assert {"Execute", "ApplyPatch", "FetchUrl", "WebSearch", "Script", "Task", "GenerateDroid"} <= runner.BUILTIN_TOOLS
+    assert len(runner.BUILTIN_TOOLS) == 34
+
+
+def test_droid_out_of_credits_is_unavailable_not_retried(deps, double_spend, monkeypatch):
+    from datetime import timedelta
+
+    import droid_sdk
+    from droid_sdk import ErrorEvent, ErrorType, RunFailure
+
+    opened = []
+
+    class Stream:
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self):
+            raise StopAsyncIteration
+
+        result = RunFailure(
+            subtype="error_during_execution", text="", messages=(), usage=None, duration=timedelta(0), turn_count=0,
+            session_id="droid-1", error=ErrorEvent("Agent turn ended: model_usage_exhausted", ErrorType.ERROR))
+
+    class Session:
+        def __init__(self, **kw):
+            opened.append(kw)
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+        def stream(self, prompt, output, timeout):
+            return Stream()
+
+    monkeypatch.setattr(droid_sdk, "Session", Session)
+    outcome = asyncio.run(runner.DroidRunner(deps).run(
+        Job("triage", candidate_id=double_spend["candidate_id"]), "prompt", Steps()))
+    assert outcome.unavailable and outcome.output is None and outcome.session_id == "droid-1"
+    assert outcome.error == "error_during_execution: Agent turn ended: model_usage_exhausted"
+    assert len(opened) == 1  # no point retrying a run that couldn't start
+
+
+class DownDroid:
+    """Stands in for DroidRunner when Factory says the account is out of credits."""
+
+    name = "droid"
+
+    def __init__(self, deps=None) -> None:
+        self.calls = 0
+
+    async def run(self, job, prompt, steps):
+        self.calls += 1
+        return RunOutcome("droid", None, "droid-1", "error_during_execution: Agent turn ended: model_usage_exhausted",
+                          unavailable=True)
+
+
+def test_unavailable_droid_falls_back_to_the_labelled_fake_runner(deps, double_spend, monkeypatch):
+    from stormcash.stormdesk import service
+
+    down = DownDroid()
+    monkeypatch.setattr(service, "make_runner", lambda deps: down)
+    desk = StormDesk(deps)
+    out = run(desk, Job("triage", candidate_id=double_spend["candidate_id"]))
+    assert (out["runner"], out["status"]) == ("fake", "succeeded")  # a usable, labelled flag, not an invalid one
+    assert out["flag"]["summary"].startswith("Fake runner:") and out["flag"]["status"] == "open"
+    assert "model_usage_exhausted" in out["fallback_from_droid"]
+    with deps.pool.connection() as conn:
+        row = one(conn, "SELECT * FROM stormdesk_runs")
+    assert row["runner"] == "fake" and "model_usage_exhausted" in row["transcript"]["fallback_from_droid"]
+    assert row["transcript"]["steps"][0]["tool"] == "get_candidate"
+    # During the cool-down Droid isn't tried again; afterwards it is.
+    run(desk, Job("investigate", case_id=double_spend["case_id"]))
+    assert down.calls == 1
+    desk.droid_down_until = 0
+    run(desk, Job("investigate", case_id=double_spend["case_id"]))
+    assert down.calls == 2
+
+
+def test_droid_that_raises_falls_back_too(deps, double_spend):
+    class Crashing:
+        name = "droid"
+
+        async def run(self, job, prompt, steps):
+            raise FileNotFoundError("droid")
+
+    out = run(StormDesk(deps), Job("investigate", case_id=double_spend["case_id"]), Crashing())
+    assert (out["runner"], out["status"]) == ("fake", "succeeded")
+    assert out["fallback_from_droid"] == "FileNotFoundError: droid"
+
+
 # Running jobs ------------------------------------------------------------------------------------
 
 

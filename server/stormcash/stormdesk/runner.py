@@ -10,7 +10,9 @@
   an agent's judgement (§0 rule 3).
 
 STORMDESK_RUNNER=droid|fake|auto picks one; auto uses Droid only when the SDK,
-the `droid` CLI and FACTORY_API_KEY are all present.
+the `droid` CLI and FACTORY_API_KEY are all present (`droid` also works with a
+logged-in CLI and no key). When Droid can't run at all (e.g. no credits),
+service.py answers with the fake runner, skips Droid for a cool-down, and records why.
 """
 
 from __future__ import annotations
@@ -35,11 +37,15 @@ log = logging.getLogger(__name__)
 
 MCP_SERVER_NAME = "stormdesk"
 RUN_TIMEOUT_S = 180
-# Droid's built-in tools to switch off. VERIFY with session.list_tools(include_schemas=True)
-# once Factory access works (§14.2); the permission handler refuses them regardless.
+# Every built-in Droid tool, switched off: StormDesk may only use its own read-only tools.
+# Verified on Oct 16 with Session.list_tools() against droid CLI 0.244.0 (§14.2);
+# the permission handler refuses them regardless.
 BUILTIN_TOOLS = frozenset({
-    "Execute", "Edit", "Create", "ApplyPatch", "MultiEdit", "Read", "LS", "Grep", "Glob", "FetchUrl",
-    "WebSearch", "TodoWrite", "Task", "AskUser", "ExitSpecMode",
+    "ApplyPatch", "AskUser", "ConnectApp", "CreateAutomation", "DeleteAutomation", "DismissHandoffItems",
+    "EditAutomation", "EndFeatureRun", "Execute", "ExitSpecMode", "FetchUrl", "GenerateDroid", "GenerateImage",
+    "Glob", "Grep", "LS", "ListAutomationTemplates", "ListAutomations", "Loop", "ProposeMission", "Read",
+    "ReadAutomation", "RunAutomation", "Script", "Skill", "StageSettingsChanges", "StartMissionRun", "Task",
+    "TaskOutput", "TaskStop", "TodoWrite", "ToolSearch", "WaitForScript", "WebSearch",
 })
 DEFAULT_ACTIONS = {"merchant_silence": "hold_pool_payout", "cap_drain": "freeze_cert", "region_dark": "dispatch_relay"}
 
@@ -63,6 +69,7 @@ class RunOutcome:
     output: BaseModel | None
     session_id: str | None = None
     error: str | None = None
+    unavailable: bool = False  # the runner couldn't run at all (no credits, no CLI): try another
 
 
 @dataclass
@@ -272,8 +279,12 @@ class DroidRunner:
                                       session_id)
                 except ValidationError as exc:
                     error = f"output did not match {job.output_model.__name__}: {exc.error_count()} errors"
+            elif result.subtype == "error_during_execution":
+                # The agent couldn't run (e.g. "model_usage_exhausted"): retrying won't help.
+                message = getattr(result.error, "message", None) or result.text or "no output"
+                return RunOutcome(self.name, None, session_id, f"error_during_execution: {message}", unavailable=True)
             else:
-                error = f"{result.subtype}: {result.structured_output_error or result.error or 'no output'}"
+                error = f"{result.subtype}: {result.structured_output_error or 'no output'}"
             log.warning("StormDesk attempt %s failed: %s", attempt, error)
         return RunOutcome(self.name, None, session_id, error)
 

@@ -1170,14 +1170,15 @@ def deny_everything_else(req: PermissionRequest) -> PermissionResponse:
 config = SessionConfig(
     system_prompt=STORMDESK_PROMPT,          # §14.4
     mcp_servers=[server],
-    disabled_tools={"Execute", "Edit", "Create", ...},   # VERIFY tool ids with session.list_tools()
+    disabled_tools=BUILTIN_TOOLS,            # every built-in tool id from session.list_tools() (droid 0.244.0)
     disable_builtin_skills=True,
 )
 ```
 
 - Use `run(prompt, output=Flag)` (or `Session.stream`) with **structured output** (Pydantic). Missing or invalid output = `RunFailure` with `error_structured_output`: retry once, then store the flag as `invalid`.
 - Stream messages; for each `ToolCall` / `ToolResult`, emit SSE `stormdesk_step` and append to `agent_transcript`.
-- **VERIFY in hour 1:** the exact built-in tool ids to disable (`list_tools(include_schemas=True)`), the MCP tool id format, and that structured output works with your `droid` version.
+- **Verified Oct 16** with droid CLI 0.244.0: the built-in tool ids to disable (`list_tools()`; the full list is `runner.BUILTIN_TOOLS`) and the MCP tool id format (`mcp__stormdesk__<tool>`). Structured output is still to be seen working on a live run.
+- **Droid can't run** (`RunFailure` `error_during_execution`, e.g. "model_usage_exhausted" when the account is out of credits, or the CLI/process fails): not retried. The job is answered by the labelled fake runner instead, the run records `fallback_from_droid` with the reason, and Droid is skipped for 5 minutes before it is tried again.
 - Model: let Droid pick (`model="auto"`) unless a Claude model is selectable; prefer Claude.
 
 ### 14.3 Tools (all read-only, in-process MCP)
@@ -1279,7 +1280,7 @@ Reject = flag `rejected`, nothing executes. Every approval writes an `approvals`
 ### 14.7a As built [v4.3]
 
 - `server/stormcash/stormdesk/`: `tools.py` (the 11 tools, plain SQL reads in a `READ ONLY` transaction, ids returned as hex so they can be cited), `runner.py`, `service.py`, `worker.py`, `schemas.py`, `prompt.py`, `citations.py`.
-- **Runners.** `STORMDESK_RUNNER=droid|fake|auto` (auto = Droid only when the SDK, the `droid` CLI and `FACTORY_API_KEY` are present). `DroidRunner` uses `droid-sdk` 0.5.0: our tools are an in-process MCP server named `stormdesk`, `SessionConfig(system_prompt, mcp_servers, disabled_tools, disable_builtin_skills=True)`, `Session.stream(prompt, output=Model)`, `ToolCall`/`ToolResult` events become steps, and a failed structured output is retried once. The permission handler allows only `McpToolAction`s from the `stormdesk` server naming one of our 11 tools and cancels everything else. The `disabled_tools` list is still **unverified** (needs `list_tools()` with Factory access). `FakeRunner` calls the same tools and applies the rules-only baseline (every candidate gets its default action; case files from `verify_tags` + `get_cert_chain`). Its summaries start with "Fake runner", its session ids with `fake-`, and every run records its runner, so a fake result is never shown as an agent's judgement (§0 rule 3).
+- **Runners.** `STORMDESK_RUNNER=droid|fake|auto` (auto = Droid only when the SDK, the `droid` CLI and `FACTORY_API_KEY` are present). `DroidRunner` uses `droid-sdk` 0.5.0: our tools are an in-process MCP server named `stormdesk`, `SessionConfig(system_prompt, mcp_servers, disabled_tools, disable_builtin_skills=True)`, `Session.stream(prompt, output=Model)`, `ToolCall`/`ToolResult` events become steps, and a failed structured output is retried once. The permission handler allows only `McpToolAction`s from the `stormdesk` server naming one of our 11 tools and cancels everything else. The `disabled_tools` list is every built-in tool id (verified with `list_tools()`, §14.2). If Droid can't run at all, the fake runner answers the job and the run records `fallback_from_droid` (§14.2). `FakeRunner` calls the same tools and applies the rules-only baseline (every candidate gets its default action; case files from `verify_tags` + `get_cert_chain`). Its summaries start with "Fake runner", its session ids with `fake-`, and every run records its runner, so a fake result is never shown as an agent's judgement (§0 rule 3).
 - **Storage.** Every run is a `stormdesk_runs` row (§11.1) with its transcript. Triage writes one `flags` row per candidate (`dismissed` for kind `none`, `invalid` on a citation miss or no output). A re-run updates it unless an operator already approved or rejected it. An investigation writes `cases.case_file_md` only when its citations hold.
 - **Citations** (§14.7) accept tag/payment hashes, device-log entry hashes, contact ids, cert ids, merchant ids (hex, optional `kind:` prefix) and weather alert ids. A flag of a real kind must cite at least one; a dismissal may cite none.
 - **Worker.** Polls every 5 s for candidates without a flag and cases without a case file (at most 2 runs each), up to 4 at a time (the same limit covers `POST /v1/stormdesk/run`). `STORMDESK_AUTO=0` turns it off.
