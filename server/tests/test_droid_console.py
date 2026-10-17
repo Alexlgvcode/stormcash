@@ -114,6 +114,21 @@ def test_guardrails_list_the_runs_where_they_fired():
     assert (g["permission_denial"]["count"], g["permission_denial"]["recorded_runs"]) == (1, 2)
 
 
+def test_a_fallback_reports_what_its_droid_attempt_recorded():
+    """The reviewer session's runner stores a fallback's Droid attempt under fallback_attempts / _permission_denials."""
+    fallback = row(15, runner="fake", fallback_from_droid="error_during_execution: model_usage_exhausted",
+                   fallback_attempts=[{"attempt": 1, "ok": False, "error": "error_during_execution"}],
+                   fallback_permission_denials=[{"tool": "Execute", "server": None, "reason": "read-only"}])
+    out = console([row(1), fallback])
+    run = next(r for r in out["runs"] if r["run_id"] == 15)
+    assert (run["outcome"], run["structured_output_retries"], run["permission_denials"]) == ("fallback", 0, 1)
+    g = {x["key"]: x for x in out["guardrails"]}
+    assert (g["permission_denial"]["count"], g["permission_denial"]["recorded_runs"]) == (1, 1)
+    assert g["permission_denial"]["events"][0]["run_id"] == 15
+    plain_fake = next(r for r in console([row(5, runner="fake", attempts=[{"attempt": 1, "ok": True}])])["runs"])
+    assert plain_fake["structured_output_retries"] is None  # no Droid session, nothing to report
+
+
 def test_unrecorded_guardrails_are_null_never_zero():
     old = [row(1), row(2, status="invalid", missing_citations=["x"])]
     g = {x["key"]: x for x in console(old)["guardrails"]}

@@ -90,11 +90,19 @@ def _credits(usage) -> float | None:
     return usage.get("factory_credits") if isinstance(usage, dict) else None
 
 
+def _droid_key(row: dict, key: str) -> str | None:
+    """Where a run stores what its Droid session recorded: under `fallback_<key>` when the fake runner answered."""
+    if row["runner"] == "droid":
+        return key
+    return f"fallback_{key}" if (row.get("meta") or {}).get("fallback_from_droid") else None
+
+
 def structured_output_retries(row: dict, result: str) -> int | None:
     """How many times the structured output was retried; None when the run didn't record it."""
-    if row["runner"] != "droid":
+    key = _droid_key(row, "attempts")
+    if key is None:
         return None
-    attempts = (row.get("meta") or {}).get("attempts")
+    attempts = (row.get("meta") or {}).get(key)
     if isinstance(attempts, list):
         return max(len(attempts) - 1, 0)
     if result == "structured_output_failed":
@@ -103,7 +111,8 @@ def structured_output_retries(row: dict, result: str) -> int | None:
 
 
 def permission_denials(row: dict) -> list | None:
-    denials = (row.get("meta") or {}).get("permission_denials")
+    key = _droid_key(row, "permission_denials")
+    denials = (row.get("meta") or {}).get(key) if key else None
     return denials if isinstance(denials, list) else None
 
 
@@ -216,9 +225,10 @@ def _event(run: dict, detail: str | None = None) -> dict:
 
 def guardrails(runs: list[dict]) -> list[dict]:
     droid = [r for r in runs if r["runner"] == "droid"]
-    recorded_retries = [r for r in droid if r["structured_output_retries"] is not None
+    sessions = [r for r in runs if r["runner"] == "droid" or r["outcome"] == "fallback"]  # every Droid session
+    recorded_retries = [r for r in sessions if r["structured_output_retries"] is not None
                         and r["outcome"] != "structured_output_failed"]
-    recorded_denials = [r for r in droid if r["permission_denials"] is not None]
+    recorded_denials = [r for r in sessions if r["permission_denials"] is not None]
 
     def counted(events: list[dict], recorded: int | None = None) -> dict:
         return {"count": len(events), "events": events, "recorded_runs": recorded}
