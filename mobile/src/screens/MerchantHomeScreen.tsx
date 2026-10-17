@@ -1,55 +1,65 @@
-// Merchant home: shop name, today's tally from the device log, Charge.
-import { StyleSheet, Text } from 'react-native';
+// Merchant home: the shop as the hero over the radar, today's tally, Charge.
+import { useEffect, useReducer } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
 import { Header } from '../components/Header';
-import { Big, Button, Card, colors, Field, Label, Muted, Pill, Row, Screen } from '../components/ui';
+import { Button, Cell, colors, font, Group, Screen, Status } from '../components/ui';
 import { useNav } from '../nav';
 import { logCounts } from '../store/devicelog';
 import { countsByKind } from '../store/items';
 import { merchantCert } from '../store/merchant';
+import { syncManager } from '../sync/manager';
 
 export function MerchantHomeScreen() {
   const nav = useNav();
+  const [, rerender] = useReducer((x: number) => x + 1, 0);
+  useEffect(() => syncManager.subscribe(rerender), []);
   const mc = merchantCert();
   if (!mc) return null;
   const carrying = Object.values(countsByKind()).reduce((a, b) => a + (b ?? 0), 0);
   const { accepted, refused, contacts } = logCounts();
+  const region = mc.region_id.replace(/-/g, ' ');
+
   return (
     <Screen>
       <Header />
-      <Card tone="navy" style={{ gap: 12 }}>
-        <Row style={{ justifyContent: 'space-between' }}>
-          <Label color="#9DB4FF">Shop · {mc.region_id.replace(/-/g, ' ')}</Label>
-          <Pill text="Verified by StormCash" tone="green" dot />
-        </Row>
-        <Big color="#fff">{mc.display_name}</Big>
-        <Muted color="#C7D2FE">Takes StormCash payments with no internet. Every payment is checked on this phone.</Muted>
-      </Card>
+      <View style={styles.sheet}>
+        <Text style={styles.heroLabel}>Takes StormCash with no internet in {region.replace(/\b\w/g, (c) => c.toUpperCase())}</Text>
+        <Text style={styles.heroName} adjustsFontSizeToFit numberOfLines={2}>{mc.display_name}</Text>
+        <Status text="Registered with StormCash" tone="green" />
+      </View>
+
+      <View style={styles.strip} accessible accessibilityLabel={`${accepted} accepted, ${refused} refused, ${contacts} phones met`}>
+        <Stat value={accepted} label="accepted" />
+        <Stat value={refused} label="refused" alert={refused > 0} />
+        <Stat value={contacts} label="phones met" />
+      </View>
 
       <Button title="Charge a customer" subtitle="Enter an amount, show your code" big onPress={() => nav.go({ name: 'charge' })} />
 
-      <Row style={{ flexWrap: 'nowrap' }}>
-        <Stat label="Accepted" value={accepted} />
-        <Stat label="Refused" value={refused} tone={refused ? 'red' : undefined} />
-        <Stat label="Met" value={contacts} />
-      </Row>
-
-      <Card>
-        <Field label="Records carried" value={String(carrying)} last />
-        <Button title="Records & sync" kind="ghost" onPress={() => nav.go({ name: 'records' })} />
-      </Card>
+      <Group>
+        <Cell title="Records to deliver" detail="Phones pass them on until one is online" value={String(carrying)} onPress={() => nav.go({ name: 'records' })} />
+      </Group>
     </Screen>
   );
 }
 
-function Stat({ label, value, tone }: { label: string; value: number; tone?: 'red' }) {
+function Stat({ value, label, alert }: { value: number; label: string; alert?: boolean }) {
   return (
-    <Card style={{ flex: 1, gap: 2, padding: 16, alignItems: 'center' }}>
-      <Text style={[styles.stat, tone === 'red' && value > 0 && { color: colors.red }]}>{value}</Text>
-      <Label>{label}</Label>
-    </Card>
+    <View style={{ flex: 1 }}>
+      <Text style={[styles.statValue, alert && { color: colors.red }]}>{value}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  stat: { fontSize: 36, fontWeight: '800', color: colors.ink, fontVariant: ['tabular-nums'] },
+  sheet: {
+    backgroundColor: colors.sheet, borderRadius: 8, padding: 20, gap: 10,
+    borderBottomWidth: 4, borderBottomColor: colors.sheetEdge,
+  },
+  heroLabel: { fontFamily: font.regular, fontSize: 17, lineHeight: 23, color: colors.ink },
+  heroName: { fontFamily: font.display, fontSize: 88, lineHeight: 84, color: colors.carbon },
+  strip: { flexDirection: 'row', paddingVertical: 4 },
+  statValue: { fontFamily: font.display, fontSize: 48, lineHeight: 48, color: colors.carbon, fontVariant: ['tabular-nums'] },
+  statLabel: { fontFamily: font.medium, fontSize: 15, color: colors.muted },
 });

@@ -43,6 +43,15 @@ CREATE TABLE IF NOT EXISTS wallet_history (
   tag_hash TEXT NOT NULL
 );
 
+-- Stubs of payments this wallet signed (display only; the signed tags live in items/history).
+CREATE TABLE IF NOT EXISTS receipts (
+  tag_hash TEXT PRIMARY KEY,
+  counter INTEGER NOT NULL,
+  shop TEXT NOT NULL,
+  amount_cents INTEGER NOT NULL,
+  ts INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS items (
   item_id TEXT PRIMARY KEY,
   id8 TEXT NOT NULL,
@@ -98,7 +107,7 @@ export function getDb(): SQLiteDatabase {
 export function resetDb(): void {
   const d = getDb();
   d.execSync(`
-    DELETE FROM settings; DELETE FROM wallet; DELETE FROM wallet_state; DELETE FROM wallet_history;
+    DELETE FROM settings; DELETE FROM wallet; DELETE FROM wallet_state; DELETE FROM wallet_history; DELETE FROM receipts;
     DELETE FROM items; DELETE FROM device_log; DELETE FROM peers; DELETE FROM merchant_state;
     DELETE FROM policy;
   `);

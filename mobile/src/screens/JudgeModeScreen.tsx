@@ -2,7 +2,7 @@
 import * as Haptics from 'expo-haptics';
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { Big, Button, Card, colors, Field, Label, Muted, Screen, wholeDollars } from '../components/ui';
+import { Big, Button, Card, colors, Field, font, Label, Muted, Screen, wholeDollars, TopBar } from '../components/ui';
 import { useNav } from '../nav';
 import { latestCert, rollBack, walletState, type RollbackMode } from '../store/wallet';
 
@@ -29,13 +29,14 @@ export function JudgeModeScreen() {
 
   return (
     <Screen tone="dark">
+      <TopBar onBack={nav.home} />
       <View style={styles.banner}>
         <Text style={styles.bannerText}>Demo: attacker tool</Text>
       </View>
-      <Text style={styles.lead}>You're Maya, and you're cheating. Roll the wallet back and spend the same money again.</Text>
+      <Text style={styles.lead}>You're Maya, and you're cheating. Try to spend the same money twice.</Text>
 
-      <Card style={{ backgroundColor: '#13263A' }}>
-        <Label color="#9DB4FF">Wallet now</Label>
+      <Card style={{ backgroundColor: colors.navyRaised }}>
+        <Label color={colors.onNavyMuted}>Wallet now</Label>
         <Big color="#fff">{wholeDollars(left)}</Big>
         <Field light label="Counter" value={String(state?.counter ?? 0)} />
         <Field light label="Spent" value={wholeDollars(state?.cumCents ?? 0)} last />
@@ -45,7 +46,7 @@ export function JudgeModeScreen() {
       <Button title="Be clever" subtitle="Restore, then skip the counter ahead" kind="danger" big onPress={() => run('clever')} />
 
       {message ? (
-        <View style={[styles.note, { borderColor: message.ok ? '#FDB022' : colors.red }]}>
+        <View style={[styles.note, { backgroundColor: message.ok ? '#7A4A0A' : '#7A1712' }]}>
           <Text style={styles.noteText}>{message.text}</Text>
         </View>
       ) : null}
@@ -53,15 +54,14 @@ export function JudgeModeScreen() {
       <Muted color="#98A2B3">This is what a modified app or a restored backup could do. Every offline system has to handle it.</Muted>
 
       <Button title="Pay a shop" kind="light" big onPress={() => nav.go({ name: 'pay' })} />
-      <Button title="Back" kind="light" onPress={nav.home} />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  banner: { backgroundColor: colors.red, paddingVertical: 12, borderRadius: 12 },
-  bannerText: { color: '#fff', fontSize: 20, fontWeight: '900', textAlign: 'center', letterSpacing: 0.5, textTransform: 'uppercase' },
-  lead: { color: '#fff', fontSize: 22, lineHeight: 29, fontWeight: '700' },
-  note: { borderWidth: 1.5, borderRadius: 14, padding: 14, backgroundColor: '#FFFFFF0D' },
-  noteText: { color: '#fff', fontSize: 16, lineHeight: 22 },
+  banner: { backgroundColor: colors.refuseBg, paddingVertical: 14, borderRadius: 999 },
+  bannerText: { color: '#fff', fontFamily: font.bold, fontSize: 19, textAlign: 'center', letterSpacing: -0.2 },
+  lead: { color: '#fff', fontFamily: font.displayBold, fontSize: 28, lineHeight: 31, letterSpacing: -0.6 },
+  note: { borderRadius: 16, padding: 16 },
+  noteText: { color: '#fff', fontFamily: font.medium, fontSize: 16, lineHeight: 22 },
 });

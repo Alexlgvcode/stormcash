@@ -9,7 +9,7 @@ import { appendLog } from './store/devicelog';
 import { originHop, putItem, tagsForCert } from './store/items';
 import { openRequest, setOpenRequest } from './store/merchant';
 import { currentPolicy } from './store/policy';
-import { commitPayment, latestCert, walletState } from './store/wallet';
+import { addReceipt, commitPayment, latestCert, walletState } from './store/wallet';
 
 export interface Keys { priv: Hex; pub: Hex }
 
@@ -73,6 +73,7 @@ export function signPayment(request: PaymentRequest, keys: Keys, now: number): P
   // The payer does not gossip its own tag: the shop must see this PAY first, or C6 would
   // refuse it as COUNTER_NOT_NEW. The shop's PAY travels on from there (§10.1).
   commitPayment(t, before);
+  addReceipt(t, request.mc.display_name, now);
   return { c: cert, t, d };
 }
 

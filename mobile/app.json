@@ -47,7 +47,8 @@
           "localNetworkUsagePermissionText": "StormCash talks to nearby phones to share payment records when there is no internet.",
           "bluetoothUsagePermissionText": "StormCash uses Bluetooth to reach nearby phones when there is no internet."
         }
-      ]
+      ],
+      "expo-font"
     ]
   }
 }

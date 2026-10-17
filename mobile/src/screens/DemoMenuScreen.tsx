@@ -1,7 +1,7 @@
 // Hidden demo menu (long-press the logo, §19.2).
 import { useState } from 'react';
 import { Alert, StyleSheet, Switch, TextInput, View } from 'react-native';
-import { Body, Button, Card, Chip, colors, Field, Muted, radius, Row, Screen, Section, Title } from '../components/ui';
+import { Body, Button, Card, Chip, colors, Field, Muted, radius, Row, Screen, Section, Title, TopBar } from '../components/ui';
 import {
   deleteDeviceKey, deviceKey, enclaveAvailable, getDeviceKey, setWantsEnclave, wantsEnclave,
 } from '../keys';
@@ -14,6 +14,7 @@ import { resetDb, setSetting } from '../store/db';
 import { syncManager } from '../sync/manager';
 
 const LABELS: DemoLabel[] = ['MAYA', 'PHARMACY', 'GAS_STATION'];
+const LABEL_NAMES: Record<DemoLabel, string> = { MAYA: 'Maya', PHARMACY: 'Pharmacy', GAS_STATION: 'Gas Station' };
 
 // Dev-build previews of the result screen (the simulator camera can't scan). Not in Release builds.
 const PREVIEW_TAG = {
@@ -69,6 +70,7 @@ export function DemoMenuScreen() {
 
   return (
     <Screen>
+      <TopBar onBack={nav.home} />
       <Title>Demo menu</Title>
       <Muted>Hidden from customers. Long-press the logo to get here.</Muted>
 
@@ -79,13 +81,13 @@ export function DemoMenuScreen() {
 
       <Section title="Demo phone">
         <Row>
-          {LABELS.map((l) => <Chip key={l} text={l.replace('_', ' ')} active={label === l} onPress={() => pickLabel(l)} />)}
+          {LABELS.map((l) => <Chip key={l} text={LABEL_NAMES[l]} active={label === l} onPress={() => pickLabel(l)} />)}
         </Row>
         <Card>
           <Row style={{ justifyContent: 'space-between', flexWrap: 'nowrap' }}>
             <View style={{ flex: 1, gap: 2 }}>
               <Body>Demo topology</Body>
-              <Muted>Pharmacy ↔ Maya ↔ Gas Station. Pharmacy and Gas Station never link.</Muted>
+              <Muted>Maya links to the Pharmacy and the Gas Station. Those two never link to each other.</Muted>
             </View>
             <Switch value={topology} onValueChange={toggleTopology} trackColor={{ true: colors.primary }} />
           </Row>
@@ -140,7 +142,6 @@ export function DemoMenuScreen() {
       ) : null}
 
       <Button title="Reset local data" kind="danger" onPress={reset} />
-      <Button title="Back" kind="ghost" onPress={nav.home} />
     </Screen>
   );
 }
@@ -148,6 +149,6 @@ export function DemoMenuScreen() {
 const styles = StyleSheet.create({
   input: {
     borderWidth: 1, borderColor: colors.line, borderRadius: radius.sm, padding: 12, fontSize: 13,
-    fontFamily: 'Menlo', backgroundColor: colors.card, color: colors.ink,
+    fontFamily: 'Menlo', backgroundColor: colors.well, color: colors.ink,
   },
 });

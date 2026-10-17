@@ -2,10 +2,11 @@
 // Demo payments are whole dollars (Nessie moves whole dollars, §11.4), so the keypad enters dollars.
 import * as Haptics from 'expo-haptics';
 import { useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
-import { QrCode } from '../components/QrCode';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Icon } from '../components/Icon';
+import { Ticket } from '../components/Ticket';
 import { Scanner } from '../components/Scanner';
-import { Button, Card, Chip, colors, Label, Meter, Muted, Row, Screen, Title, radius } from '../components/ui';
+import { Button, Chip, colors, ErrorNote, font, Label, Meter, Muted, Row, Screen, Title, radius, TopBar } from '../components/ui';
 import { useTick } from '../hooks';
 import { deviceKey } from '../keys';
 import { useNav } from '../nav';
@@ -25,6 +26,8 @@ export function ChargeScreen() {
   const nav = useNav();
   const [amount, setAmount] = useState(0); // whole dollars
   const [step, setStep] = useState<Step>({ s: 'amount' });
+  const [error, setError] = useState<string | null>(null);
+  const [scanKey, setScanKey] = useState(0);
   const now = Math.floor(useTick(1000) / 1000);
   const mc = merchantCert();
   if (!mc) return null;
@@ -44,21 +47,24 @@ export function ChargeScreen() {
   const onScan = (data: string) => {
     const r = receivePayment(data, mc, deviceKey(), getServerPub(), nowS());
     if (!r.parsed) {
-      Alert.alert('Not a payment', r.message, [{ text: 'Scan again', onPress: () => setStep({ s: 'scan' }) }]);
+      setError(r.message);
+      setScanKey((k) => k + 1);
       return;
     }
+    setError(null);
     nav.go({ name: 'result', result: r.result, pay: r.pay, capCents: r.pay.c.cap_cents });
   };
 
   if (step.s === 'amount') {
     return (
       <Screen>
+        <TopBar onBack={cancel} />
         <Title>Charge</Title>
-        <Card style={{ alignItems: 'center', paddingVertical: 24 }}>
-          <Label>{mc.display_name}</Label>
-          <Text style={styles.amount} adjustsFontSizeToFit numberOfLines={1}>${amount}</Text>
+        <View style={{ alignItems: 'center', paddingVertical: 12 }}>
+          <Label>{mc.display_name} charges</Label>
+          <Text style={[styles.amount, amount === 0 && { color: colors.faint }]} adjustsFontSizeToFit numberOfLines={1}>${amount}</Text>
           <Muted>Whole dollars</Muted>
-        </Card>
+        </View>
         <Row style={{ justifyContent: 'center' }}>
           {QUICK.map((d) => <Chip key={d} text={`$${d}`} active={amount === d} onPress={() => setAmount(d)} />)}
         </Row>
@@ -70,7 +76,9 @@ export function ChargeScreen() {
               style={({ pressed }) => [styles.key, pressed && { backgroundColor: colors.primarySoft }]}
               accessibilityLabel={k === '⌫' ? 'Delete' : k === 'C' ? 'Clear' : k}
             >
-              <Text style={[styles.keyText, (k === 'C' || k === '⌫') && { color: colors.muted }]}>{k}</Text>
+              {k === '⌫'
+                ? <Icon name="delete" size={28} color={colors.ink} />
+                : <Text style={[styles.keyText, k === 'C' && { color: colors.muted }]}>{k}</Text>}
             </Pressable>
           ))}
         </View>
@@ -83,7 +91,6 @@ export function ChargeScreen() {
             setStep({ s: 'request', request, qr: requestQr(request) });
           }}
         />
-        <Button title="Cancel" kind="secondary" onPress={cancel} />
       </Screen>
     );
   }
@@ -93,38 +100,37 @@ export function ChargeScreen() {
     const expired = left === 0;
     return (
       <Screen>
-        <Row style={{ justifyContent: 'space-between' }}>
-          <Title>{mc.display_name}</Title>
-          <Title color={colors.primary}>${step.request.rq.amount_cents / 100}</Title>
-        </Row>
-        <Muted>Ask the customer to scan this code with StormCash.</Muted>
-        <Card style={{ alignItems: 'center', padding: 12, opacity: expired ? 0.3 : 1 }}>
-          <QrCode value={step.qr} />
-        </Card>
+        <TopBar onBack={cancel} />
+        <Title>Customer scans this</Title>
+        <Ticket
+          value={step.qr}
+          kicker="Payment request"
+          title={mc.display_name}
+          amount={`$${step.request.rq.amount_cents / 100}`}
+          footnote="Signed by this shop. Works with no internet."
+          dim={expired}
+        />
         <Meter value={left} max={REQ_TTL_S} color={left > 30 ? colors.primary : colors.amber} />
         <Muted>{expired ? 'This code expired. Start again.' : `Expires in ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`}</Muted>
         <Button title="Scan customer's code" big onPress={() => setStep({ s: 'scan' })} disabled={expired} />
-        <Button title="Cancel" kind="secondary" onPress={cancel} />
       </Screen>
     );
   }
 
   return (
     <Screen>
+      <TopBar onBack={cancel} />
       <Title>Scan customer's code</Title>
       <Muted>Every check runs on this phone. No internet needed.</Muted>
-      <Scanner onScan={onScan} />
-      <Button title="Cancel" kind="secondary" onPress={cancel} />
+      {error ? <ErrorNote text={error} /> : null}
+      <Scanner key={scanKey} onScan={onScan} />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  amount: { fontSize: 72, fontWeight: '800', color: colors.ink, letterSpacing: -2, fontVariant: ['tabular-nums'] },
+  amount: { fontFamily: font.display, fontSize: 104, lineHeight: 110, color: colors.ink, letterSpacing: -3, fontVariant: ['tabular-nums'] },
   pad: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 10 },
-  key: {
-    width: '31.5%', height: 64, borderRadius: radius.md, backgroundColor: colors.card, alignItems: 'center',
-    justifyContent: 'center', borderWidth: 1, borderColor: colors.line,
-  },
-  keyText: { fontSize: 28, fontWeight: '600', color: colors.ink },
+  key: { width: '31.5%', height: 64, borderRadius: radius.pill, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' },
+  keyText: { fontFamily: font.semibold, fontSize: 28, color: colors.ink, fontVariant: ['tabular-nums'] },
 });
