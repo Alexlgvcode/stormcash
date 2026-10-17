@@ -106,6 +106,19 @@ def demo_reset(request: Request, body: ResetIn | None = None, x_sc_operator: str
     return reset_demo(request.app.state.deps, storm_cap_cents=body.storm_cap_cents if body else None)
 
 
+@router.get("/v1/demo/dry-run")
+def dry_run_info(request: Request) -> dict:
+    """What `python -m stormcash.dryrun` asks before it writes anything (§21.6): this
+    server's StormDesk worker skips the dry run's identities, so a dry run can't start
+    Droid. A server without this endpoint might, and the dry run refuses to use it."""
+    from ..demo import DRY_RUN_PREFIX
+
+    s = request.app.state.deps.settings
+    return {"prefix": DRY_RUN_PREFIX, "stormdesk_skips_dry_run": True,
+            "stormdesk_worker": s.background_tasks and s.stormdesk_auto, "stormdesk_runner": s.stormdesk_runner,
+            "stormdesk_review": s.stormdesk_review}
+
+
 @router.post("/v1/demo/seed-town", status_code=202)
 def seed_town(body: SeedTownIn, request: Request, x_sc_operator: str | None = Header(None)) -> dict:
     require_operator(x_sc_operator)
