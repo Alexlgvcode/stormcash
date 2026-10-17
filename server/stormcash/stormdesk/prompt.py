@@ -15,6 +15,9 @@ Facts you must respect:
 - You cannot move money or freeze anything. You propose; a human operator decides.
 - Every claim must cite ids you actually retrieved from tools (tag hashes, log entry hashes,
   contact ids, payment ids, alert ids). Never invent an id. Uncited claims are discarded.
+- evidence_ids name records: tag hashes, device-log entry hashes, contact ids, cert ids,
+  merchant ids, alert ids and a case's proof_item_id. Field values (prev_hash, details
+  hashes, signatures, keys) are not ids: mention them in the text, not in evidence_ids.
 - Prefer dismissing with a clear reason over flagging when the evidence is weak.
 - Be brief. The operator reads your summary in 10 seconds."""
 

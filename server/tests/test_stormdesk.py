@@ -86,6 +86,10 @@ def test_citation_check(deps, double_spend):
         assert citations.citations_valid(conn, [], required=True) == (False, [])
         assert citations.citations_valid(conn, [], required=False) == (True, [])
         assert citations.citations_valid(conn, ["no-such-alert"], required=True)[0] is False
+        # get_case hands the agent the case's proof item id, so citing it is fine (seen on the first live run).
+        proof = scalar(conn, "SELECT evidence->>'proof_item_id' FROM cases WHERE case_id = %s",
+                       (double_spend["case_id"],))
+        assert citations.citations_valid(conn, [proof, f"proof:{proof}"], required=True) == (True, [])
 
 
 # Droid harness pieces (no CLI needed) --------------------------------------------------------------
@@ -143,24 +147,24 @@ def test_builtin_tools_are_the_verified_droid_list():
     assert len(runner.BUILTIN_TOOLS) == 34
 
 
-def test_droid_out_of_credits_is_unavailable_not_retried(deps, double_spend, monkeypatch):
-    from datetime import timedelta
+def patch_droid(monkeypatch, results: list, models: list[str] | None = None) -> list:
+    """Replace droid_sdk.Session with one that streams no events and ends with each result in turn,
+    on the given models (what Factory reports in the session's settings)."""
+    from types import SimpleNamespace
 
     import droid_sdk
-    from droid_sdk import ErrorEvent, ErrorType, RunFailure
 
     opened = []
 
     class Stream:
+        def __init__(self, result) -> None:
+            self.result = result
+
         def __aiter__(self):
             return self
 
         async def __anext__(self):
             raise StopAsyncIteration
-
-        result = RunFailure(
-            subtype="error_during_execution", text="", messages=(), usage=None, duration=timedelta(0), turn_count=0,
-            session_id="droid-1", error=ErrorEvent("Agent turn ended: model_usage_exhausted", ErrorType.ERROR))
 
     class Session:
         def __init__(self, **kw):
@@ -173,14 +177,68 @@ def test_droid_out_of_credits_is_unavailable_not_retried(deps, double_spend, mon
             return False
 
         def stream(self, prompt, output, timeout):
-            return Stream()
+            return Stream(results[len(opened) - 1])
+
+        @property
+        def settings(self):
+            if models is None:
+                raise AttributeError("settings")
+            return SimpleNamespace(model=models[len(opened) - 1])
 
     monkeypatch.setattr(droid_sdk, "Session", Session)
+    return opened
+
+
+def test_droid_out_of_credits_is_unavailable_not_retried(deps, double_spend, monkeypatch):
+    from datetime import timedelta
+
+    from droid_sdk import ErrorEvent, ErrorType, RunFailure
+
+    opened = patch_droid(monkeypatch, [RunFailure(
+        subtype="error_during_execution", text="", messages=(), usage=None, duration=timedelta(0), turn_count=0,
+        session_id="droid-1", error=ErrorEvent("Agent turn ended: model_usage_exhausted", ErrorType.ERROR))])
     outcome = asyncio.run(runner.DroidRunner(deps).run(
         Job("triage", candidate_id=double_spend["candidate_id"]), "prompt", Steps()))
     assert outcome.unavailable and outcome.output is None and outcome.session_id == "droid-1"
     assert outcome.error == "error_during_execution: Agent turn ended: model_usage_exhausted"
     assert len(opened) == 1  # no point retrying a run that couldn't start
+
+
+def test_a_droid_run_records_what_it_cost(deps, double_spend, monkeypatch):
+    import dataclasses
+    from datetime import timedelta
+
+    from droid_sdk import RunFailure, RunSuccess, Usage
+
+    cand = double_spend["candidate_id"]
+    with deps.pool.connection() as conn:
+        subject = scalar(conn, "SELECT subject_id FROM candidates WHERE candidate_id = %s", (cand,))
+    good = flag(subject_id=subject, evidence_ids=[double_spend["cheat"].tag.tag_hash.hex()]).model_dump()
+
+    def usage(credits: float) -> Usage:
+        return Usage(input_tokens=421, output_tokens=249, cache_creation_tokens=0, cache_read_tokens=100,
+                     thinking_tokens=0, factory_credits=credits)
+
+    # The first attempt's structured output fails (retried once); both attempts' costs add up. Factory moved
+    # the second attempt to another model (as it does when Standard Usage runs out): the run says which.
+    patch_droid(monkeypatch, models=["claude-sonnet-5-5", "droid-core"], results=[
+        RunFailure(subtype="error_structured_output", text="", messages=(), usage=usage(1000.0),
+                   duration=timedelta(0), turn_count=1, session_id="droid-1"),
+        RunSuccess(text="", messages=(), usage=usage(2963.0), duration=timedelta(seconds=6), turn_count=3,
+                   session_id="droid-2", structured_output=good),
+    ])
+    live = dataclasses.replace(deps, settings=dataclasses.replace(deps.settings, stormdesk_model="claude-sonnet-5-5"))
+    out = run(StormDesk(live), Job("triage", candidate_id=cand), runner.DroidRunner(live))
+    assert (out["runner"], out["status"]) == ("droid", "succeeded")
+    assert (out["model"], out["model_requested"]) == ("droid-core", "claude-sonnet-5-5")
+    assert out["usage"] == {"input_tokens": 842, "output_tokens": 498, "cache_creation_tokens": 0,
+                            "cache_read_tokens": 200, "thinking_tokens": 0, "factory_credits": 3963.0}
+    with deps.pool.connection() as conn:
+        row = one(conn, "SELECT * FROM stormdesk_runs")
+        agent = scalar(conn, "SELECT agent_transcript FROM flags")
+    assert row["session_id"] == "droid-2"
+    assert row["transcript"]["usage"]["factory_credits"] == agent["usage"]["factory_credits"] == 3963.0
+    assert row["transcript"]["model"] == agent["model"] == "droid-core"
 
 
 class DownDroid:
