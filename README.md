@@ -2,7 +2,164 @@
 
 When a disaster takes out towers and card readers, StormCash keeps phones paying local shops, and stops cheaters with no internet.
 
-HackHarvard 2026. The full design lives in [`STORMCASH_BUILD_SPEC.md`](STORMCASH_BUILD_SPEC.md).
+> "I tried to cheat it with no internet, and it refused me."
+
+HackHarvard 2026 · Digital Trust track · Capital One Nessie · Factory Droid SDK · Chalk · Photon. The full design lives in [`STORMCASH_BUILD_SPEC.md`](STORMCASH_BUILD_SPEC.md).
+
+## The problem
+
+After Hurricane Helene (2024), card readers in western North Carolina couldn't connect, most ATMs were down or empty, and some shops stayed cash-only for a month. People had money in the bank and phones with battery, and still couldn't pay, because every payment app needs a server to approve each payment.
+
+## How it works
+
+1. **Bank-backed certificate.** The resident's bank (Capital One, through Nessie) locks money in an escrow account, and the StormCash server signs a certificate for the phone's key: "this phone may spend up to $X". The always-on cap is $20; Storm Mode raises it to $50.
+2. **Pay offline by QR.** The shop's phone checks the bank's signature and the resident's signature with no network (checks C1–C6), and shows "Backed by Capital One, $12 of $50 used".
+3. **Spend tags travel phone to phone.** Every payment is a signed, chained spend tag. Phones gossip tags over Bluetooth and peer Wi-Fi (Apple Multipeer); customers carry them from shop to shop. A rolled-back wallet trying to spend the same money again is **refused offline** by the next shop that holds the tag, and the two conflicting signatures are **self-proving evidence** anyone can check.
+4. **Store and forward.** Payments, tags and signed device logs hop phone to phone until any phone gets a signal and uploads them. The server pays shops through Nessie, freezes cheaters, and sends receipts, the freeze list and renewed certificates back the same way.
+5. **"Merchant knew."** Every phone keeps a signed, hash-chained log of what it accepted and whom it met. A shop that accepted a double spend while holding the conflicting tag is caught by its own signature.
+6. **StormDesk.** A back-office agent built on Factory's Droid SDK investigates hard cases and triages suspicious patterns from deterministic detectors. It proposes; a person approves. Shops get notices and can appeal by text through Photon.
+
+**Math flags. The agent investigates. A person decides.**
+
+```mermaid
+flowchart LR
+  subgraph offline["Offline: no towers"]
+    Maya["Maya's iPhone<br/>cert + wallet"] -- "PAY QR" --> Pharmacy["Pharmacy iPhone<br/>checks C1–C6"]
+    Pharmacy -- "Multipeer gossip<br/>tags, logs, proofs" --- Maya
+    Maya -- "Multipeer gossip" --- Gas["Gas Station iPhone"]
+  end
+  Gas -- "any phone with a signal:<br/>POST /v1/sync" --> Server["StormCash server<br/>settlement · ledger · hard rules R1–R6"]
+  Server -- "withdrawal + deposit pairs" --> Nessie[("Capital One Nessie")]
+  Server -- "candidates" --> StormDesk["StormDesk<br/>(Factory Droid)"]
+  StormDesk -- "features" --> Chalk[("Chalk")]
+  StormDesk -- "proposal" --> Dashboard["Dashboard<br/>operator approves"]
+  Dashboard -- "notice / appeal" --> Photon["Photon<br/>(Telegram)"]
+```
+
+## Honest limits
+
+- **Offline double spending is bounded, not impossible.** A shop no tag has reached can be fooled once, up to the cap; settlement proves it and the guarantee pool pays the shop.
+- The wallet counter lives in app storage, not a secure chip (a Secure Enclave key is optional and off by default).
+- iPhones only exchange data while the app is open.
+- Phones share pseudonymous certificate ids, amounts and running totals, never names. Payments relayed for settlement name the shop they paid; production would encrypt relayed bundles to the server's key.
+- The 40-shop town around our 3 phones is **simulated** and labelled "simulated" everywhere; its money never touches Nessie. Weather alerts we replay are labelled "replayed".
+- **StormDesk without Factory access:** until our Factory account is set up, the same pipeline runs with a deterministic stand-in that applies the rules-only baseline. It is labelled "Fake runner · rules only" on every screen and in every stored record, and is never presented as an agent's judgement.
+
+## Run it
+
+**Server** (Python 3.11, Postgres). Details in [`server/README.md`](server/README.md):
+
+```bash
+cd server && python3.11 -m venv .venv && source .venv/bin/activate && pip install -e ".[dev]"
+```
+
+```bash
+cp .env.example .env
+```
+
+A fresh database gets the whole schema (`psql "$DATABASE_URL" -f schema.sql`); an older one gets the files in `server/migrations/`.
+
+```bash
+uvicorn --factory stormcash.app:create_app --host 0.0.0.0 --port 8000
+```
+
+**Dashboard.** Build it once and the server serves it at `/`, along with the public proof page at `/proof/<case_id>`. Details in [`dashboard/README.md`](dashboard/README.md):
+
+```bash
+cd dashboard && npm ci && npm run build
+```
+
+**Public URL.** Judges' phones open the proof page over HTTPS (WebCrypto needs it); set `PUBLIC_BASE_URL` in `server/.env` to the tunnel's URL:
+
+```bash
+cloudflared tunnel --url http://localhost:8000
+```
+
+**Simulated town.** This runs 72 simulated hours ending now, with the planted demo cases. Details in [`sim/README.md`](sim/README.md):
+
+```bash
+pip install -e ./sim
+```
+
+```bash
+curl -X POST localhost:8000/v1/demo/seed-town -H 'X-SC-Operator: alex' -H 'content-type: application/json' -d '{"seed": 42}'
+```
+
+**Phones.** Expo development build on iPhone with free signing: [`mobile/README.md`](mobile/README.md).
+
+**Photon bridge.** Telegram sending runs through a small Node process: [`server/stormcash/photon/README.md`](server/stormcash/photon/README.md).
+
+**Between judges.** This clears the real phones' data, opens fresh Nessie accounts and reissues Maya's certificate. The simulated town stays.
+
+```bash
+curl -X POST localhost:8000/v1/demo/reset -H 'X-SC-Operator: alex'
+```
+
+**Fallback switches** (`server/.env`):
+
+| Switch | Effect |
+|---|---|
+| `NESSIE_DISABLED=1` | money is ledger-only (no Nessie calls) |
+| `API_SIG_REQUIRED=0` | accept unsigned phone writes |
+| `STORMDESK_RUNNER=fake` | StormDesk uses the labelled rules-only stand-in |
+| `STORMDESK_AUTO=0` | don't run StormDesk automatically |
+| `PHOTON_DISABLED=1` | record messages on the dashboard, send nothing |
+
+Queued Nessie payouts replay on their own every 10 s.
+
+**Tests.** The protocol test vectors are shared by Python and TypeScript (`spec/vectors.json`):
+
+```bash
+cd server && pytest
+```
+
+```bash
+cd sim && pytest
+```
+
+```bash
+cd dashboard && npm test
+```
+
+```bash
+cd mobile && npm test
+```
+
+## Where Droid runs
+
+StormDesk is the back office of the running product, in [`server/stormcash/stormdesk/`](server/stormcash/stormdesk/):
+
+- **`worker.py`**: picks up every new hard case and every new detector candidate, with at most 4 Droid sessions at once. Nothing has to ask for it: when a phone uploads and a rule or a detector fires, the job is queued.
+- **Three jobs** (`runner.py`, `prompt.py`):
+  - **Investigate** a hard case. It re-verifies both signatures and the rule with the deterministic verifier, works out who was paid from escrow and from the pool, and writes a case file.
+  - **Triage** a candidate (a shop went quiet, a certificate drained fast, a region went dark). It decides whether it's real, cites the evidence, and proposes an action, or dismisses it with a reason.
+  - **Respond** to a shop's appeal arriving through Photon, by comparing the claim with the shop's own signed logs.
+- **Eleven read-only tools** (`tools.py`) served to Droid as an in-process MCP server: `get_case`, `get_candidate`, `get_cert_chain`, `verify_tags`, `get_device_log`, `get_contacts`, `get_merchant_payments`, `query_features`, `get_region_status`, `get_nessie_balances`, `get_messages`. They run in a read-only database transaction. **There is no write tool.**
+- **Structured outputs** (`schemas.py`): `Flag`, `CaseFile` and `AppealReply` are Pydantic models passed as `output=` to `Session.stream`. A failed structured output is retried once and otherwise stored as invalid.
+- **Permission handler** (`runner.permission_handler`): allows only our own MCP tools and cancels everything else (shell, file edits, network). Droid's built-in tools are also switched off in `SessionConfig`; that list of tool ids gets checked on the first live run.
+- **Citation check** (`citations.py`): every id the agent cites must exist in the database, or the result is stored as invalid and never shown as actionable.
+- **Every run is stored** with its transcript (`stormdesk_runs`). Each tool call streams live to the dashboard (`stormdesk_step` events) and can be replayed step by step.
+- **A person decides.** Approve or Reject on the dashboard runs deterministic code (`approvals.py`): hold a shop's pool payouts, lower its limit, freeze a certificate, or dispatch a relay. Hard rules never go through the agent.
+
+_Screenshot of the live step stream: added after the first live Droid run (see Honest limits)._
+
+## How we use Chalk
+
+- **Features for the agent.** StormDesk's `query_features` tool asks for a shop's, certificate's or region's features: contact rates against nearby shops, pool-funded share, drain speed, upload gaps, active weather alerts. The Chalk feature set (#28) builds them from our Postgres data, Nessie balances and the National Weather Service alerts API. Until the Chalk client lands, the tool answers from the detectors' own frozen features and says so (`source: "postgres_fallback"`).
+- **Evaluations.** The simulator writes ground truth for every seeded town (`sim/out/<seed>/labels.json`), including deliberate traps: a remote shop, a victim shop, an honest resident stocking up, a drifting clock and a quiet region. Chalk Evaluations compares the rules-only baseline with StormDesk on those labels (#33). The Evals tab shows only numbers from a real run.
+
+## How we use Capital One Nessie
+
+- Each real resident has a **checking** account and a **StormCash escrow** account. The guarantee **pool** belongs to a "StormCash Operator" customer, and each real shop has its own account.
+- **Every money movement is a matched pair:** a withdrawal on the source account and a deposit on the destination, both described `SC <txn_id> …` so they link to our double-entry ledger. This covers locking escrow, the Storm Mode top-up, paying a shop from escrow or from the pool, and refunding on close.
+- **Balances are read live from Nessie** as opening balance + deposits − withdrawals, and the Accounts tab labels them "from Nessie transactions". The ledger beside them must balance ("Ledger balanced ✓").
+- Nessie amounts are whole dollars; one helper converts cents to dollars and refuses anything else rather than rounding.
+- **If Nessie is slow or down**, the payout is queued and replayed until both halves exist; a payout is "executed" only when they do. Every call is in the dashboard's Nessie call log.
+- Simulated money never touches Nessie.
+
+## How we use Photon
+
+StormCash talks to shop owners over Telegram through Photon. When an operator approves a hold or a lower limit, the shop gets a notice whose numbers must all come from the flag's evidence. A shop's reply is answered by StormDesk, citing the shop's own signed logs, and anything uncertain is escalated to a person. Real shops with a registered handle also get a "Paid" notice when Nessie pays them. Details: [`server/stormcash/photon/README.md`](server/stormcash/photon/README.md).
 
 ## Team
 
@@ -32,8 +189,4 @@ HackHarvard 2026. The full design lives in [`STORMCASH_BUILD_SPEC.md`](STORMCASH
 5. Whoever opened the PR merges it once it's ready (**Squash and merge** is the only option, so each PR becomes one commit on `main`).
 6. GitHub deletes the branch automatically after the merge; locally, switch back to `main`, pull, and run `git fetch --prune`.
 
-`main` is protected: no direct pushes, no force pushes, and no deleting it. Every change goes through a PR.
-
-## Setup
-
-Server secrets go in `server/.env` (copy [`server/.env.example`](server/.env.example)); never commit it. Per-folder setup is in each folder's README.
+`main` is protected: no direct pushes, no force pushes, and no deleting it. Every change goes through a PR. Server secrets go in `server/.env` (copy [`server/.env.example`](server/.env.example)); never commit it.
