@@ -14,17 +14,18 @@ const VIEWS = [
 type View = (typeof VIEWS)[number]["id"];
 
 const CELL = 22;
-const REGION_FILL = ["#F6F8FA", "#FFFFFF"];
-const C = {
-  rule: "#EBEEF1",
-  hatch: "#D5DBE1",
-  label: "#687385",
-  heading: "#1A1B25",
-  warning: "#A35A00",
-  danger: "#B3093C",
-  simulated: "#9AA3AF",
-  real: "#2B3A9E",
-  pulse: "#05690D",
+// The map in the bank style of the "Capital One" mockup: deep navy text, bank blue
+// for real shops, a soft blue tint, rounded corners. No logo or brand red.
+const B = {
+  navy: "#0B3B5C",
+  blue: "#0B5D8C",
+  tint: "#E6F0F6",
+  grey: "#F4F5F7",
+  hatch: "#D9D9D9",
+  red: "#B0261B",
+  warn: "#9A5300",
+  ok: "#1E6B35",
+  sim: "#9A9A9A",
 };
 
 interface Pulse {
@@ -33,71 +34,129 @@ interface Pulse {
   y: number;
 }
 
-function TownMap({ town, pulses }: { town: Town; pulses: Pulse[] }) {
+type Shop = Town["merchants"][number];
+
+/** Relay legs between shops on the map, from the latest uploads that real phones carried (the town's own would be noise). */
+function relayLegs(town: Town, paths: RelayPath[]): [Shop, Shop][] {
+  const byName = new Map(town.merchants.map((m) => [m.display_name, m]));
+  const seen = new Set<string>();
+  const legs: [Shop, Shop][] = [];
+  for (const p of paths.slice(0, 10)) {
+    if (p.path.every((hop) => hop.simulated !== false)) continue;
+    const stops = p.path.filter((hop) => hop.kind === "merchant").map((hop) => byName.get(hop.name))
+      .filter((m): m is Shop => !!m);
+    for (let i = 0; i + 1 < stops.length; i++) {
+      const key = `${stops[i].merchant_id}>${stops[i + 1].merchant_id}`;
+      if (stops[i] === stops[i + 1] || seen.has(key)) continue;
+      seen.add(key);
+      legs.push([stops[i], stops[i + 1]]);
+    }
+  }
+  return legs;
+}
+
+function TownMap({ town, pulses, paths }: { town: Town; pulses: Pulse[]; paths: RelayPath[] }) {
   const { w, h } = town.grid;
+  const W = w * CELL;
+  const H = h * CELL;
   const alertsByRegion = new Map<string, Town["alerts"]>();
   for (const a of town.alerts) {
     if (a.region_id) alertsByRegion.set(a.region_id, [...(alertsByRegion.get(a.region_id) ?? []), a]);
   }
+  // Areas along the top edge get their name, status and alerts in a header row above the map,
+  // where no shop can cover them; any other area is labelled inside.
+  const header = town.regions.filter((r) => r.y === 0).sort((x, y) => x.x - y.x);
+  const inside = town.regions.filter((r) => r.y !== 0);
+  const at = (m: Shop) => [(m.x + 0.5) * CELL, (m.y + 0.5) * CELL] as const;
+  const labelled = town.merchants.filter((m) => !m.simulated || !m.pool_eligible);
   return (
-    <svg viewBox={`0 0 ${w * CELL} ${h * CELL}`} className="w-full max-w-3xl border border-rule" role="img"
-      aria-label="Map of the simulated town">
-      <defs>
-        <pattern id="hatch" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-          <line x1="0" y1="0" x2="0" y2="10" stroke={C.hatch} strokeWidth="3" />
-        </pattern>
-      </defs>
-      {town.regions.map((r, i) => {
-        const dark = town.dark_regions.includes(r.region_id);
-        return (
-          <g key={r.region_id}>
-            <rect x={r.x * CELL} y={r.y * CELL} width={r.w * CELL} height={r.h * CELL} fill={REGION_FILL[i % 2]}
-              stroke={C.rule} />
-            {dark && <rect x={r.x * CELL} y={r.y * CELL} width={r.w * CELL} height={r.h * CELL} fill="url(#hatch)" />}
-            <text x={r.x * CELL + 10} y={r.y * CELL + 28} fill={dark ? C.warning : C.label} fontSize="21" fontWeight="500">
+    <div className="w-full max-w-3xl">
+      <div className="mb-2 grid" style={{ gridTemplateColumns: header.map((r) => `${r.w}fr`).join(" ") }}>
+        {header.map((r) => {
+          const dark = town.dark_regions.includes(r.region_id);
+          return (
+            <div key={r.region_id} className="min-w-0 px-2">
+              <div className="font-semibold leading-snug" style={{ color: B.navy }}>{r.display_name}</div>
+              {dark && <div className="text-th" style={{ color: B.warn }}>Dark: no uploads</div>}
+              {(alertsByRegion.get(r.region_id) ?? []).map((a) => (
+                <div key={a.alert_id} className="text-th" style={{ color: B.warn }}>⚠ {a.event} ({a.source})</div>
+              ))}
+            </div>
+          );
+        })}
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="block w-full" role="img" aria-label="Map of the simulated town">
+        <defs>
+          <pattern id="hatch" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+            <line x1="0" y1="0" x2="0" y2="10" stroke={B.hatch} strokeWidth="3" />
+          </pattern>
+          <clipPath id="town-clip">
+            <rect width={W} height={H} rx="16" />
+          </clipPath>
+        </defs>
+        <g clipPath="url(#town-clip)">
+          {town.regions.map((r, i) => {
+            const dark = town.dark_regions.includes(r.region_id);
+            return (
+              <g key={r.region_id}>
+                <rect x={r.x * CELL} y={r.y * CELL} width={r.w * CELL} height={r.h * CELL}
+                  fill={dark || i % 2 ? B.grey : B.tint} stroke="#FFFFFF" strokeWidth="4" />
+                {dark && <rect x={r.x * CELL} y={r.y * CELL} width={r.w * CELL} height={r.h * CELL} fill="url(#hatch)" />}
+              </g>
+            );
+          })}
+          {inside.map((r) => (
+            <text key={r.region_id} x={r.x * CELL + 10} y={r.y * CELL + 26} fill={B.navy} fontSize="18" fontWeight="600"
+              stroke="#FFFFFF" strokeWidth="5" paintOrder="stroke">
               {r.display_name}
-              {dark ? " · dark" : ""}
+              {town.dark_regions.includes(r.region_id) ? " · dark" : ""}
             </text>
-            {(alertsByRegion.get(r.region_id) ?? []).map((a, j) => (
-              <text key={a.alert_id} x={r.x * CELL + 10} y={r.y * CELL + 54 + j * 48} fill={C.warning} fontSize="19">
-                <tspan>⚠ {a.event}</tspan>
-                <tspan x={r.x * CELL + 10} dy="22">({a.source})</tspan>
-              </text>
-            ))}
-          </g>
-        );
-      })}
-      {town.merchants.map((m) => {
-        const cx = (m.x + 0.5) * CELL;
-        const cy = (m.y + 0.5) * CELL;
-        const held = m.simulated && !m.pool_eligible;
-        return (
-          <g key={m.merchant_id}>
-            <circle cx={cx} cy={cy} r={m.simulated ? (held ? 8 : 6) : 12}
-              fill={m.simulated ? (held ? C.danger : C.simulated) : C.real}>
-              <title>
-                {m.display_name}
-                {m.simulated ? " (simulated)" : ""}
-                {m.pool_eligible ? "" : " · pool payouts suspended"}
-              </title>
+          ))}
+          {relayLegs(town, paths).map(([from, to]) => {
+            const [x1, y1] = at(from);
+            const [x2, y2] = at(to);
+            return (
+              <path key={`${from.merchant_id}>${to.merchant_id}`}
+                d={`M ${x1} ${y1} Q ${(x1 + x2) / 2} ${Math.min(y1, y2) - Math.min(40, Math.hypot(x2 - x1, y2 - y1) / 4)} ${x2} ${y2}`}
+                fill="none" stroke={B.blue} strokeWidth="3" strokeDasharray="6 5" />
+            );
+          })}
+          {town.merchants.map((m) => {
+            const [cx, cy] = at(m);
+            const held = m.simulated && !m.pool_eligible;
+            return (
+              <circle key={m.merchant_id} cx={cx} cy={cy} r={m.simulated ? (held ? 8 : 6) : 11}
+                fill={m.simulated ? (held ? B.red : B.sim) : B.blue} stroke="#FFFFFF" strokeWidth="2">
+                <title>
+                  {m.display_name}
+                  {m.simulated ? " (simulated)" : ""}
+                  {m.pool_eligible ? "" : " · pool payouts held"}
+                </title>
+              </circle>
+            );
+          })}
+          {pulses.map((p) => (
+            <circle key={p.id} cx={(p.x + 0.5) * CELL} cy={(p.y + 0.5) * CELL} r="6" fill="none" stroke={B.ok}
+              strokeWidth="3">
+              <animate attributeName="r" from="6" to="34" dur="1.6s" fill="freeze" />
+              <animate attributeName="opacity" from="1" to="0" dur="1.6s" fill="freeze" />
             </circle>
-            {(!m.simulated || held) && (
-              <text x={cx + 15} y={cy + 7} fill={held ? C.danger : C.heading} fontSize="20" fontWeight="600"
-                stroke="#FFFFFF" strokeWidth="5" paintOrder="stroke">
+          ))}
+          {/* Labels last, over every dot, with a white halo; near the right edge they read leftwards. */}
+          {labelled.map((m) => {
+            const [cx, cy] = at(m);
+            const left = cx > W - 230;
+            return (
+              <text key={m.merchant_id} x={left ? cx - 14 : cx + 14} y={cy + 6} textAnchor={left ? "end" : "start"}
+                fill={m.simulated ? B.red : B.navy} fontSize="18" fontWeight="600" stroke="#FFFFFF" strokeWidth="6"
+                paintOrder="stroke">
                 {m.display_name}
               </text>
-            )}
-          </g>
-        );
-      })}
-      {pulses.map((p) => (
-        <circle key={p.id} cx={(p.x + 0.5) * CELL} cy={(p.y + 0.5) * CELL} r="6" fill="none" stroke={C.pulse}
-          strokeWidth="3">
-          <animate attributeName="r" from="6" to="34" dur="1.6s" fill="freeze" />
-          <animate attributeName="opacity" from="1" to="0" dur="1.6s" fill="freeze" />
-        </circle>
-      ))}
-    </svg>
+            );
+          })}
+        </g>
+      </svg>
+    </div>
   );
 }
 
@@ -106,19 +165,22 @@ function Legend() {
     <span className="inline-block shrink-0 rounded-full" style={{ background: color, width: size, height: size }} />
   );
   return (
-    <div className="flex flex-wrap gap-x-6 gap-y-2 py-3 text-th text-secondary">
-      <span className="flex items-center gap-2">{dot(C.real, 14)} real phone</span>
-      <span className="flex items-center gap-2">{dot(C.simulated, 9)} simulated shop</span>
-      <span className="flex items-center gap-2">{dot(C.danger, 10)} simulated, pool payouts suspended</span>
+    <div className="flex max-w-3xl flex-wrap gap-x-6 gap-y-2 py-3 text-th text-secondary">
+      <span className="flex items-center gap-2">{dot(B.blue, 13)} real shop (a phone)</span>
+      <span className="flex items-center gap-2">{dot(B.sim, 9)} simulated shop</span>
+      <span className="flex items-center gap-2">{dot(B.red, 11)} simulated, pool payouts held</span>
       <span className="flex items-center gap-2">
-        <span className="inline-block h-3 w-5 border border-rule"
-          style={{ background: `repeating-linear-gradient(45deg, ${C.hatch} 0 3px, transparent 3px 7px)` }} />
-        dark region (no uploads)
+        <span className="inline-block h-3 w-5 rounded-sm"
+          style={{ background: `repeating-linear-gradient(45deg, ${B.hatch} 0 3px, ${B.grey} 3px 7px)` }} />
+        dark area (no uploads)
       </span>
       <span className="flex items-center gap-2">
-        <span className="inline-block h-3 w-3 rounded-full border-2" style={{ borderColor: C.pulse }} /> payment
+        <span className="inline-block w-6 border-t-2 border-dashed" style={{ borderColor: B.blue }} /> recent relay
       </span>
-      <span className="flex items-center gap-2"><span style={{ color: C.warning }}>⚠</span> weather alert (live or replayed)</span>
+      <span className="flex items-center gap-2">
+        <span className="inline-block h-3 w-3 rounded-full border-2" style={{ borderColor: B.ok }} /> payment
+      </span>
+      <span className="flex items-center gap-2"><span style={{ color: B.warn }}>⚠</span> weather alert (live or replayed)</span>
     </div>
   );
 }
@@ -193,9 +255,9 @@ function Bars({ base, cur }: { base: QuickResult; cur: QuickResult }) {
             <tr key={m.key}>
               <Td className="text-heading">{m.label}</Td>
               <Td num>{m.show(b)}</Td>
-              <Td><Bar value={b} max={max} color={C.simulated} /></Td>
+              <Td><Bar value={b} max={max} color="#9AA3AF" /></Td>
               <Td num className="font-medium text-heading">{m.show(c)}</Td>
-              <Td><Bar value={c} max={max} color={C.real} /></Td>
+              <Td><Bar value={c} max={max} color="#2B3A9E" /></Td>
             </tr>
           );
         })}
@@ -321,7 +383,7 @@ export function TownTab() {
             Every shop but the real ones is <span className="font-medium text-heading">simulated</span>, checked by the
             same code as the phones.
           </p>
-          <TownMap town={town} pulses={pulses} />
+          <TownMap town={town} pulses={pulses} paths={paths} />
           <Legend />
           <div className="pt-6">
             <Section title="Recent relay paths">
