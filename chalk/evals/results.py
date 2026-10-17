@@ -104,6 +104,8 @@ def summarize(rows: list[dict], *, chalk: dict, dataset: dict, mode: str, git_sh
     fallbacks = sum(1 for _, flag in parsed if flag and (flag.get("_run") or {}).get("fallback_from_droid"))
     droid_runs = [(f.get("_run") or {}) for _, f in parsed if f and (f.get("_run") or {}).get("runner") == "droid"]
     runner = runner_of(runners, fallbacks, [(r.get("models_used"), r.get("model")) for r in droid_runs])
+    if runner == "droid" and any(r.get("server_model") not in (None, *(r.get("models_used") or [])) for r in droid_runs):
+        runner = "mixed"  # the server's own record of the model disagrees with the session files
     models = sorted({m for r in droid_runs for m in (r.get("models_used") or [])})
     model = models[0] if len(models) == 1 else (", ".join(models) or None)
     audit_models = ((droid_audit or {}).get("audit") or {}).get("models_seen")

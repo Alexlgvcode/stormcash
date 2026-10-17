@@ -106,6 +106,9 @@ def to_output(result: dict, model: str | None = None, session: dict | None = Non
         "session_id": ((result.get("flag") or {}).get("agent_session_id")) if droid else None,
         "models_used": (session or {}).get("models_used") if droid else None,
         "factory_credits": (session or {}).get("factory_credits") if droid else None,
+        # From the server itself once it reports them (#81): the session's actual model and summed usage.
+        "server_model": result.get("model") if droid else None,
+        "server_usage": result.get("usage") if droid else None,
         "status": result.get("status"),
         "citations_valid": result.get("citations_valid"),
         "missing_citations": result.get("missing_citations") or [],
@@ -152,6 +155,8 @@ class Jobs:
             reason = "a Droid row has no session files to read its model from"
         elif session is not None and session["models_used"] != [self.require_model]:
             reason = f"a session used {session['models_used']}, not {self.require_model}"
+        elif result is not None and result.get("model") not in (None, self.require_model):
+            reason = f"the server says the run used {result.get('model')}, not {self.require_model}"
         totals = audit(self.sessions_dir, self.started)
         if reason is None and any(m != self.require_model for m in totals["models_seen"]):
             reason = f"the eval sessions used {totals['models_seen']}, not only {self.require_model}"

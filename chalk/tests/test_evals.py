@@ -260,6 +260,9 @@ def test_a_stormdesk_result_needs_one_named_model_on_every_row():
     core = row("trap_stockup", "none", "none", True, droid_out(dismiss, models=("droid-core",)))
     both = row("trap_stockup", "none", "none", True, droid_out(dismiss, models=("droid-core", "m")))
     unknown = row("trap_stockup", "none", "none", True, droid_out(dismiss, models=()))
+    disagree = row("trap_stockup", "none", "none", True, droid_out(dismiss, server_model="droid-core"))
+    agree = row("trap_stockup", "none", "none", True, droid_out(dismiss, server_model="m"))
+    assert summarize([disagree])["runner"] == "mixed" and summarize([agree])["runner"] == "droid"
     assert summarize([sonnet, core])["runner"] == "mixed"
     assert summarize([both])["runner"] == "mixed"
     assert summarize([unknown])["runner"] == "mixed"  # the model couldn't be read: not a StormDesk result
@@ -376,6 +379,7 @@ def run_one(jobs, seed=42, candidate_id=5):
 @pytest.mark.parametrize("models, credits, cap, trips", [
     (["claude-sonnet-5-5"], 1000, 10**6, None),
     (["droid-core"], 1000, 10**6, "not claude-sonnet-5-5"),
+    (["claude-sonnet-5-5"], 1000, 10**6, None),
     (["claude-sonnet-5-5"], 2000, 1500, "credit cap reached"),
 ])
 def test_breaker_refuses_rows_after_a_model_change_or_the_cap(tmp_path, fake_server, models, credits, cap, trips):
@@ -394,6 +398,18 @@ def test_breaker_refuses_rows_after_a_model_change_or_the_cap(tmp_path, fake_ser
         with pytest.raises(gateway.Refused):
             jobs.start(42, 6)
     assert jobs.stats()["audit"]["factory_credits"] == credits
+
+
+def test_breaker_trips_when_the_server_reports_another_model(tmp_path, fake_server):
+    server_url, _, state = fake_server
+    write_session(tmp_path / "-eval", SID, ["m"], 10)
+    state["run"] = {**RUN, "runner": "droid", "flag": {"agent_session_id": SID}, "model": "droid-core",
+                    "usage": {"factory_credits": 10}}
+    jobs = gateway.Jobs({42: server_url}, "m", require_model="m", max_credits=10**6,
+                        sessions_dir=str(tmp_path / "-eval"), sessions_root=str(tmp_path))
+    done = run_one(jobs)
+    assert "server says the run used droid-core" in jobs.tripped
+    assert json.loads(done["output"])["_run"]["server_usage"] == {"factory_credits": 10}
 
 
 def test_breaker_trips_on_a_fallback_or_a_missing_session(tmp_path, fake_server):
