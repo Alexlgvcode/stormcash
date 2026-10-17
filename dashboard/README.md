@@ -4,7 +4,7 @@ React + Vite + TypeScript + Tailwind dashboard (WS3, reviewer B): Accounts, Case
 
 - **Spec:** §18
 - **Done when:** the full core demo runs with only dashboard clicks + phones, and every tab survives a page reload.
-- **Built so far:** the sidebar (tabs, Demo mode, connection dot, clock, Reset demo); the Accounts tab (live Nessie balances that animate on change, Nessie call log, Ledger balanced ✓, Nessie queued counter, simulated town totals); the Cases tab and proof page; the Town tab (map, relay paths, and sliders over a quick in-memory re-sim, all labelled simulated); the Evals tab; the Droid tab (`#droid`, spec §18.7: Droid's stored runs, their tool calls, totals per job and the guardrails that fired).
+- **Built so far:** the top navigation bar (tabs, Demo mode, connection dot, clock, Reset demo), in the bank style of the approved mockup (#93); the Accounts tab (live Nessie balances that animate on change, Nessie call log, Ledger balanced ✓, Nessie queued counter, simulated town totals); the Cases tab and proof page; the Town tab (map, relay paths, and sliders over a quick in-memory re-sim, all labelled simulated); the Evals tab; the Droid tab (`#droid`, spec §18.7: Droid's stored runs, their tool calls, totals per job and the guardrails that fired).
 
 ## Run
 
