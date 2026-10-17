@@ -43,13 +43,15 @@ flowchart LR
 - iPhones only exchange data while the app is open.
 - Phones share pseudonymous certificate ids, amounts and running totals, never names. Payments relayed for settlement name the shop they paid; production would encrypt relayed bundles to the server's key.
 - The 40-shop town around our 3 phones is **simulated** and labelled "simulated" everywhere; its money never touches Nessie. Weather alerts we replay are labelled "replayed".
-- **StormDesk costs Factory credits.** On the seeded town a hard-case investigation took 12,000 to 17,000 credits and a shop triage 63,000 (`claude-sonnet-5-5`). Each run stores its model, tokens and credits, shown next to the Droid badge. We run Droid on the cases an operator opens (`STORMDESK_RUNNER=droid STORMDESK_AUTO=0`). Everything else, and any run Droid can't make (no credits, no CLI), goes through a deterministic stand-in that applies the rules-only baseline. It is labelled "Fake runner · rules only" on every screen and in every stored record, and is never presented as an agent's judgement.
+- **StormDesk costs Factory credits.** On the seeded town a hard-case investigation took 12,000 to 17,000 credits and a shop triage 43,000 to 70,000 (`claude-sonnet-5-5`). Each run stores its model, tokens and credits, shown next to the Droid badge. We run Droid on the cases an operator opens (`STORMDESK_RUNNER=droid STORMDESK_AUTO=0`). Everything else, and any run Droid can't make (no credits, no CLI), goes through a deterministic stand-in that applies the rules-only baseline. It is labelled "Fake runner · rules only" on every screen and in every stored record, and is never presented as an agent's judgement.
 - **Droid disagrees with our planted label.** On seed 42 it dismissed the Corner Store, which the simulator plants as a colluder, twice:
   - The first time the shop had taken a single pool-funded payment, already covered by a hard case. So we changed the scenario: the colluder now takes pool money from several cheaters while silent (#82).
   - On the new town, Droid read the four cheaters' re-spends as the shop being their victim. It flagged the pattern for the operator to watch but proposed no action.
   - That second answer also cited one id it had mis-copied (40 right characters, then made-up ones), so the citation check stored it as invalid and it can't be approved.
+  - With prompt v2 (next point), it flagged the shop. It weighed the shop's silence, the 67% pool-funded share and the 4 caught cheater certificates together, proposed holding pool payouts, and noted that the neighbour baseline was thin. Citations valid, 70,319 credits.
 
-  We show both answers as they are.
+  We show every answer as it is.
+- **StormDesk's prompt is v2, and its eval is not a blind holdout.** The first real eval (v1, 43 rows) caught 2 of 23 real cases. It dismissed stolen phones because their escrow covered every cent, and colluding shops as the cheaters' victims. We then added general principles to the prompt (a drained escrow is the resident's loss; weigh a shop's silence, pool-funded share and number of cheater certificates together). Those principles were written after reading v1's errors on that same dataset, so a v2 score on it is not a blind test. Each run records its prompt version.
 
 ## Run it
 

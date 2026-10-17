@@ -19,7 +19,7 @@ from psycopg.types.json import Jsonb
 from ..db import one, scalar
 from ..jsonutil import jsonable
 from .citations import citations_valid
-from .prompt import investigate_prompt, respond_prompt, triage_prompt
+from .prompt import PROMPT_VERSION, investigate_prompt, respond_prompt, triage_prompt
 from .runner import FakeRunner, Job, RunOutcome, Steps, make_runner
 
 DROID_COOLDOWN_S = 300  # after Droid couldn't run, use the fake runner this long before trying again
@@ -79,7 +79,8 @@ def _store(deps, job: Job, run_id: int, outcome: RunOutcome, steps: Steps, fallb
         transcript = {"runner": outcome.runner, "steps": steps.transcript, "missing_citations": missing,
                       "error": outcome.error, "fallback_from_droid": fallback, "model": outcome.model,
                       "model_requested": outcome.model_requested, "usage": outcome.usage,
-                      "fallback_usage": fallback_usage}
+                      "fallback_usage": fallback_usage,
+                      "prompt_version": PROMPT_VERSION if outcome.runner == "droid" else None}
         run = one(
             conn,
             """UPDATE stormdesk_runs SET runner = %s, status = %s, output = %s, citations_valid = %s, transcript = %s,
@@ -90,6 +91,7 @@ def _store(deps, job: Job, run_id: int, outcome: RunOutcome, steps: Steps, fallb
         result = {"run_id": run_id, "runner": outcome.runner, "status": status, "citations_valid": valid,
                   "missing_citations": missing, "error": outcome.error, "fallback_from_droid": fallback,
                   "model": outcome.model, "model_requested": outcome.model_requested, "usage": outcome.usage,
+                  "prompt_version": transcript["prompt_version"],
                   "output": output.model_dump() if output else None}
         if job.kind == "triage":
             result["flag"] = _save_flag(conn, job, output, valid, outcome, run, transcript)

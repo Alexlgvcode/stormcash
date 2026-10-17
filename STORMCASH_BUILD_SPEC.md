@@ -13,6 +13,7 @@
 > **v4.9 (Oct 17):** first live Droid runs (#27): run cost recorded per run, the citation check accepts a hard case's `proof_item_id`, the prompt says evidence ids name records, not field values (§14.2, §14.4, §14.7). Marked **[v4.9]**.
 > **v4.10 (Oct 17):** the colluder scenario now takes pool money that the hard rules can't deny (3 cheaters' re-spends per colluder, §16.4), after the first live triage dismissed a colluder whose only pool payment was already covered. Marked **[v4.10]**.
 > **v4.11 (Oct 17):** first real StormDesk Chalk Evaluation (#33, §15.3): the eval dataset is rebuilt from the v4.10 simulator (43 rows), and a Droid guard checks every row's model and credits from the Droid session files, stops the run on a model switch or at a credit cap, and never saves a mixed or partial run as StormDesk. Marked **[v4.11]**.
+> **v4.12 (Oct 17):** StormDesk prompt v2 (§14.4): how to weigh soft evidence, written after reading v1's eval errors, so not a blind holdout. Marked **[v4.12]**.
 > **Builds on:** "StormCash: The 10/10 Build" v3 (Oct 16, Alexandre Lugovoi, on Brian Maina's Oct 11 draft). Everything new since v3 is marked **[v4]**.
 
 ---
@@ -1229,7 +1230,23 @@ Facts you must respect:
   hashes, signatures, keys) are not ids: mention them in the text, not in evidence_ids.
 - Prefer dismissing with a clear reason over flagging when the evidence is weak.
 - Be brief. The operator reads your summary in 10 seconds.
+
+**[v4.12]** How to weigh soft evidence (prompt v2):
+- Exposure is money someone loses, not only the guarantee pool's. A resident's escrow drained by
+  someone else is the resident's loss: "every cent came from escrow" does not mean "no exposure".
+- A hard case settles the cheating certificate, not the people around it. Don't treat "covered by
+  escrow" or "covered by a hard case" as no exposure: ask who kept the money and whether the
+  pattern goes on.
+- A certificate that sat idle, then spends most of its cap at several shops within minutes,
+  outside its home region, points to a stolen phone, whatever funds the payments.
+- A shop reached by one or two cheaters while it keeps syncing normally is usually their victim.
+  A shop that goes quiet relative to its neighbors while accepting pool-funded payments from
+  several certificates the hard rules caught fits a shop working with them. Weigh silence,
+  pool-funded share and the number of distinct cheater certificates together; no single one
+  decides.
 ```
+
+**[v4.12] Prompt v2 is not a blind holdout.** The first real eval (#33, PR #85, v1, `claude-sonnet-5-5`, 43 rows) caught 2 of 23 real cases and dismissed every stolen phone ("all from escrow, so no exposure") and every colluder ("the cheaters' victim"). We wrote the v2 lines above after reading those errors on that same dataset. They are general principles, with no seed, shop, scenario or trap names, but a v2 score on that dataset still isn't a blind test. Each Droid run stores `prompt_version` in its transcript.
 
 ### 14.5 Output schemas
 
