@@ -37,14 +37,14 @@ The Info.plist keys from §6.2 (local network, Bonjour `_stormcash._tcp/_udp`, B
 
 Hidden demo menu: long-press the StormCash logo.
 
-## Protocol choices the Python twin must match
+## Protocol
 
-These are decisions the spec leaves open. Keep `server/stormcash/protocol/` in line, or change both.
+`src/protocol/` mirrors `server/stormcash/protocol/` and must reproduce `spec/vectors.json` byte for byte (`npm test` runs every vector). The protocol is frozen (spec §7–§10, v4.3); change both libraries, the spec and the vectors together.
 
-- **JSON short keys not given in the spec:** DLOG bodies use `th` tag_hash, `ci` cert_id, `hi` held_ids, `ck` check, `cid` contact_id, `pp` peer_pub, `si` sent_ids, `ri` recv_ids, `so` sent_overflow, `ro` recv_overflow. RENEW uses `ci`, `ch` chain_head, `k`, `ts`. RCPT uses `ts`, `ids`. POLICY uses `pv`, `ia`, `fc`, `ml`.
-- **API request signature:** `X-SC-Sig` is over `canonical(API, path, sha256_hex(body), ts)`, with the path rendered as a string field (§7.2 rules: ≤ 48 chars, no `|`).
-- **REQ expiry:** both the payer and C4 accept `req_expires_at > now − 600` (the same 10-minute clock tolerance).
-- **C6:** stored tags that are byte-identical to the presented tag are ignored, because the payer's own phone may gossip it first; replays are caught by C4 (the request closes on accept). Stored tags only count if they verify against the presented cert's `holder_pub`. A counter-1 tag whose `prev_hash` isn't `GENESIS` fails C6 as `BROKEN_LINK`; counter 1 with `cum ≠ amount` fails C5.
-- **CONTACT ids:** `sent_ids` / `recv_ids` include PAY items as well as TAG and PROOF, since a PAY has the same id as its tag (needed for R5 b).
-- **Sync HELLO** has an optional `pay` list (id8 of items held as a full PAY), so a phone holding only the bare TAG still fetches the PAY the server needs.
-- **Path:** the phone that creates an item adds itself as the first hop; each receiver appends `[short_id, ts]`.
+App-level choices outside the frozen protocol:
+
+- The payer does not gossip its own TAG: the shop must receive the PAY first, or C6 refuses it as `COUNTER_NOT_NEW`. The shop's PAY travels on by store-and-forward.
+- Bare gossiped TAGs arrive without their cert, so before C6 the merchant keeps only stored tags that verify under the presented cert's `holder_pub` (§8.2 assumes verified stored tags).
+- With no open request, a scanned PAY is refused as C4 `WRONG_NONCE`.
+- Sync HELLO carries `pays` (§10.3) and an optional `lb` demo label.
+- Charge takes whole dollars only (Nessie moves whole dollars, §11.4).
