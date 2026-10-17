@@ -323,9 +323,11 @@ def test_list_scores_are_averaged_and_empty_lists_skipped():
 
 # The committed dataset ---------------------------------------------------------------------------
 
-def test_dataset_rows_match_spec_columns_and_meta():
-    rows = [json.loads(line) for line in (EVALS / "dataset" / "stormdesk_triage.jsonl").read_text().splitlines()]
-    meta = json.loads((EVALS / "dataset" / "meta.json").read_text())
+@pytest.mark.parametrize("rows_file, meta_file", [("stormdesk_triage.jsonl", "meta.json"),
+                                                  ("stormdesk_triage_heldout.jsonl", "meta_heldout.json")])
+def test_dataset_rows_match_spec_columns_and_meta(rows_file, meta_file):
+    rows = [json.loads(line) for line in (EVALS / "dataset" / rows_file).read_text().splitlines()]
+    meta = json.loads((EVALS / "dataset" / meta_file).read_text())
     assert len(rows) == meta["rows"] and sum(r["honest_subject"] for r in rows) == meta["honest_rows"]
     assert sorted({r["seed"] for r in rows}) == sorted(s["seed"] for s in meta["seeds"])
     reserved = {"output", "trace"}
@@ -489,3 +491,22 @@ def test_every_row_must_come_from_the_expected_prompt_version():
     assert run([v2, v1])["runner"] == "mixed"
     assert run([v1], expect=2)["runner"] == "mixed"
     assert json.loads(gateway.to_output({**RUN, "runner": "droid", "prompt_version": 2}))["_run"]["prompt_version"] == 2
+
+
+def test_heldout_seeds_never_overlap_the_main_dataset():
+    import run_eval
+
+    main, main_sha = run_eval.load_rows()
+    held, _ = run_eval.load_rows("heldout")
+    assert main_sha == __import__("hashlib").sha256((EVALS / "dataset" / "stormdesk_triage.jsonl").read_bytes()).hexdigest()
+    assert {r["seed"] for r in held} == {1, 2, 3} and not {r["seed"] for r in held} & {r["seed"] for r in main}
+    subset, subset_sha = run_eval.load_rows("heldout", [1, 2])
+    assert {r["seed"] for r in subset} == {1, 2} and subset_sha != run_eval.load_rows("heldout")[1]
+
+
+def test_heldout_results_name_their_own_eval():
+    rules = task_rules_only.rules_only("cap_drain", "s", json.dumps({"spent_15m_cents": 4000}))
+    s = results.summarize([row("stolen_phone", "cap_drain", "freeze_cert", False, rules, kind="cap_drain")],
+                          chalk={}, dataset={}, mode="chalk_task", git_sha=None, now=0,
+                          eval_name="stormdesk-triage-heldout")
+    assert s["eval"] == "stormdesk-triage-heldout"

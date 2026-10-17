@@ -1,0 +1,50 @@
+{
+  "name": "stormdesk-triage-heldout",
+  "note": "One row per detector candidate from simulated towns (spec \u00a715.3). Every subject is simulated.",
+  "rows": 30,
+  "honest_rows": 16,
+  "seeds": [
+    {
+      "seed": 1,
+      "database": "stormcash_eval_1",
+      "start": 1791936000,
+      "hours": 72,
+      "candidates": 11,
+      "labelled_subjects": 32
+    },
+    {
+      "seed": 2,
+      "database": "stormcash_eval_2",
+      "start": 1791936000,
+      "hours": 72,
+      "candidates": 9,
+      "labelled_subjects": 32
+    },
+    {
+      "seed": 3,
+      "database": "stormcash_eval_3",
+      "start": 1791936000,
+      "hours": 72,
+      "candidates": 10,
+      "labelled_subjects": 32
+    }
+  ],
+  "scenarios": {
+    "colluder": 5,
+    "dark_region": 3,
+    "stolen_phone": 6,
+    "trap_quiet_region": 3,
+    "trap_stockup": 8,
+    "trap_victim_shop": 5
+  },
+  "detector_misses": [
+    {
+      "seed": 2,
+      "subject_id": "9900dbabfd058d0ad741dfa89b66f400",
+      "name": "Downtown Pharmacy",
+      "scenario": "colluder",
+      "expected_kind": "merchant_silence"
+    }
+  ],
+  "built_from_git_sha": "5a617e6850b3304e19b61249e55bf36bae37a3cb"
+}

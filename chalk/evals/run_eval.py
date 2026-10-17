@@ -30,17 +30,23 @@ import results
 
 EVALS = Path(__file__).resolve().parent
 STATE = EVALS / ".state"
-DATASET_FILE = EVALS / "dataset" / "stormdesk_triage.jsonl"
-META_FILE = EVALS / "dataset" / "meta.json"
+DATASETS = {  # as in build_dataset.py: name -> (Chalk dataset / eval name, rows file, meta file)
+    "main": ("stormdesk-triage", "stormdesk_triage.jsonl", "meta.json"),
+    "heldout": ("stormdesk-triage-heldout", "stormdesk_triage_heldout.jsonl", "meta_heldout.json"),
+}
 RESULTS = EVALS / "results"
 UPLOADS = STATE / "chalk_datasets.json"
 SUITE = "StormCash"
 RUN_TIMEOUT_S = 3600
 
 
-def load_rows() -> tuple[list[dict], str]:
-    raw = DATASET_FILE.read_bytes()
-    return [json.loads(line) for line in raw.decode().splitlines() if line.strip()], hashlib.sha256(raw).hexdigest()
+def load_rows(dataset: str = "main", seeds: list[int] | None = None) -> tuple[list[dict], str]:
+    """The dataset's rows (only `seeds`, if given) and the sha256 of exactly those lines."""
+    lines = [line for line in (EVALS / "dataset" / DATASETS[dataset][1]).read_text().splitlines() if line.strip()]
+    if seeds is not None:
+        lines = [line for line in lines if json.loads(line)["seed"] in seeds]
+    raw = "".join(line + "\n" for line in lines).encode()
+    return [json.loads(line) for line in lines], hashlib.sha256(raw).hexdigest()
 
 
 def git_sha() -> str | None:
@@ -111,13 +117,19 @@ def gateway_stats() -> dict | None:
 
 
 def save_results(evaluation, run, droid_audit: dict | None = None) -> Path:
-    label, label_note = evaluation.metadata.get("label"), evaluation.metadata.get("label_note")
     """Read a succeeded run's result dataset and write its results file (named by when the run completed)."""
+    label, label_note = evaluation.metadata.get("label"), evaluation.metadata.get("label_note")
+    dataset = evaluation.metadata.get("dataset") or "main"
+    eval_name, _, meta_file = DATASETS[dataset]
     if run.status != chalkcompute.EvaluationRunStatus.SUCCEEDED or run.result_dataset is None:
         raise SystemExit(f"run {run.id} ended {run.status.name}: {run.error_message} (no results saved)")
     rows = named_scores(chalkcompute.DatasetClient().read(run.result_dataset).to_pylist(), evaluation)
     rows.sort(key=lambda r: (r["seed"], r["candidate_id"]))
-    meta = json.loads(META_FILE.read_text())
+    meta = json.loads((EVALS / "dataset" / meta_file).read_text())
+    seeds = evaluation.metadata.get("seeds") or [m["seed"] for m in meta["seeds"]]
+    scenarios: dict[str, int] = {}
+    for r in rows:
+        scenarios[r["label_scenario"]] = scenarios.get(r["label_scenario"], 0) + 1
     mode, dataset_sha = evaluation.metadata.get("mode"), evaluation.metadata.get("dataset_sha256")
     now = int(run.completed_at.timestamp()) if run.completed_at else int(time.time())
     summary = results.summarize(
@@ -132,17 +144,19 @@ def save_results(evaluation, run, droid_audit: dict | None = None) -> Path:
             "created_at": run.created_at.isoformat() if run.created_at else None,
             "completed_at": run.completed_at.isoformat() if run.completed_at else None,
         },
-        dataset={"name": meta["name"], "rows": len(rows), "honest_rows": meta["honest_rows"],
-                 "seeds": [s["seed"] for s in meta["seeds"]], "scenarios": meta["scenarios"],
-                 "detector_misses": meta["detector_misses"], "sha256": dataset_sha},
+        dataset={"name": meta["name"], "rows": len(rows), "honest_rows": sum(r["honest_subject"] for r in rows),
+                 "seeds": seeds, "scenarios": dict(sorted(scenarios.items())),
+                 "detector_misses": [m for m in meta["detector_misses"] if m["seed"] in seeds], "sha256": dataset_sha},
+        eval_name=eval_name,
         mode=mode, git_sha=(run.metadata or {}).get("git_sha") or None, now=now, droid_audit=droid_audit,
         label=label, label_note=label_note, expect_prompt_version=evaluation.metadata.get("expect_prompt_version"),
     )
     RESULTS.mkdir(exist_ok=True)
     stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime(now))
     slug = re.sub(r"[^a-z0-9]+", "-", label.lower()).strip("-") if label else ""
-    path = RESULTS / (f"{stamp}-{summary['runner']}{'-local' if mode == 'run_local' else ''}{'-' + slug if slug else ''}"
-                      f"{'' if summary['complete'] else '-incomplete'}.json")
+    heldout = f"-heldout-seeds-{'-'.join(map(str, seeds))}" if dataset == "heldout" else ""
+    path = RESULTS / (f"{stamp}-{summary['runner']}{'-local' if mode == 'run_local' else ''}{heldout}"
+                      f"{'-' + slug if slug else ''}{'' if summary['complete'] else '-incomplete'}.json")
     path.write_text(json.dumps(summary, indent=2) + "\n")
     print_summary(summary, path)
     return path
@@ -168,6 +182,9 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("task", choices=("rules_only", "stormdesk", "resummarize"))
     ap.add_argument("run_id", nargs="?", help="resummarize: rewrite this run's results file from its result dataset")
+    ap.add_argument("--dataset", choices=DATASETS, default="main",
+                    help="heldout: the held-out seeds (README), a separate dataset and results section")
+    ap.add_argument("--seeds", type=int, nargs="+", help="only these seeds' rows (a separate dataset revision)")
     ap.add_argument("--audit-from", type=Path,
                     help="resummarize: keep the Droid audit the gateway recorded at run time, from that run's file")
     ap.add_argument("--label", help='a name for this version of the agent, e.g. "prompt v2" (kept in the results)')
@@ -180,7 +197,9 @@ def main() -> None:
         audit = json.loads(args.audit_from.read_text()).get("droid_audit") if args.audit_from else None
         save_results(chalkcompute.Evaluation.from_id(run.evaluation_id), run, droid_audit=audit)
         return
-    rows, sha = load_rows()
+    rows, sha = load_rows(args.dataset, args.seeds)
+    chalk_dataset = DATASETS[args.dataset][0]
+    print(f"{chalk_dataset}: {len(rows)} rows from seeds {sorted({r['seed'] for r in rows})}", flush=True)
 
     if args.task == "stormdesk":
         stack_file = STATE / "stack.json"
@@ -204,12 +223,15 @@ def main() -> None:
         task = task_module.rules_only
         name = "StormDesk triage: rules-only baseline"
         metadata = {"configured_runner": "rules_only"}
+    if args.dataset == "heldout":
+        name += f" · held-out seeds {', '.join(map(str, args.seeds or sorted({r['seed'] for r in rows})))}"
+    metadata |= {"dataset": args.dataset, "seeds": args.seeds or sorted({r["seed"] for r in rows})}
 
     import eval_scorers
 
     scorers = eval_scorers.RULES_ONLY_SCORERS if args.task == "rules_only" else eval_scorers.SCORERS
 
-    ref = upload("stormdesk-triage", rows, sha)
+    ref = upload(chalk_dataset, rows, sha)
     run_and_save(name=name, dataset_ref=ref, task=task, scorers=scorers, mode="chalk_task",
                  dataset_sha=sha, metadata=metadata)
 

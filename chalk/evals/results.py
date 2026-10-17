@@ -94,7 +94,7 @@ def _score(row: dict, name: str) -> float | None:
 def summarize(rows: list[dict], *, chalk: dict, dataset: dict, mode: str, git_sha: str | None,
               now: int, scorers: list[str] = SCORERS, droid_audit: dict | None = None,
               label: str | None = None, label_note: str | None = None,
-              expect_prompt_version: int | None = None) -> dict:
+              expect_prompt_version: int | None = None, eval_name: str = "stormdesk-triage") -> dict:
     """The results file for one run. `rows` are the result dataset's rows (dicts); `scorers` are the
     evaluation's scorers (the rules-only evaluation has no citations-valid: it cites nothing)."""
     parsed = []
@@ -229,7 +229,7 @@ def summarize(rows: list[dict], *, chalk: dict, dataset: dict, mode: str, git_sh
 
     return {
         "schema_version": 1,
-        "eval": "stormdesk-triage",
+        "eval": eval_name,
         "runner": runner,
         "runner_label": display,
         "label": label,
