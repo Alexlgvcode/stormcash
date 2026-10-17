@@ -113,6 +113,10 @@ Every function scorer gives 0 to an output that isn't a Flag. `summary-quality` 
 uv run python evals/run_eval.py stormdesk --label "prompt v2" --label-note "written after reading v1's errors on this dataset: not a blind holdout"
 ```
 
+## Held-out seeds (chosen Oct 17, before any held-out row was built or run)
+
+**Seeds 1, 2 and 3**, the same fixed T0 and 72 h as the main dataset. They were chosen before their towns were built and before any prompt-v2 result was seen. No dataset, simulator output, or StormDesk prompt (v1 or v2) has ever used them, so prompt v2 was written without seeing their rows. Their rows are a separate dataset (`dataset/stormdesk_triage_heldout.jsonl`), and their results are a separate section ("held-out seeds"), never mixed into the main comparison. If the credit cap can't cover all three, the run uses seeds in the order 1, 2, 3, decided before it starts.
+
 ## Results file (for the Evals tab, #38)
 
 ```jsonc
