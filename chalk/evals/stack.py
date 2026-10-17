@@ -154,7 +154,7 @@ def up(args) -> None:
         **base_env,
         "SERVER_SIGNING_KEY_PEM": KEY_FILE.read_text(),
         "NESSIE_DISABLED": "1", "PHOTON_DISABLED": "1", "CHALK_DISABLED": "1",
-        "BACKGROUND_TASKS": "0", "STORMDESK_AUTO": "0", "DEMO_MODE": "1",
+        "BACKGROUND_TASKS": "0", "STORMDESK_AUTO": "0", "STORMDESK_REVIEW": "0", "DEMO_MODE": "1",
         "STORMDESK_RUNNER": args.runner, "STORMDESK_MODEL": args.model or "",
         "FACTORY_API_KEY": factory_key(args.factory_env) if args.runner == "droid" else "",
     }
