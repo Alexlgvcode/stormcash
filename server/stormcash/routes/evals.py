@@ -7,7 +7,10 @@ each file's claim before it fills a column (§0 rule 3):
 
 - rules_only: runner "rules_only".
 - stormdesk: runner "droid", an agent result, every row answered by Droid,
-  and no fallback to the fake runner.
+  no fallback to the fake runner, a complete run (no task errors, the eval's
+  Droid guard never stopped it) and one named model on every row.
+
+Either column also needs as many result rows as the dataset has.
 
 Anything else (fake or mixed runners) is listed as a pipeline check, with its
 run id and time but none of its numbers.
@@ -34,14 +37,21 @@ def column(run: dict) -> tuple[str | None, str | None]:
     """The comparison column a results file may fill, or None and why not."""
     claimed, runner = run.get("table_column"), run.get("runner")
     rows = (run.get("dataset") or {}).get("rows")
+    if claimed in ("rules_only", "stormdesk") and rows != len(run.get("rows") or []):
+        return None, "its rows don't match the dataset's row count"
     if claimed == "rules_only" and runner == "rules_only":
         return "rules_only", None
     if claimed == "stormdesk":
         fallbacks = (run.get("metrics") or {}).get("fallback_from_droid")
+        models = run.get("models_seen")
         if runner != "droid" or run.get("is_agent_result") is not True:
             return None, f"runner is {runner!r}, not Droid"
         if run.get("runners_seen") != {"droid": rows} or fallbacks != 0:
             return None, "some rows weren't answered by Droid"
+        if run.get("complete") is not True:
+            return None, "an incomplete run (task errors, or the Droid guard stopped it)"
+        if not models or len(models) != 1 or models[0] != run.get("model"):
+            return None, f"not one named model on every row ({models})"
         return "stormdesk", None
     if claimed is None:
         return None, f"{run.get('runner_label') or runner}: a pipeline check, not a score"
