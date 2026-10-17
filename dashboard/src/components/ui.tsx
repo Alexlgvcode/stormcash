@@ -1,7 +1,7 @@
 // The dashboard's shared building blocks (issue #93): page header, underlined
 // tabs, sections (a heading over a hairline), plain tables, status pills and
 // buttons. No cards: the only rounded things are pills (4px) and buttons (6px).
-import type { ButtonHTMLAttributes, ReactNode, TdHTMLAttributes, ThHTMLAttributes } from "react";
+import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, TdHTMLAttributes, ThHTMLAttributes } from "react";
 import { Icon, type IconName } from "./Icon";
 
 export type Tone = "success" | "danger" | "warning" | "neutral" | "agents";
@@ -16,7 +16,7 @@ const PILL: Record<Tone, string> = {
 
 export function Pill({ tone, title, children }: { tone: Tone; title?: string; children: ReactNode }) {
   return (
-    <span title={title} className={`inline-flex items-center rounded-pill px-2 py-0.5 text-th font-medium ${PILL[tone]}`}>
+    <span title={title} className={`inline-flex items-center whitespace-nowrap rounded-pill px-2 py-0.5 text-th font-medium ${PILL[tone]}`}>
       {children}
     </span>
   );
@@ -67,7 +67,7 @@ export function Tabs<T extends string>({
 /** A heading over a thin rule. */
 export function Section({ title, right, children }: { title: string; right?: ReactNode; children: ReactNode }) {
   return (
-    <section className="mt-10 first:mt-0">
+    <section>
       <div className="flex flex-wrap items-end justify-between gap-3 border-b border-rule pb-2">
         <h2 className="text-section font-medium text-heading">{title}</h2>
         {right}
@@ -136,15 +136,61 @@ export function StatusItem({ tone, children }: { tone: Tone; children: ReactNode
 
 export function Button({
   primary = false,
+  small = false,
   className = "",
   ...rest
-}: ButtonHTMLAttributes<HTMLButtonElement> & { primary?: boolean }) {
+}: ButtonHTMLAttributes<HTMLButtonElement> & { primary?: boolean; small?: boolean }) {
   return (
     <button
       {...rest}
-      className={`rounded-button px-3.5 py-1.5 text-ui font-medium disabled:opacity-60 ${
-        primary ? "bg-accent text-white hover:bg-accent/90" : "border border-rule text-ink hover:bg-accent-tint"
-      } ${className}`}
+      className={`whitespace-nowrap rounded-button font-medium disabled:opacity-60 ${
+        small ? "px-2.5 py-1 text-th" : "px-3.5 py-1.5 text-ui"
+      } ${primary ? "bg-accent text-white hover:bg-accent/90" : "border border-rule bg-page text-ink hover:bg-accent-tint"} ${className}`}
     />
   );
+}
+
+/** A summary strip: label over value, items split by vertical hairlines, ruled above and below. */
+export function Strip({ items }: { items: { label: string; value: ReactNode }[] }) {
+  return (
+    <div className="flex flex-wrap gap-y-3 border-y border-rule py-3">
+      {items.map((it, i) => (
+        <div key={it.label} className={i === 0 ? "pr-6" : "border-l border-rule px-6"}>
+          <div className="text-th text-secondary">{it.label}</div>
+          <div className="text-heading">{it.value}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** label · value rows separated by hairlines (a definition list without boxes). */
+export function Facts({ rows }: { rows: [string, ReactNode][] }) {
+  return (
+    <dl>
+      {rows.map(([label, value]) => (
+        <div key={label} className="grid grid-cols-[minmax(8rem,auto)_1fr] gap-6 border-b border-rule py-2.5">
+          <dt className="text-secondary">{label}</dt>
+          <dd className="min-w-0 break-words">{value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+/** A small text input in the house style. */
+export function TextInput(props: InputHTMLAttributes<HTMLInputElement>) {
+  return (
+    <input
+      {...props}
+      className={`rounded-button border border-rule px-3 py-1.5 text-ui text-ink placeholder:text-secondary focus:border-accent focus:outline-none ${
+        props.className ?? ""
+      }`}
+    />
+  );
+}
+
+/** "Loading…", an error, or an empty state, in plain secondary text. */
+export function Note({ tone = "neutral", children }: { tone?: "neutral" | "danger"; children: ReactNode }) {
+  return <p className={tone === "danger" ? "text-danger" : "text-secondary"}>{children}</p>;
 }

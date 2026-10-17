@@ -21,6 +21,7 @@
   --color-success-bg: #d7f7c2;
   --color-danger: #b3093c;
   --color-danger-bg: #ffe7f2;
+  --color-danger-tint: #fff5f8; /* a conflicting row in a table */
   --color-warning: #a35a00;
   --color-warning-bg: #fff4e5;
   --color-neutral: #545969;

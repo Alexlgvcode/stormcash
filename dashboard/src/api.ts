@@ -166,6 +166,8 @@ export interface RelayPath {
   hops: number;
   path: { device: string; at: number; name: string; kind: string; simulated?: boolean }[];
   uploaded_by: string | null;
+  paid_at?: number;
+  received_at?: number;
   latency_s: number;
 }
 

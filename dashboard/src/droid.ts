@@ -160,16 +160,17 @@ export const JOB_LABEL: Record<string, string> = {
   author: "Author",
 };
 
-export const OUTCOME_STYLE: Record<Outcome, string> = {
-  valid: "bg-emerald-500/15 text-emerald-300",
-  invalid_citation: "bg-rose-500/15 text-rose-300",
-  rerun_rejected: "bg-rose-500/15 text-rose-300",
-  structured_output_failed: "bg-rose-500/15 text-rose-300",
-  failed: "bg-rose-500/15 text-rose-300",
-  fallback: "bg-amber-500/15 text-amber-300",
-  fake: "bg-amber-500/15 text-amber-300",
-  running: "bg-sky-500/15 text-sky-300",
-  unfinished: "bg-slate-500/20 text-slate-300",
+/** Each outcome's pill tone: green valid, red rejected or failed, amber for the fake runner. */
+export const OUTCOME_TONE: Record<Outcome, "success" | "danger" | "warning" | "neutral" | "agents"> = {
+  valid: "success",
+  invalid_citation: "danger",
+  rerun_rejected: "danger",
+  structured_output_failed: "danger",
+  failed: "danger",
+  fallback: "warning",
+  fake: "warning",
+  running: "agents",
+  unfinished: "neutral",
 };
 
 const n = (value: number) => Math.round(value).toLocaleString("en-US");
