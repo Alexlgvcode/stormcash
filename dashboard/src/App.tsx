@@ -1,4 +1,4 @@
-// One page, four tabs, persistent header (spec §18). The tab lives in the URL
+// One page, five tabs, persistent header (spec §18). The tab lives in the URL
 // hash so a reload lands on the same tab. `#intro` (or the I key) lays the
 // opening slide over the dashboard; the live stream stays connected under it.
 import { useEffect, useState } from "react";
@@ -8,6 +8,7 @@ import { EventsProvider } from "./events";
 import { ProofPage } from "./proof/ProofPage";
 import { AccountsTab } from "./tabs/Accounts";
 import { CasesTab } from "./tabs/Cases";
+import { DroidTab } from "./tabs/Droid";
 import { EvalsTab } from "./tabs/Evals";
 import { TownTab } from "./tabs/Town";
 
@@ -16,6 +17,7 @@ const TABS = [
   { id: "cases", label: "Cases" },
   { id: "town", label: "Town" },
   { id: "evals", label: "Evals" },
+  { id: "droid", label: "Droid" },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
 
@@ -88,6 +90,7 @@ function Dashboard() {
           {tab === "cases" && <CasesTab />}
           {tab === "town" && <TownTab />}
           {tab === "evals" && <EvalsTab />}
+          {tab === "droid" && <DroidTab />}
         </main>
       </div>
       {intro && <Intro onClose={closeIntro} />}

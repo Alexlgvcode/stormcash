@@ -31,7 +31,7 @@ from .photon.config import load as load_photon
 from .regions import ensure_regions
 from .stormdesk.service import StormDesk, StormDeskError
 from .stormdesk.worker import Worker
-from .routes import accounts, cases, demo, evals, nessie_log, registration, stormdesk, sync, town
+from .routes import accounts, cases, demo, droid_console, evals, nessie_log, registration, stormdesk, sync, town
 
 log = logging.getLogger(__name__)
 
@@ -152,6 +152,7 @@ def create_app(
     app.include_router(demo.router)
     app.include_router(town.router)
     app.include_router(stormdesk.router)
+    app.include_router(droid_console.router)
     app.include_router(photon_routes.router)
     app.include_router(nessie_log.router)
     app.include_router(evals.router)

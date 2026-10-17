@@ -1065,6 +1065,7 @@ All JSON. Byte fields base64url. Prefix `/v1`. Auth for demo: none on reads; res
 | `POST /v1/stormdesk/run` | `{candidate_id}` or `{case_id}` | `{flag}` or `{case_file_md}` (sync; used by evals) | WS5 |
 | `GET /v1/stormdesk/runs` / `GET /v1/stormdesk/runs/{id}` **[v4.3]** | `?case_id&candidate_id` | stored runs; one run with its full transcript for replay (§14.8). `POST /v1/stormdesk/run` needs the operator header | WS5 |
 | `GET /v1/evals` **[v4.8]** | | the saved Chalk eval runs for the Evals tab: the newest file per comparison column (full), the others as summaries (§18.5) | WS3 |
+| `GET /v1/droid/console` **[v4.16]** | `?limit=200` | read-only aggregates of the stored StormDesk runs for the Droid tab: per-run outcome, totals per job, guardrail events, harness (§18.7) | WS3 |
 | `GET /v1/town` | | regions, merchants (x, y, simulated), live dots, recent payments, uploads, alerts | WS4/WS2 |
 | `GET /v1/relay/paths` | `?limit=20` | recent payments with `path`, hops, latency. **[v4.3]** Each hop names the device (resident or merchant, from `device_short_id`) | WS2 |
 | `GET /v1/town/quick` **[v4.3]** | `?adoption&p_link&p_uplink` | the §16.6 quick re-sim: `{baseline, current, seconds}` | WS4 |
@@ -1599,7 +1600,7 @@ Photon's best voice agent prize: the same appeal flow by phone call. Only after 
 
 ## 18. Dashboard
 
-React + Vite + TS, one page with four tabs and a persistent header. Live via SSE. Big fonts: judges stand 1 m away.
+React + Vite + TS, one page with four tabs and a persistent header. Live via SSE. Big fonts: judges stand 1 m away. **[v4.16]** A fifth tab, Droid (§18.7).
 
 ### 18.1 Header
 
@@ -1642,6 +1643,18 @@ Mobile-friendly, no login. Shows the two tags, the rule, and a **Verify** button
 **[v4.3] As built.** `dashboard/src/verify.ts` rebuilds each signed string from the displayed fields with the §7.2 rules (TAG, CERT, DLOG), so the server can't show one thing and sign another; checks the CERT against the server key, both TAGs against the cert's `holder_pub`, re-checks the rule from the fields, and for MERCHANT_KNEW checks the merchant's own ACCEPT entry and that its `held_ids` list payment A. Compressed keys are decompressed in JS (WebCrypto imports raw keys uncompressed). `npm test` runs the same code against `spec/vectors.json`. WebCrypto needs a secure context, so the proof link must be HTTPS: the server serves the built dashboard (`dashboard/dist`) from the same origin as the API, the Proof QR points at `PUBLIC_BASE_URL/proof/<case_id>` (the cloudflared tunnel), and a build can bake the server key in with `VITE_SERVER_PUB` (base64url) so the page doesn't take the key from the server it is checking.
 
 **Done when:** the full core demo runs with only dashboard clicks + phones, and every tab survives a page reload.
+
+### 18.7 Droid tab (Factory add-on) [v4.16]
+
+What Droid does in the running product, at the table in seconds, from stored runs only (§0 rule 3). `GET /v1/droid/console` (`server/stormcash/routes/droid_console.py`, read-only transaction) aggregates `stormdesk_runs`:
+
+- **Per run:** job (investigate, triage, respond, review), model used and requested, prompt version, duration (`finished_at − started_at`), Factory credits, StormDesk tool calls (Droid's own `ToolSearch` counted apart), verdict, and one outcome: `valid`, `invalid_citation`, `structured_output_failed` (failed after its retry), `fallback` (Droid couldn't run, the fake runner answered), `fake` (`STORMDESK_RUNNER=fake`), `failed`, `running`, or `unfinished` (`running` for over 15 min).
+- **Totals per job** count Droid's own finished runs (valid share, mean credits and duration). Fake-runner runs, fallbacks included, are counted beside them and never in a success rate.
+- **Guardrails:** invalid citations rejected, structured output failed after the retry, fallbacks, and, once runs record them (`transcript.attempts`, `transcript.permission_denials`), structured-output retries and permission-handler denials. A guardrail no stored run records has a null count and the tab says "not recorded yet", never 0.
+- **Reviews (§14.7b):** verdict counts of valid Droid reviews; `transcript.reviewed.run_id` links a review to the run it checked.
+- **Harness:** the 11 read-only tools, the built-in tools switched off, prompt versions, the runner new jobs get now, and Droid's cool-down if one is on.
+
+The tab (`#droid`): summary tiles, Droid's runs (fake-runner runs behind a toggle, badged), a run view with its tool calls replayed step by step (the Cases tab's `StepList`), the guardrail events with links to their runs, totals per job, and runs in progress live from `stormdesk_step`. Empty state: "No StormDesk runs yet."
 
 ---
 
