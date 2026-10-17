@@ -3,6 +3,7 @@
 Balances of the real demo entities come live from Nessie (opening balance +
 deposits − withdrawals, §11.4); the ledger is shown beside them. Simulated
 entities are ledger-only and only appear as town totals.
+GET /v1/accounts/reconcile checks the ledger against Nessie's records (reconcile.py).
 """
 
 from __future__ import annotations
@@ -12,7 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import APIRouter, Request
 
-from .. import ledger
+from .. import ledger, reconcile
 from ..db import all_rows, scalar
 from ..deps import Deps
 from ..jsonutil import jsonable
@@ -92,6 +93,18 @@ def accounts_snapshot(deps: Deps) -> dict:
 @router.get("/v1/accounts")
 def get_accounts(request: Request) -> dict:
     return jsonable(accounts_snapshot(request.app.state.deps))
+
+
+@router.get("/v1/accounts/reconcile")
+def get_reconcile(request: Request) -> dict:
+    """Our ledger against Nessie's own records, per real account (§11.4a). When
+    Nessie can't be read, `last_ok_at` is the last check that read every account."""
+    state = request.app.state
+    result = reconcile.reconcile(state.deps)
+    if result["ok"]:
+        state.reconcile_last_ok_at = result["checked_at"]
+    result["last_ok_at"] = getattr(state, "reconcile_last_ok_at", None)
+    return jsonable(result)
 
 
 @router.get("/v1/health")

@@ -1,9 +1,22 @@
 // Accounts tab (spec §18.2, Capital One add-on): live Nessie balances, the
-// Nessie call log, the ledger check and the queued-payout counter.
+// reconciliation of our ledger with Nessie's records, the Nessie call log, the
+// ledger check and the queued-payout counter.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getJSON, type AccountCard, type AccountsSnapshot, type NessieCall } from "../api";
 import { useEvents } from "../events";
 import { clockTime, dollars, signedDollars } from "../format";
+import {
+  itemsOf,
+  openingNote,
+  pairsLine,
+  simulatedNote,
+  summary,
+  unreachable,
+  verdict,
+  type ReconcileAccount,
+  type Reconciliation,
+  type Tone,
+} from "../reconcile";
 
 const KIND_STYLE: Record<AccountCard["kind"], string> = {
   checking: "border-sky-500/40",
@@ -86,6 +99,162 @@ function NessieLog({ calls }: { calls: NessieCall[] }) {
           );
         })}
       </ol>
+    </section>
+  );
+}
+
+const TONE_TEXT: Record<Tone, string> = {
+  ok: "text-emerald-400",
+  diff: "text-amber-300",
+  error: "text-rose-300",
+  off: "text-slate-400",
+};
+
+function ReconcileRow({ a, checkedAt }: { a: ReconcileAccount; checkedAt: number }) {
+  const v = verdict(a);
+  const read = a.status === "reconciled" || a.status === "difference";
+  return (
+    <li className="rounded-xl bg-slate-800/50 p-4">
+      <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+        <span className="text-xl font-semibold text-white">{a.label}</span>
+        <span className={`text-xl font-bold ${TONE_TEXT[v.tone]}`}>{v.text}</span>
+        {read && (
+          <span className="ml-auto font-mono text-lg tabular-nums text-slate-300">
+            ledger expects {dollars(a.expected_cents!)} · Nessie has {dollars(a.nessie_cents!)}
+          </span>
+        )}
+      </div>
+      {a.error && <p className={`mt-1 text-base ${a.status === "error" ? "text-rose-300" : "text-slate-400"}`}>{a.error}</p>}
+      {(a.by_kind ?? []).map((k) => {
+        const { shown, more } = itemsOf(a, k.kind);
+        return (
+          <div key={k.kind} className="mt-2">
+            <div className="text-lg">
+              <span className="font-semibold text-amber-200">{k.label}</span>{" "}
+              <span className="font-mono tabular-nums text-slate-100">{signedDollars(k.cents)}</span>
+              {k.count > 1 && <span className="text-slate-400"> · {k.count} transactions</span>}
+            </div>
+            <ul className="ml-4 list-disc text-base text-slate-300">
+              {shown.map((i, n) => (
+                <li key={`${i.txn_id}-${n}`} className="break-words">
+                  {i.text}
+                </li>
+              ))}
+              {more > 0 && <li className="text-slate-500">and {more} more</li>}
+            </ul>
+          </div>
+        );
+      })}
+      {a.simulated && <p className="mt-2 text-base text-slate-400">{simulatedNote(a.simulated)}</p>}
+      {a.opening && <p className="mt-1 text-sm text-slate-500">{openingNote(a.opening)}</p>}
+      {a.fetched_at !== undefined && a.fetched_at < checkedAt - 1 && (
+        <p className="text-sm text-slate-500">Nessie records as read at {clockTime(a.fetched_at)} (cached ≤ 10 s)</p>
+      )}
+    </li>
+  );
+}
+
+function ReconcilePanel() {
+  const [result, setResult] = useState<Reconciliation | null>(null);
+  const [lastOk, setLastOk] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const inFlight = useRef(false);
+  const again = useRef(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const run = useCallback(function check() {
+    if (inFlight.current) {
+      again.current = true; // one more check once this one answers
+      return;
+    }
+    inFlight.current = true;
+    setBusy(true);
+    getJSON<Reconciliation>("/v1/accounts/reconcile")
+      .then((r) => {
+        setResult(r);
+        setError(null);
+        if (r.ok) setLastOk(r.checked_at);
+      })
+      .catch((e) => setError(String(e)))
+      .finally(() => {
+        inFlight.current = false;
+        setBusy(false);
+        if (again.current) {
+          again.current = false;
+          check();
+        }
+      });
+  }, []);
+
+  useEffect(run, [run]);
+  // Payouts and Nessie calls change what reconciles: check again, debounced.
+  useEvents(["accounts", "payment", "upload", "nessie_call"], () => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(run, 1500);
+  });
+
+  const s = result ? summary(result) : null;
+  const down = result ? unreachable({ ...result, last_ok_at: result.last_ok_at ?? lastOk }, clockTime) : null;
+  const pairs = result && result.nessie.enabled ? pairsLine(result.pairs) : null;
+  return (
+    <section className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          <h2 className="text-2xl font-semibold text-white">Reconciled with Capital One Nessie</h2>
+          <p className="text-base text-slate-400">
+            Our double-entry ledger against Nessie's own records (opening balance + completed deposits − completed
+            withdrawals), matched by the SC txn id in every Nessie description.
+          </p>
+        </div>
+        <button
+          onClick={run}
+          disabled={busy}
+          className="rounded-lg bg-sky-600 px-4 py-2 text-lg font-semibold text-white hover:bg-sky-500 disabled:opacity-60"
+        >
+          {busy ? "Checking…" : "Re-check"}
+        </button>
+      </div>
+      {error && (
+        <p className="mt-3 text-lg text-rose-300">
+          Can't reach the server: {error}
+          {lastOk !== null && ` Last successful check: ${clockTime(lastOk)}.`}
+        </p>
+      )}
+      {!result && !error && <p className="mt-3 text-lg text-slate-300">Checking…</p>}
+      {result && s && (
+        <>
+          <div className="mt-3 flex flex-wrap items-baseline gap-x-4">
+            <span className={`text-3xl font-bold ${TONE_TEXT[s.tone]}`}>{s.text}</span>
+            <span className="text-base text-slate-400">last ran {clockTime(result.checked_at)}</span>
+          </div>
+          {down && <p className="mt-2 rounded-lg bg-rose-500/10 p-3 text-lg text-rose-200">{down}</p>}
+          <ul className="mt-4 space-y-3">
+            {result.accounts.map((a) => (
+              <ReconcileRow key={a.key} a={a} checkedAt={result.checked_at} />
+            ))}
+          </ul>
+          {pairs && (
+            <div className="mt-4">
+              <div className={`text-lg font-semibold ${TONE_TEXT[pairs.tone]}`}>{pairs.text}</div>
+              <ul className="ml-4 list-disc text-base text-slate-300">
+                {result.pairs.problems.slice(0, 5).map((p) => (
+                  <li key={p.txn_id} className="break-words">
+                    {p.text}
+                  </li>
+                ))}
+                {result.pairs.problems_total > 5 && (
+                  <li className="text-slate-500">and {result.pairs.problems_total - 5} more</li>
+                )}
+              </ul>
+            </div>
+          )}
+          <p className="mt-3 text-base text-slate-400">
+            {result.simulated_town.label}: {dollars(result.simulated_town.merchant_cents)} at{" "}
+            {result.simulated_town.merchants} simulated shops, not a difference.
+          </p>
+        </>
+      )}
     </section>
   );
 }
@@ -179,6 +348,7 @@ export function AccountsTab() {
             <BalanceCard key={card.key} card={card} />
           ))}
         </div>
+        <ReconcilePanel />
         <NessieLog calls={calls} />
       </div>
       <LedgerPanel snap={snap} />

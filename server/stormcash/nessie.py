@@ -169,20 +169,33 @@ class NessieClient:
     def deposit(self, account_id: str, dollars: int, desc: str, summary: str) -> str:
         return self._record("deposits", account_id, dollars, desc, summary)
 
-    def balance_cents(self, account_id: str) -> int:
-        """Opening balance + Σ deposits − Σ withdrawals, cached ≤ 10 s (§11.4)."""
+    def account_records(self, account_id: str) -> dict:
+        """The account as Nessie holds it, cached ≤ 10 s (§11.4): `opening` (the
+        fixed `balance`, dollars), `deposits`, `withdrawals` (raw records) and
+        `fetched_at` (Unix seconds of the read). Balances and the reconciliation
+        share this cache, so the Accounts tab costs one read per account."""
         now = time.monotonic()
         with self._cache_lock:
             hit = self._balance_cache.get(account_id)
         if hit and now - hit[0] < BALANCE_CACHE_S:
             return hit[1]
-        opening = self.get_account(account_id)["balance"]
-        deposits = sum(d["amount"] for d in self.list_deposits(account_id))
-        withdrawals = sum(w["amount"] for w in self.list_withdrawals(account_id))
-        cents = round((opening + deposits - withdrawals) * 100)
+        fetched_at = int(time.time())
+        records = {
+            "opening": self.get_account(account_id)["balance"],
+            "deposits": self.list_deposits(account_id),
+            "withdrawals": self.list_withdrawals(account_id),
+            "fetched_at": fetched_at,
+        }
         with self._cache_lock:
-            self._balance_cache[account_id] = (now, cents)
-        return cents
+            self._balance_cache[account_id] = (now, records)
+        return records
+
+    def balance_cents(self, account_id: str) -> int:
+        """Opening balance + Σ deposits − Σ withdrawals, cached ≤ 10 s (§11.4)."""
+        r = self.account_records(account_id)
+        deposits = sum(d["amount"] for d in r["deposits"])
+        withdrawals = sum(w["amount"] for w in r["withdrawals"])
+        return round((r["opening"] + deposits - withdrawals) * 100)
 
 
 class MoneyMover:

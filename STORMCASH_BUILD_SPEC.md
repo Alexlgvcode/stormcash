@@ -18,6 +18,7 @@
 > **v4.14 (Oct 17):** prompt v2 evaluated complete on the 43-row dataset, and on held-out seeds fixed before the run (#100, §15.3): the held-out section on the Evals tab, the prompt-version guard, and an idempotent eval gateway. Marked **[v4.14]**.
 > **v4.15 (Oct 17):** a reviewer Droid (§14.7b): a second session tries to refute each triage Flag with the same read-only tools before a person sees it; a valid disagreement marks the flag "agents disagree" and keeps it open for a person, who still decides. `STORMDESK_REVIEW`, `POST /v1/stormdesk/review`, `flags.review` / `agents_disagree`, `stormdesk_runs.job = 'review'` (§6.3, §11.1, §12.1, §14.1, §22.4). Migration `005_stormdesk_review.sql`. Marked **[v4.15]**.
 > **v4.16 (Oct 17):** the reviewer Droid evaluated on held-out rows (§15.3, §14.7b): "v2 alone" vs "v2 + reviewer" as two Chalk Evaluations on run B's frozen outputs; a one-row-at-a-time driver that never sends a review twice. Marked **[v4.16]**.
+> **v4.17 (Oct 17):** live reconciliation of the ledger with Nessie's own records (§11.4a): `GET /v1/accounts/reconcile` and a "Reconciled with Capital One Nessie" panel on the Accounts tab (§12.1, §18.2). Balances and the check share one ≤ 10 s cache of each account's records. Marked **[v4.17]**.
 > **Builds on:** "StormCash: The 10/10 Build" v3 (Oct 16, Alexandre Lugovoi, on Brian Maina's Oct 11 draft). Everything new since v3 is marked **[v4]**.
 
 ---
@@ -1042,6 +1043,18 @@ Rules:
 - **[v4.3] Reads** (`GET`) are logged too; `GET /v1/nessie/log` hides them unless `?reads=1`, and only writes are published as `nessie_call` SSE events.
 - A payout is `executed` only when both Nessie records exist. Never fake "executed".
 
+### 11.4a Reconciliation with Nessie (`reconcile.py`) [v4.17]
+
+`GET /v1/accounts/reconcile` proves the ledger and the bank agree, per real account that has a Nessie account (each real resident's checking and escrow, each real shop, the guarantee pool), in integer cents. Read-only: it never writes to the ledger or to Nessie.
+
+- **Nessie's side:** the account's fixed `balance` (its opening) + completed deposits − completed withdrawals, from the same ≤ 10 s cache as the balances (`NessieClient.account_records`). Records whose status isn't `completed` are listed, not counted.
+- **Our side:** the opening + Σ ledger movements on the ledger accounts the Nessie account mirrors (a resident's escrow covers all their certs), leaving out simulated money. The ledger books no opening entry, so the opening is compared on its own: ours is the logged "open account" call in `nessie_calls` (request `balance`), else StormCash's opening rule (checking $500, escrow and shops $0), else, for an account opened outside this database (the pool, by `nessie_setup`), Nessie's own value, said so.
+- **Simulated money** (a txn whose other side is a simulated resident or shop, or a settlement whose payer is simulated) is shown per account as "ledger only, never sent to Nessie", never as a difference.
+- **A difference is split by txn** using the `SC <txn_id>` in each Nessie description, so the items add up to it exactly: `opening` (the two openings differ), `queued` (a `nessie_moves` row not executed yet), `half_pair` (one half recorded), `in_flight` (executed after Nessie was read), `pending_in_nessie`, `ledger_only` (not whole dollars, no pool account in Nessie, a `ledger_only` payout), `held` (an approved hold booked and reversed in the ledger), `not_in_ledger` (an `SC` record with no ledger txn; our call log says whether we made it and where its other half went), `unlinked` (a record with no `SC` id), and `unexplained` for anything else. Nessie is read before the database, so a txn posted in between shows as queued or in flight, not missing.
+- **Pairs:** every `SC <txn_id>` on the accounts read, and every move touching them, must be one completed withdrawal on the move's source and one completed deposit on its destination, both equal to the ledger amount. Problems are listed by kind.
+- **Nessie unreachable:** the account says so with the error and no number; `last_ok_at` is the last check that read every account (server memory). `NESSIE_DISABLED=1` makes every account "ledger only".
+- Response: `{checked_at, ok, last_ok_at, nessie: {enabled, error}, accounts: [{key, label, kind, nessie_account_id, status: reconciled|difference|error|no_nessie_account, error, fetched_at, opening: {cents, source: call_log|rule|nessie, call_id, at, nessie_cents}, ledger_cents, simulated: {cents, txns, label}|null, expected_cents, nessie_cents, difference_cents, records, by_kind, items, items_total}], pairs: {checked, complete, problems, problems_total}, simulated_town}`.
+
 ---
 
 ## 12. Server API
@@ -1061,6 +1074,7 @@ All JSON. Byte fields base64url. Prefix `/v1`. Auth for demo: none on reads; res
 | `POST /v1/sync` | `{device_pub, items: [...]}` | `{rcpt, policy, certs: [...]}` | WS2 |
 | `GET /v1/policy` | `?since=ver` | `{policy}` | WS2 |
 | `GET /v1/accounts` | | live Nessie balances for demo entities (computed from Nessie transactions, §11.4) + ledger totals. **[v4.3]** `{accounts: [{key, label, kind, nessie_account_id, nessie_cents, nessie_error, ledger_cents}], simulated_town, ledger: {balanced, unbalanced_txns, totals}, nessie: {enabled, queued}}`; a Nessie failure shows as `nessie_error`, never as a number | WS2 |
+| `GET /v1/accounts/reconcile` **[v4.17]** | | the ledger against Nessie's own records per real account, with every difference explained by txn and every `SC` pair checked (§11.4a) | WS2 |
 | `GET /v1/health` **[v4.3]** | | `{ok, time, demo_mode, nessie_enabled, api_sig_required, server_pub}` for the header and phones | WS2 |
 | `GET /v1/nessie/log` | `?limit=50` | rows of `nessie_calls` | WS2 |
 | `GET /v1/cases` / `GET /v1/cases/{id}` | | case with both tags, the cert, the rule, evidence, case file | WS2 |
@@ -1648,6 +1662,7 @@ Title, "Demo mode", connection dot, **Reset demo** button (calls `/v1/demo/reset
 - Nessie call log (scrolling): `POST withdrawal Maya Escrow, $12 · completed` / `POST deposit Pharmacy, $12 · completed`.
 - Ledger panel: "Ledger balanced ✓", totals per account type.
 - Queued Nessie payouts counter (fallback visible).
+- **[v4.17]** "Reconciled with Capital One Nessie" panel (§11.4a): per account ✓ or the difference with its explanation, how each side represents the opening, simulated money as "ledger only, never sent to Nessie", the `SC` pair check, when it last ran, and a Re-check button. It re-runs (debounced) on `accounts`, `payment`, `upload` and `nessie_call` SSE events. If Nessie can't be read it says so and shows the last successful check's time.
 
 ### 18.3 Cases tab (Digital Trust + Factory add-ons)
 
