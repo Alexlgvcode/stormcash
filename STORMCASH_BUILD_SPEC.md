@@ -7,6 +7,7 @@
 > **v4.3 (Oct 16):** WS2 server core (#13): every Nessie money movement is a `nessie_moves` row executed after commit and replayed until both halves exist; signed API writes spelled out; fallback switches `NESSIE_DISABLED` and `API_SIG_REQUIRED` (§6.3, §11.1, §11.4, §12, §22.4). Marked **[v4.3]**.
 > **v4.4 (Oct 16):** seed-town against the hosted DB takes ~45 s instead of ~46 min: each upload is one pipelined transaction (uploads one at a time) instead of one transaction per item, with the same results (§11.2, §16.5). Marked **[v4.4]**.
 > **v4.5 (Oct 17):** Photon shapes verified (§6.3, §17): Spectrum webhooks with HMAC signatures inbound, a small Node bridge for outbound. Marked **[v4.5]**.
+> **v4.6 (Oct 16):** Chalk verified and built (#28, §15.1, §15.2): sim-time windows are an `as_of` feature (no Postgres views needed), SQL resolvers read the Neon integration `neon_stormcash`, the NWS resolver labels live vs replayed, and `query_features` calls Chalk with fallback switch `CHALK_DISABLED` (§6.3, §14.7a, §22.4). Marked **[v4.6]**.
 > **Builds on:** "StormCash: The 10/10 Build" v3 (Oct 16, Alexandre Lugovoi, on Brian Maina's Oct 11 draft). Everything new since v3 is marked **[v4]**.
 
 ---
@@ -263,7 +264,8 @@ NESSIE_API_KEY=...
 NESSIE_BASE_URL=https://api.nessieisreal.com     # [v4.2] verified; HTTP is refused
 SERVER_SIGNING_KEY_PEM=...                        # P-256 private key, generated once
 FACTORY_API_KEY=...
-CHALK_CLIENT_ID=... / CHALK_CLIENT_SECRET=... / CHALK_ENVIRONMENT=...
+CHALK_CLIENT_ID=... / CHALK_CLIENT_SECRET=... / CHALK_ENVIRONMENT=...   # [v4.6] empty = the machine's `chalk login`
+CHALK_DISABLED=0                                  # [v4.6] fallback: 1 = query_features reads Postgres only (§15.2)
 PHOTON_API_KEY=... (unused; see the Photon lines below)
 SPECTRUM_WEBHOOK_SECRET=...                       # [v4.5] Photon webhook signing secret (inbound HMAC)
 PHOTON_BRIDGE_TOKEN=...                           # [v4.5] shared secret between the server and photon/bridge
@@ -1284,7 +1286,7 @@ Reject = flag `rejected`, nothing executes. Every approval writes an `approvals`
 - **Citations** (§14.7) accept tag/payment hashes, device-log entry hashes, contact ids, cert ids, merchant ids (hex, optional `kind:` prefix) and weather alert ids. A flag of a real kind must cite at least one; a dismissal may cite none.
 - **Worker.** Polls every 5 s for candidates without a flag and cases without a case file (at most 2 runs each), up to 4 at a time (the same limit covers `POST /v1/stormdesk/run`). `STORMDESK_AUTO=0` turns it off.
 - **SSE `stormdesk_step`:** `{run_id, job, subject, runner, index, tool, input_summary, ok}` per tool call, then `{run_id, done, status}`. A `flag` event follows triage.
-- `query_features` is the Postgres fallback (§22.4: the detectors' frozen features) until the Chalk client (WS6) is wired.
+- `query_features` asks Chalk (§15.2) **[v4.6]**; the Postgres fallback (§22.4: the detectors' frozen features) answers when Chalk is off or fails.
 - Checked on the seeded town with the fake runner: all 22 hard cases and 12 candidates give valid outputs with verified citations.
 
 ### 14.8 Demo replay
@@ -1347,11 +1349,26 @@ class Region:
 - **Python resolver** for live NWS alerts: `GET https://api.weather.gov/alerts/active?area=NC` with `User-Agent`, mapped to regions by county/zone; fallback to `weather_alerts` rows (`source='replayed'`).
 - Features in the window are computed against **simulated time** for simulated data. Pass `as_of` (sim clock) as an input feature or query parameter. **VERIFY** the cleanest way in Chalk (time-travel/`now` input vs. explicit window columns). If unclear in 30 min, precompute window features in SQL views in Postgres and let Chalk SQL resolvers read the views.
 
+**[v4.6] As built (verified against docs.chalk.ai and chalkpy 2.163).**
+- **Sim time is an `as_of` feature** on each class (Unix seconds). A tiny SQL resolver per class defaults it to the sim clock, `max(uploads.received_at)` (the server's latest sync, which is "now" for the seeded town and for real phones alike); a query that passes `as_of` as an input skips that resolver. Window resolvers take `${ns.id}` and `${ns.as_of}` as parameters. Chalk's own clock (`Now`, `${now}`, `ChalkClient.query(now=...)`) is wall-clock time unless every caller passes the sim time, so it isn't used, and no Postgres views were needed.
+- **Classes** (`chalk/features.py`), all windows ending at `as_of`:
+  - `Merchant`: `name, region_id, simulated`, and over 6 h `contacts_per_hour_6h, neighbors_6h, neighbor_median_contacts_6h, silence_ratio_6h, accepted_count_6h, pool_funded_count_6h, pool_funded_cents_6h, pool_funded_share_6h, distinct_cheater_certs_6h, near_cap_share_6h, paired_contact_share_6h, one_sided_contacts_6h, prior_windows_flagged`.
+  - `Certificate`: `status, storm_mode, home_region`, and over 15 min (inclusive) `cap_cents` (the version in force at `as_of`), `spent_15m_cents, distinct_merchants_15m, drain_share_15m, regions_15m, region_mismatch_15m, minutes_since_storm_mode, gap_since_last_activity_min, hour_of_day` (Asheville time).
+  - `Region`: `name, county, active_certs, expiring_12h_share, hours_since_last_upload, merchants_open_6h, replayed_alert_events, live_alert_events, nws_reachable, active_alert_events, alert_source`.
+  - Shares and times are `None` when there's nothing to divide or measure (no accepted payments, no own contacts, no Storm Mode). Definitions are §13's, as coded in `detectors.py`.
+- **SQL resolvers** use the Chalk PostgreSQL integration **`neon_stormcash`** (added in the Chalk dashboard; credentials live only there, ideally a read-only role). Three per class: fixed attributes, the `as_of` default, the window features.
+- **Frozen vs current.** A candidate's features are frozen when the detector fires; Chalk recomputes from everything the server holds now. Store-and-forward data arrives late, so they can differ for the same window (seed 42: Downtown Market's 6 h window gained contacts that turned out paired). `cap_drain` features matched exactly on all five seed-42 candidates.
+- **NWS resolver** (`chalk/resolvers/nws.py`): one NWS call a minute at most; all four regions are in Buncombe County (SAME `037021`, zones `NCC021`, `NCZ053`). Live alerts win when NWS has any for the region; otherwise the replayed rows active at `as_of`. `alert_source` says which one `active_alert_events` came from (`replayed` whenever NWS is unreachable). `NWS_USER_AGENT` can be set as a Chalk secret; the default names the repo.
+- Deploy: `cd chalk && uv sync && chalk apply`. Local checks: `chalk lint`, `uv run pytest`.
+
 ### 15.2 `query_features` tool
 
 StormDesk calls Chalk's online query API through `ChalkClient().query(input={Merchant.id: ...}, output=[...])`. This is how Chalk "does real work" at runtime. Log every query (feature names, latency) for the Chalk add-on demo.
 
 Fallback if Chalk is down: the tool reads the same features from Postgres views and marks the result `source: "postgres_fallback"`.
+
+**[v4.6] As built.** `server/stormcash/chalk_features.py` holds the `ChalkClient` (string FQNs, so the server doesn't import `chalk/`; credentials from `CHALK_CLIENT_*` or the machine's `chalk login`; 10 s timeout). Tool args: `entity: merchant|cert|region, id, features[]?, as_of?`; `cert` maps to the `certificate` namespace, and no `features` means all of the entity's features. The answer is `{source: "chalk", entity, id, as_of, features, latency_ms}` (+ `errors`, `unknown_features`), and each query logs one line with the feature names and latency. If Chalk fails or `CHALK_DISABLED=1`, the tool returns the Postgres fallback as before (the detectors' frozen features for the subject's latest candidate, not views) with `source: "postgres_fallback"` and `chalk_error`.
+- Deployed with `chalk apply` on Oct 16 and checked on the seeded town through the tool itself: Downtown Market's 16 merchant features in ~2 s on a cold client (token exchange, Neon waking up), then 125–350 ms per query for merchant, cert and region features.
 
 ### 15.3 Evaluations
 
@@ -1763,6 +1780,7 @@ If judging slots are < 3 min, drop the Town beat from the core and show StormDes
 |---|---|---|
 | Multipeer unreliable | QR sync | Records → Sync by QR |
 | Hosted Postgres unreachable | Local Postgres on Mac 2; Chalk reads features via Postgres views exposed through the API tunnel or StormDesk uses `postgres_fallback` | `DATABASE_URL` |
+| Chalk down or slow **[v4.6]** | `query_features` answers from Postgres (`postgres_fallback`, the detectors' frozen features) | automatic; `CHALK_DISABLED=1` |
 | Nessie down/slow | queued payouts + replay | automatic |
 | Nessie unusable for the whole demo **[v4.3]** | ledger-only money, Accounts tab shows ledger | `NESSIE_DISABLED=1` |
 | Phone can't sign API writes yet **[v4.3]** | accept unsigned writes | `API_SIG_REQUIRED=0` |

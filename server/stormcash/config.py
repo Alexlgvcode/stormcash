@@ -34,6 +34,9 @@ class Settings:
     chalk_client_id: str = ""
     chalk_client_secret: str = ""
     chalk_environment: str = ""
+    # Fallback switch (§22.4): CHALK_DISABLED=1 makes query_features read Postgres only.
+    # Off unless loaded from the environment, so bare Settings (tests) never call Chalk.
+    chalk_enabled: bool = False
     photon_api_key: str = ""
     # Background loops (Nessie replay, escrow release). Off in tests.
     background_tasks: bool = True
@@ -86,6 +89,7 @@ def load_settings(env_file: Path | None = SERVER_DIR / ".env") -> Settings:
         chalk_client_id=env.get("CHALK_CLIENT_ID", ""),
         chalk_client_secret=env.get("CHALK_CLIENT_SECRET", ""),
         chalk_environment=env.get("CHALK_ENVIRONMENT", ""),
+        chalk_enabled=not _flag(env.get("CHALK_DISABLED"), False),
         photon_api_key=env.get("PHOTON_API_KEY", ""),
         background_tasks=_flag(env.get("BACKGROUND_TASKS"), True),
         stormdesk_runner=(env.get("STORMDESK_RUNNER") or "auto").lower(),
