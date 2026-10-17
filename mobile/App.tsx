@@ -1,6 +1,7 @@
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { getDeviceKey } from './src/keys';
 import { NavContext, type Nav, type Route } from './src/nav';
 import { getRole } from './src/settings';
@@ -70,9 +71,11 @@ export default function App() {
     );
   }
   return (
-    <NavContext.Provider value={nav}>
-      {render()}
-      <StatusBar style="dark" />
-    </NavContext.Provider>
+    <SafeAreaProvider>
+      <NavContext.Provider value={nav}>
+        {render()}
+        <StatusBar style={route.name === 'result' || route.name === 'judge' ? 'light' : 'dark'} />
+      </NavContext.Provider>
+    </SafeAreaProvider>
   );
 }

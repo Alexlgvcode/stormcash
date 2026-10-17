@@ -1,11 +1,11 @@
 // Hidden demo menu (long-press the logo, §19.2).
 import { useState } from 'react';
-import { Alert, StyleSheet, TextInput } from 'react-native';
-import { Body, Button, Chip, colors, Muted, Row, Screen, Title } from '../components/ui';
+import { Alert, StyleSheet, Switch, TextInput, View } from 'react-native';
+import { Body, Button, Card, Chip, colors, Field, Muted, radius, Row, Screen, Section, Title } from '../components/ui';
 import {
   deleteDeviceKey, deviceKey, enclaveAvailable, getDeviceKey, setWantsEnclave, wantsEnclave,
 } from '../keys';
-import { useNav } from '../nav';
+import { useNav, type Route } from '../nav';
 import {
   getDemoLabel, getRole, getServerPub, setDemoLabel, setServerPub, type DemoLabel,
 } from '../settings';
@@ -14,6 +14,22 @@ import { resetDb, setSetting } from '../store/db';
 import { syncManager } from '../sync/manager';
 
 const LABELS: DemoLabel[] = ['MAYA', 'PHARMACY', 'GAS_STATION'];
+
+// Dev-build previews of the result screen (the simulator camera can't scan). Not in Release builds.
+const PREVIEW_TAG = {
+  cert_id: '00'.repeat(16), counter: 1, prev_hash: '00'.repeat(32), amount_cents: 1200, cum_cents: 1200,
+  details_hash: '00'.repeat(32),
+};
+const PREVIEW_PAY = {
+  c: { cert_id: '00'.repeat(16), cert_ver: 2, holder_pub: '02' + '00'.repeat(32), cap_cents: 5000, issued_at: 0, expires_at: 0, escrow_ref: 'preview' },
+  t: PREVIEW_TAG,
+  d: { merchant_pub: '02' + '00'.repeat(32), nonce: '00'.repeat(16), ts: 0 },
+};
+const PREVIEW_OK: Route = { name: 'result', result: { ok: true }, pay: PREVIEW_PAY, capCents: 5000 };
+const PREVIEW_REFUSED: Route = {
+  name: 'result', pay: PREVIEW_PAY, capCents: 5000,
+  result: { ok: false, check: 'C6', reason: 'SAME_COUNTER', rule: 'SAME_COUNTER', conflict: PREVIEW_TAG },
+};
 
 export function DemoMenuScreen() {
   const nav = useNav();
@@ -29,9 +45,9 @@ export function DemoMenuScreen() {
     await syncManager.start();
   };
 
-  const toggleTopology = () => {
-    setSetting('demo_topology', topology ? '0' : '1');
-    setTopology(!topology);
+  const toggleTopology = (on: boolean) => {
+    setSetting('demo_topology', on ? '1' : '0');
+    setTopology(on);
   };
 
   const reset = () => {
@@ -54,54 +70,84 @@ export function DemoMenuScreen() {
   return (
     <Screen>
       <Title>Demo menu</Title>
+      <Muted>Hidden from customers. Long-press the logo to get here.</Muted>
 
       {getRole() === 'resident' ? (
-        <Button title="Judge mode" kind="danger" onPress={() => nav.go({ name: 'judge' })} />
+        <Button title="Judge mode" subtitle="Attacker tool: roll the wallet back" kind="danger" big
+          onPress={() => nav.go({ name: 'judge' })} />
       ) : null}
 
-      <Body>Demo label</Body>
-      <Row>
-        {LABELS.map((l) => <Chip key={l} text={l} active={label === l} onPress={() => pickLabel(l)} />)}
-      </Row>
+      <Section title="Demo phone">
+        <Row>
+          {LABELS.map((l) => <Chip key={l} text={l.replace('_', ' ')} active={label === l} onPress={() => pickLabel(l)} />)}
+        </Row>
+        <Card>
+          <Row style={{ justifyContent: 'space-between', flexWrap: 'nowrap' }}>
+            <View style={{ flex: 1, gap: 2 }}>
+              <Body>Demo topology</Body>
+              <Muted>Pharmacy ↔ Maya ↔ Gas Station. Pharmacy and Gas Station never link.</Muted>
+            </View>
+            <Switch value={topology} onValueChange={toggleTopology} trackColor={{ true: colors.primary }} />
+          </Row>
+        </Card>
+      </Section>
 
-      <Button
-        title={`Demo topology: ${topology ? 'on' : 'off'}`}
-        kind="secondary"
-        onPress={toggleTopology}
-      />
-      <Muted>On: Pharmacy ↔ Maya ↔ Gas Station only (Pharmacy and Gas Station never link).</Muted>
+      <Section title="Keys">
+        <Card>
+          <Field label="Device key" value={deviceKey().hardware ? 'Secure Enclave' : 'Software key'} />
+          <Muted selectable>{deviceKey().pub}</Muted>
+          <Row style={{ justifyContent: 'space-between', flexWrap: 'nowrap' }}>
+            <View style={{ flex: 1, gap: 2 }}>
+              <Body>Hardware key on next setup</Body>
+              <Muted>{enclaveAvailable() ? 'Takes effect after Reset, then register again.' : 'Secure Enclave not available here.'}</Muted>
+            </View>
+            <Switch
+              value={enclave}
+              disabled={!enclaveAvailable()}
+              onValueChange={(v) => {
+                setWantsEnclave(v);
+                setEnclave(v);
+              }}
+              trackColor={{ true: colors.primary }}
+            />
+          </Row>
+        </Card>
+      </Section>
 
-      <Body>Device public key ({deviceKey().hardware ? 'Secure Enclave' : 'software key'})</Body>
-      <Muted selectable>{deviceKey().pub}</Muted>
-      <Button
-        title={`Hardware key on next setup: ${enclave ? 'on' : 'off'}`}
-        kind="secondary"
-        disabled={!enclaveAvailable()}
-        onPress={() => {
-          setWantsEnclave(!enclave);
-          setEnclave(!enclave);
-        }}
-      />
-      <Muted>
-        {enclaveAvailable() ? 'Takes effect after Reset local data, then register again.' : 'Secure Enclave not available here.'}
-      </Muted>
+      <Section title="Server public key">
+        <TextInput
+          style={styles.input}
+          value={serverPub}
+          onChangeText={setServerPubState}
+          onEndEditing={() => setServerPub(serverPub.trim() || null)}
+          autoCapitalize="none"
+          autoCorrect={false}
+          multiline
+        />
+      </Section>
 
-      <Body>Server public key</Body>
-      <TextInput
-        style={styles.input}
-        value={serverPub}
-        onChangeText={setServerPubState}
-        onEndEditing={() => setServerPub(serverPub.trim() || null)}
-        autoCapitalize="none"
-        autoCorrect={false}
-      />
+      {__DEV__ ? (
+        <Section title="Dev builds only">
+          <Row style={{ flexWrap: 'nowrap' }}>
+            <View style={{ flex: 1 }}>
+              <Button title="Preview green" kind="secondary" onPress={() => nav.go(PREVIEW_OK)} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Button title="Preview red" kind="secondary" onPress={() => nav.go(PREVIEW_REFUSED)} />
+            </View>
+          </Row>
+        </Section>
+      ) : null}
 
       <Button title="Reset local data" kind="danger" onPress={reset} />
-      <Button title="Back" kind="secondary" onPress={nav.home} />
+      <Button title="Back" kind="ghost" onPress={nav.home} />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  input: { borderWidth: 1, borderColor: colors.line, borderRadius: 10, padding: 12, fontSize: 14 },
+  input: {
+    borderWidth: 1, borderColor: colors.line, borderRadius: radius.sm, padding: 12, fontSize: 13,
+    fontFamily: 'Menlo', backgroundColor: colors.card, color: colors.ink,
+  },
 });

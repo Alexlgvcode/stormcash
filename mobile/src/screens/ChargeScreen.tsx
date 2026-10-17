@@ -1,14 +1,15 @@
 // Merchant charges (§19.2): keypad → REQ QR with a 2-minute countdown → scan the customer's code.
 // Demo payments are whole dollars (Nessie moves whole dollars, §11.4), so the keypad enters dollars.
+import * as Haptics from 'expo-haptics';
 import { useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { QrCode } from '../components/QrCode';
 import { Scanner } from '../components/Scanner';
-import { Big, Button, colors, Muted, Screen, Title, dollars } from '../components/ui';
+import { Button, Card, Chip, colors, Label, Meter, Muted, Row, Screen, Title, radius } from '../components/ui';
 import { useTick } from '../hooks';
 import { deviceKey } from '../keys';
 import { useNav } from '../nav';
-import { createRequest, receivePayment, requestQr } from '../payments';
+import { createRequest, receivePayment, REQ_TTL_S, requestQr } from '../payments';
 import type { PaymentRequest } from '../protocol';
 import { getServerPub } from '../settings';
 import { nowS } from '../store/items';
@@ -17,6 +18,7 @@ import { merchantCert, setOpenRequest } from '../store/merchant';
 type Step = { s: 'amount' } | { s: 'request'; request: PaymentRequest; qr: string } | { s: 'scan' };
 
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'C', '0', '⌫'];
+const QUICK = [5, 10, 12, 20];
 const MAX_DOLLARS = 999;
 
 export function ChargeScreen() {
@@ -28,6 +30,7 @@ export function ChargeScreen() {
   if (!mc) return null;
 
   const press = (k: string) => {
+    Haptics.selectionAsync().catch(() => {});
     if (k === '⌫') setAmount(Math.floor(amount / 10));
     else if (k === 'C') setAmount(0);
     else setAmount(Math.min(MAX_DOLLARS, Number(String(amount) + k)));
@@ -51,16 +54,29 @@ export function ChargeScreen() {
     return (
       <Screen>
         <Title>Charge</Title>
-        <Big>${amount}</Big>
+        <Card style={{ alignItems: 'center', paddingVertical: 24 }}>
+          <Label>{mc.display_name}</Label>
+          <Text style={styles.amount} adjustsFontSizeToFit numberOfLines={1}>${amount}</Text>
+          <Muted>Whole dollars</Muted>
+        </Card>
+        <Row style={{ justifyContent: 'center' }}>
+          {QUICK.map((d) => <Chip key={d} text={`$${d}`} active={amount === d} onPress={() => setAmount(d)} />)}
+        </Row>
         <View style={styles.pad}>
           {KEYS.map((k) => (
-            <Pressable key={k} style={styles.key} onPress={() => press(k)}>
-              <Text style={styles.keyText}>{k}</Text>
+            <Pressable
+              key={k}
+              onPress={() => press(k)}
+              style={({ pressed }) => [styles.key, pressed && { backgroundColor: colors.primarySoft }]}
+              accessibilityLabel={k === '⌫' ? 'Delete' : k === 'C' ? 'Clear' : k}
+            >
+              <Text style={[styles.keyText, (k === 'C' || k === '⌫') && { color: colors.muted }]}>{k}</Text>
             </Pressable>
           ))}
         </View>
         <Button
-          title="Show code"
+          title={amount ? `Show code for $${amount}` : 'Enter an amount'}
+          big
           disabled={amount === 0}
           onPress={() => {
             const request = createRequest(mc, amount * 100, deviceKey(), nowS());
@@ -71,21 +87,32 @@ export function ChargeScreen() {
       </Screen>
     );
   }
+
   if (step.s === 'request') {
-    const left = step.request.rq.req_expires_at - now;
+    const left = Math.max(0, step.request.rq.req_expires_at - now);
+    const expired = left === 0;
     return (
       <Screen>
-        <Title>{mc.display_name} · {dollars(step.request.rq.amount_cents)}</Title>
-        <QrCode value={step.qr} />
-        <Muted>{left > 0 ? `Expires in ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}` : 'Expired'}</Muted>
-        <Button title="Scan customer's code" onPress={() => setStep({ s: 'scan' })} />
+        <Row style={{ justifyContent: 'space-between' }}>
+          <Title>{mc.display_name}</Title>
+          <Title color={colors.primary}>${step.request.rq.amount_cents / 100}</Title>
+        </Row>
+        <Muted>Ask the customer to scan this code with StormCash.</Muted>
+        <Card style={{ alignItems: 'center', padding: 12, opacity: expired ? 0.3 : 1 }}>
+          <QrCode value={step.qr} />
+        </Card>
+        <Meter value={left} max={REQ_TTL_S} color={left > 30 ? colors.primary : colors.amber} />
+        <Muted>{expired ? 'This code expired. Start again.' : `Expires in ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`}</Muted>
+        <Button title="Scan customer's code" big onPress={() => setStep({ s: 'scan' })} disabled={expired} />
         <Button title="Cancel" kind="secondary" onPress={cancel} />
       </Screen>
     );
   }
+
   return (
     <Screen>
       <Title>Scan customer's code</Title>
+      <Muted>Every check runs on this phone. No internet needed.</Muted>
       <Scanner onScan={onScan} />
       <Button title="Cancel" kind="secondary" onPress={cancel} />
     </Screen>
@@ -93,7 +120,11 @@ export function ChargeScreen() {
 }
 
 const styles = StyleSheet.create({
+  amount: { fontSize: 72, fontWeight: '800', color: colors.ink, letterSpacing: -2, fontVariant: ['tabular-nums'] },
   pad: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 10 },
-  key: { width: '31%', paddingVertical: 18, borderRadius: 12, backgroundColor: '#f1f1f1', alignItems: 'center' },
-  keyText: { fontSize: 26, fontWeight: '600', color: colors.text },
+  key: {
+    width: '31.5%', height: 64, borderRadius: radius.md, backgroundColor: colors.card, alignItems: 'center',
+    justifyContent: 'center', borderWidth: 1, borderColor: colors.line,
+  },
+  keyText: { fontSize: 28, fontWeight: '600', color: colors.ink },
 });
