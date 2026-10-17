@@ -2,8 +2,7 @@
 import { useEffect, useReducer } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Header } from '../components/Header';
-import { Radar } from '../components/Radar';
-import { Button, Cell, colors, FadeUp, font, Group, Screen, Status } from '../components/ui';
+import { Button, Cell, colors, font, Group, Screen, Status } from '../components/ui';
 import { useNav } from '../nav';
 import { logCounts } from '../store/devicelog';
 import { countsByKind } from '../store/items';
@@ -23,25 +22,22 @@ export function MerchantHomeScreen() {
   return (
     <Screen>
       <Header />
-      <FadeUp style={styles.hero}>
-        <Radar blips={syncManager.status.connected.length} />
-        <Text style={styles.heroLabel}>Taking payments offline in {region.replace(/\b\w/g, (c) => c.toUpperCase())}</Text>
+      <View style={styles.sheet}>
+        <Text style={styles.heroLabel}>Takes StormCash with no internet in {region.replace(/\b\w/g, (c) => c.toUpperCase())}</Text>
         <Text style={styles.heroName} adjustsFontSizeToFit numberOfLines={2}>{mc.display_name}</Text>
-        <Status text="Verified by StormCash" tone="green" />
-      </FadeUp>
+        <Status text="Registered with StormCash" tone="green" />
+      </View>
 
-      <FadeUp delay={90}>
       <View style={styles.strip} accessible accessibilityLabel={`${accepted} accepted, ${refused} refused, ${contacts} phones met`}>
         <Stat value={accepted} label="accepted" />
         <Stat value={refused} label="refused" alert={refused > 0} />
         <Stat value={contacts} label="phones met" />
       </View>
-      </FadeUp>
 
       <Button title="Charge a customer" subtitle="Enter an amount, show your code" big onPress={() => nav.go({ name: 'charge' })} />
 
       <Group>
-        <Cell title="Records carried" detail="Delivered phone to phone" value={String(carrying)} onPress={() => nav.go({ name: 'records' })} />
+        <Cell title="Records to deliver" detail="Phones pass them on until one is online" value={String(carrying)} onPress={() => nav.go({ name: 'records' })} />
       </Group>
     </Screen>
   );
@@ -57,10 +53,13 @@ function Stat({ value, label, alert }: { value: number; label: string; alert?: b
 }
 
 const styles = StyleSheet.create({
-  hero: { paddingTop: 28, paddingBottom: 8, minHeight: 230, gap: 10 },
-  heroLabel: { fontFamily: font.medium, fontSize: 17, color: colors.muted },
-  heroName: { fontFamily: font.display, fontSize: 68, lineHeight: 68, color: colors.ink, letterSpacing: -2.5 },
+  sheet: {
+    backgroundColor: colors.sheet, borderRadius: 8, padding: 20, gap: 10,
+    borderBottomWidth: 4, borderBottomColor: colors.sheetEdge,
+  },
+  heroLabel: { fontFamily: font.regular, fontSize: 17, lineHeight: 23, color: colors.ink },
+  heroName: { fontFamily: font.display, fontSize: 88, lineHeight: 84, color: colors.carbon },
   strip: { flexDirection: 'row', paddingVertical: 4 },
-  statValue: { fontFamily: font.display, fontSize: 34, lineHeight: 38, color: colors.ink, fontVariant: ['tabular-nums'] },
+  statValue: { fontFamily: font.display, fontSize: 48, lineHeight: 48, color: colors.carbon, fontVariant: ['tabular-nums'] },
   statLabel: { fontFamily: font.medium, fontSize: 15, color: colors.muted },
 });

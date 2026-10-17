@@ -4,66 +4,68 @@
 // (no shadows at rest, no hairlines, no outlined boxes), round buttons, sentence-case labels.
 import * as Haptics from 'expo-haptics';
 import type { ReactNode } from 'react';
-import { useEffect, useRef } from 'react';
 import {
-  AccessibilityInfo, ActivityIndicator, Animated, ImageBackground, Pressable, ScrollView, StyleSheet, Text, View,
+  ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View,
   type ViewStyle,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Icon } from './Icon';
 
 export const font = {
-  regular: 'Geist_400Regular',
-  medium: 'Geist_500Medium',
-  semibold: 'Geist_600SemiBold',
-  bold: 'Geist_700Bold',
-  heavy: 'Geist_800ExtraBold',
-  display: 'BricolageGrotesque_800ExtraBold', // figures and headlines only
-  displayBold: 'BricolageGrotesque_700Bold',
+  // Atkinson Hyperlegible (Braille Institute) for everything you read; Big Shoulders (civic
+  // signage) only for figures and the few headlines.
+  regular: 'AtkinsonHyperlegible_400Regular',
+  medium: 'AtkinsonHyperlegible_400Regular',
+  semibold: 'AtkinsonHyperlegible_700Bold',
+  bold: 'AtkinsonHyperlegible_700Bold',
+  heavy: 'AtkinsonHyperlegible_700Bold',
+  display: 'BigShouldersDisplay_800ExtraBold',
+  displayBold: 'BigShouldersDisplay_700Bold',
 };
 
 export const colors = {
-  bg: '#0A0F14', // storm night: the ground
-  card: '#131B24', // one tone step up
-  well: '#1C2632', // two steps up: secondary buttons, keys, chips
-  ink: '#F3F5F7', // headings, amounts, running text
-  text: '#F3F5F7',
-  muted: '#93A0AF', // secondary notes
-  faint: '#5F6B79',
-  line: '#2A3542', // form fields and radar rings only
-  primary: '#FFB547', // the one accent: storm-warning amber, actions only
-  onPrimary: '#1A1205',
-  primarySoft: '#33270F',
-  green: '#3DD68C',
-  greenSoft: '#11291D',
-  red: '#FF6B5E',
-  redSoft: '#331513',
-  amber: '#FFB547',
-  amberSoft: '#33270F',
-  okBg: '#0D7A45', // result screens
-  refuseBg: '#C4291E',
-  navy: '#0A0F14',
-  navyRaised: '#131B24',
-  onNavy: '#F3F5F7',
-  onNavyMuted: '#93A0AF',
+  // The receipt book: cool paper, the canary duplicate sheet, carbon ink, graphite, rubber stamps.
+  bg: '#F7F8F6', // paper
+  card: '#FFFFFF', // a clean sheet
+  sheet: '#FFE873', // the canary duplicate copy
+  sheetEdge: '#E9CF4E',
+  well: '#ECEEEB', // pressed paper: secondary buttons, keys, chips
+  ink: '#1F2328', // graphite: text
+  text: '#1F2328',
+  carbon: '#2B3A9E', // carbon-copy ink: figures and the primary action
+  muted: '#646B75', // pencil: secondary notes
+  faint: '#9AA0A8',
+  line: '#D9DCE1', // ruled form lines (form fields only)
+  primary: '#2B3A9E',
+  onPrimary: '#FFFFFF',
+  primarySoft: '#E4E7F6',
+  green: '#1F7A47', // the VERIFIED stamp
+  greenSoft: '#E3F1E8',
+  red: '#C3321F', // the REFUSED stamp
+  redSoft: '#F9E5E1',
+  amber: '#9A5B00',
+  amberSoft: '#FCEFD9',
+  okBg: '#1F7A47',
+  refuseBg: '#C3321F',
+  tool: '#1F2328', // judge mode: the attacker tool is a different object
+  navy: '#1F2328',
+  navyRaised: '#2C3138',
+  onNavy: '#FFFFFF',
+  onNavyMuted: '#B9BEC6',
 };
 
 export const space = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 };
-export const radius = { sm: 12, md: 16, lg: 24, pill: 999 };
-
-// Ultra-subtle film grain over the ground (generated locally, tiled).
-const GRAIN = require('../../assets/grain.png');
+export const radius = { sm: 4, md: 14, lg: 8, pill: 999 };
 
 // ---- Layout ----
 
 export function Screen({
   children, scroll = true, style, tone = 'default',
 }: { children: ReactNode; scroll?: boolean; style?: ViewStyle; tone?: 'default' | 'dark' }) {
-  const bg = tone === 'dark' ? colors.navy : colors.bg;
+  const bg = tone === 'dark' ? colors.tool : colors.bg;
   const body = <View style={[s.screen, style]}>{children}</View>;
   return (
     <View style={[s.fill, { backgroundColor: bg }]}>
-      <ImageBackground source={GRAIN} resizeMode="repeat" style={StyleSheet.absoluteFill} imageStyle={{ opacity: 1 }} />
       <SafeAreaView style={s.fill} edges={['top', 'bottom']}>
         {scroll ? (
           <ScrollView style={s.fill} contentContainerStyle={s.grow} keyboardShouldPersistTaps="handled">
@@ -97,26 +99,6 @@ export function TopBar({ title, onBack, right }: { title?: string; onBack: () =>
       <View style={{ minWidth: 44, alignItems: 'flex-end' }}>{right}</View>
     </View>
   );
-}
-
-/** Fades its children up into place once, after `delay` ms. Skipped under Reduce Motion. */
-export function FadeUp({ children, delay = 0, style }: { children: ReactNode; delay?: number; style?: ViewStyle }) {
-  const t = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    let cancelled = false;
-    AccessibilityInfo.isReduceMotionEnabled()
-      .then((reduce) => {
-        if (cancelled) return;
-        if (reduce) t.setValue(1);
-        else Animated.timing(t, { toValue: 1, duration: 420, delay, useNativeDriver: true }).start();
-      })
-      .catch(() => t.setValue(1));
-    return () => {
-      cancelled = true;
-    };
-  }, [delay, t]);
-  const translateY = t.interpolate({ inputRange: [0, 1], outputRange: [18, 0] });
-  return <Animated.View style={[style, { opacity: t, transform: [{ translateY }] }]}>{children}</Animated.View>;
 }
 
 export function Card({ children, style, tone = 'default' }: { children: ReactNode; style?: ViewStyle; tone?: 'default' | 'navy' }) {
@@ -273,7 +255,7 @@ export function Button({
     secondary: [colors.well, colors.ink],
     danger: [colors.refuseBg, '#fff'],
     ghost: ['transparent', colors.primary],
-    light: ['#FFFFFF24', '#fff'],
+    light: ['#FFFFFF1F', '#fff'],
   };
   const [bg, fg] = palette[kind];
   return (
@@ -327,13 +309,13 @@ const s = StyleSheet.create({
   back: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
   topTitle: { flex: 1, fontFamily: font.semibold, fontSize: 17, color: colors.ink, textAlign: 'center' },
   card: { backgroundColor: colors.card, borderRadius: radius.lg, padding: 20, gap: space.md },
-  cardNavy: { backgroundColor: colors.card },
+  cardNavy: { backgroundColor: colors.sheet },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, alignItems: 'center' },
-  title: { fontFamily: font.display, fontSize: 34, lineHeight: 36, color: colors.ink, letterSpacing: -1 },
-  big: { fontFamily: font.display, fontSize: 64, lineHeight: 68, color: colors.ink, letterSpacing: -2, fontVariant: ['tabular-nums'] },
-  body: { fontFamily: font.medium, fontSize: 17, lineHeight: 24, color: colors.ink },
-  muted: { fontFamily: font.regular, fontSize: 15, lineHeight: 21, color: colors.muted },
-  label: { fontFamily: font.semibold, fontSize: 15, lineHeight: 20, color: colors.muted },
+  title: { fontFamily: font.display, fontSize: 40, lineHeight: 40, color: colors.ink, letterSpacing: -0.2 },
+  big: { fontFamily: font.display, fontSize: 72, lineHeight: 72, color: colors.carbon, fontVariant: ['tabular-nums'] },
+  body: { fontFamily: font.regular, fontSize: 18, lineHeight: 26, color: colors.ink },
+  muted: { fontFamily: font.regular, fontSize: 16, lineHeight: 23, color: colors.muted },
+  label: { fontFamily: font.bold, fontSize: 16, lineHeight: 21, color: colors.ink },
   field: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space.md, paddingVertical: 6 },
   fieldLabel: { fontFamily: font.regular, fontSize: 16, color: colors.muted },
   fieldValue: { fontFamily: font.semibold, fontSize: 16, color: colors.ink, flexShrink: 1, textAlign: 'right', fontVariant: ['tabular-nums'] },
@@ -351,10 +333,10 @@ const s = StyleSheet.create({
   meterFill: { height: '100%', borderRadius: radius.pill },
   error: { flexDirection: 'row', gap: 10, alignItems: 'flex-start', backgroundColor: colors.redSoft, borderRadius: radius.md, padding: 14 },
   errorText: { flex: 1, fontFamily: font.medium, fontSize: 15, lineHeight: 21, color: colors.red },
-  button: { minHeight: 56, paddingVertical: 14, paddingHorizontal: 22, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
+  button: { minHeight: 56, paddingVertical: 14, paddingHorizontal: 22, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   buttonBig: { minHeight: 72 },
   buttonText: { fontFamily: font.semibold, fontSize: 17 },
-  buttonTextBig: { fontFamily: font.bold, fontSize: 20, letterSpacing: -0.3 },
+  buttonTextBig: { fontFamily: font.bold, fontSize: 21 },
   buttonSub: { fontFamily: font.regular, fontSize: 14, opacity: 0.85, marginTop: 2 },
   chip: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 18, borderRadius: radius.pill, backgroundColor: colors.well },
   chipActive: { backgroundColor: colors.primary },

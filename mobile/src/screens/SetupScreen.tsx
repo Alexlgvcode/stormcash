@@ -2,13 +2,12 @@
 import { useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Logo } from '../components/Header';
-import { Radar } from '../components/Radar';
 import { useNav } from '../nav';
 import { register } from '../registration';
 import {
   getApiBase, getServerPub, setApiBase, setDemoLabel, setServerPub, type DemoLabel, type Role,
 } from '../settings';
-import { Body, Button, Card, Chip, colors, ErrorNote, font, Label, Muted, radius, Row, Screen, Section } from '../components/ui';
+import { Button, Card, Chip, colors, ErrorNote, font, Label, Muted, radius, Row, Screen, Section } from '../components/ui';
 
 const PRESETS: { label: DemoLabel; role: Role; name: string }[] = [
   { label: 'MAYA', role: 'resident', name: 'Maya' },
@@ -54,9 +53,8 @@ export function SetupScreen() {
   return (
     <Screen>
       <View style={styles.heroWrap}>
-        <Radar />
         <Logo />
-        <Text style={styles.hero}>Pay local shops when the network is down.</Text>
+        <Text style={styles.hero}>Pay shops with no signal.</Text>
         <Muted>Setup needs internet once. After that, payments work phone to phone.</Muted>
       </View>
 
@@ -70,8 +68,8 @@ export function SetupScreen() {
             accessibilityState={{ checked: label === p.label }}
           >
             <View style={{ flex: 1 }}>
-              <Body>{p.name}</Body>
-              <Muted>{p.role === 'resident' ? 'Resident · pays shops' : 'Shop · takes payments'}</Muted>
+              <Text style={styles.optionName}>{p.name}</Text>
+              <Muted>{p.role === 'resident' ? 'Resident who pays shops' : 'Shop that takes payments'}</Muted>
             </View>
             <View style={[styles.radio, label === p.label && styles.radioOn]} />
           </Pressable>
@@ -113,16 +111,17 @@ export function SetupScreen() {
 }
 
 const styles = StyleSheet.create({
-  heroWrap: { paddingTop: 24, paddingBottom: 12, gap: 14, minHeight: 230 },
-  hero: { fontFamily: font.display, fontSize: 44, lineHeight: 44, color: colors.ink, letterSpacing: -1.6 },
-  option: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 18, borderRadius: radius.lg, backgroundColor: colors.card },
-  optionActive: { backgroundColor: colors.primarySoft },
+  heroWrap: { paddingTop: 16, paddingBottom: 8, gap: 12 },
+  hero: { fontFamily: font.display, fontSize: 56, lineHeight: 54, color: colors.ink },
+  option: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 18, borderRadius: 8, backgroundColor: colors.card },
+  optionActive: { backgroundColor: colors.sheet },
   radio: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: colors.faint },
-  radioOn: { borderColor: colors.primary, borderWidth: 7 },
+  radioOn: { borderColor: colors.carbon, borderWidth: 7 },
   input: {
     borderRadius: radius.md, padding: 16, fontSize: 17,
     fontFamily: font.medium, backgroundColor: colors.well, color: colors.ink,
   },
   mono: { fontFamily: 'Menlo', fontSize: 13 },
+  optionName: { fontFamily: font.bold, fontSize: 19, color: colors.ink },
   link: { fontFamily: font.semibold, fontSize: 16, color: colors.primary, paddingVertical: 12 },
 });

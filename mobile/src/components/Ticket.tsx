@@ -4,16 +4,16 @@ import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 import { colors, font } from './ui';
 
-const PAPER = '#F7F4EE';
-const INK = '#0A0F14';
+const INK = '#1F2328';
 
 export function Ticket({
-  value, kicker, title, amount, footnote, dim,
-}: { value: string; kicker: string; title: string; amount: string; footnote?: string; dim?: boolean }) {
+  value, kicker, title, amount, footnote, dim, copy,
+}: { value: string; kicker: string; title: string; amount: string; footnote?: string; dim?: boolean; copy?: boolean }) {
+  const paper = copy ? colors.sheet : colors.card; // the payer's copy is canary; the shop's request is white
   const { width } = useWindowDimensions();
   const qr = Math.min(width - 40 - 48, 340);
   return (
-    <View style={[styles.ticket, dim && { opacity: 0.35 }]} accessible accessibilityLabel={`${kicker} ${title}, ${amount}. Payment code.`}>
+    <View style={[styles.ticket, { backgroundColor: paper }, dim && { opacity: 0.35 }]} accessible accessibilityLabel={`${kicker} ${title}, ${amount}. Payment code.`}>
       <View style={styles.stub}>
         <Text style={styles.kicker}>{kicker}</Text>
         <View style={styles.stubRow}>
@@ -29,7 +29,7 @@ export function Ticket({
         <View style={[styles.notch, { right: -14 }]} />
       </View>
       <View style={styles.code}>
-        <QRCode value={value} size={qr} ecl="L" quietZone={0} color={INK} backgroundColor={PAPER} />
+        <QRCode value={value} size={qr} ecl="L" quietZone={0} color={INK} backgroundColor={paper} />
         {footnote ? <Text style={styles.foot}>{footnote}</Text> : null}
       </View>
     </View>
@@ -37,16 +37,16 @@ export function Ticket({
 }
 
 const styles = StyleSheet.create({
-  ticket: { backgroundColor: PAPER, borderRadius: 22, overflow: 'visible' },
+  ticket: { borderRadius: 8, overflow: 'visible' },
   stub: { paddingHorizontal: 24, paddingTop: 20, paddingBottom: 16, gap: 4 },
-  kicker: { fontFamily: font.medium, fontSize: 15, color: '#5B6470' },
+  kicker: { fontFamily: font.regular, fontSize: 16, color: colors.muted },
   stubRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 },
-  title: { flex: 1, fontFamily: font.displayBold, fontSize: 26, color: INK, letterSpacing: -0.6 },
-  amount: { fontFamily: font.display, fontSize: 34, color: INK, letterSpacing: -1, fontVariant: ['tabular-nums'] },
+  title: { flex: 1, fontFamily: font.bold, fontSize: 22, color: INK },
+  amount: { fontFamily: font.display, fontSize: 48, lineHeight: 48, color: colors.carbon, fontVariant: ['tabular-nums'] },
   perf: { height: 28, justifyContent: 'center' },
   notch: { position: 'absolute', width: 28, height: 28, borderRadius: 14, backgroundColor: colors.bg, top: 0 },
   dots: { flexDirection: 'row', justifyContent: 'space-between', marginHorizontal: 22 },
-  dot: { width: 5, height: 5, borderRadius: 3, backgroundColor: '#D6D0C4' },
+  dot: { width: 5, height: 5, borderRadius: 3, backgroundColor: colors.line },
   code: { alignItems: 'center', paddingHorizontal: 24, paddingBottom: 22, paddingTop: 8, gap: 12 },
-  foot: { fontFamily: font.medium, fontSize: 14, color: '#5B6470' },
+  foot: { fontFamily: font.regular, fontSize: 15, color: colors.muted },
 });

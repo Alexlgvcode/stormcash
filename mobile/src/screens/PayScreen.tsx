@@ -4,7 +4,7 @@ import { View } from 'react-native';
 import { confirmWithFaceId } from '../auth';
 import { Ticket } from '../components/Ticket';
 import { Scanner } from '../components/Scanner';
-import { Big, Button, Cell, ErrorNote, Group, Muted, Screen, FadeUp, Status, Title, wholeDollars, TopBar } from '../components/ui';
+import { Big, Button, Cell, ErrorNote, Group, Muted, Screen, Status, Title, wholeDollars, TopBar } from '../components/ui';
 import { deviceKey } from '../keys';
 import { useNav } from '../nav';
 import { payQr, preparePayment, signPayment } from '../payments';
@@ -79,22 +79,19 @@ export function PayScreen() {
 
   return (
     <Screen>
-      <FadeUp>
-        <Title>Show this to {step.shop}</Title>
-      </FadeUp>
-      <FadeUp delay={80}>
-        <Ticket
+      <Title>Show this to {step.shop}</Title>
+      <Ticket
           value={step.qr}
-          kicker={`Paid with ${getDisplayName() ?? "your"} StormCash`}
+          copy
+          kicker={`${getDisplayName() ?? 'Your'}'s copy`}
           title={step.shop}
           amount={wholeDollars(step.amount)}
           footnote={`Signed on this phone at ${new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`}
         />
-      </FadeUp>
-      <FadeUp delay={160} style={{ alignItems: 'center', gap: 6 }}>
+      <View style={{ alignItems: 'center', gap: 6 }}>
         <Status text="Your wallet is already updated" tone="green" />
         <Muted>{wholeDollars(step.leftAfter)} left to spend</Muted>
-      </FadeUp>
+      </View>
       <Button title="Done" onPress={nav.home} />
     </Screen>
   );

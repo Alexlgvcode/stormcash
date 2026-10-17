@@ -85,3 +85,20 @@ export function rollBack(mode: RollbackMode): boolean {
   );
   return true;
 }
+
+export interface Receipt { tagHash: Hex; counter: number; shop: string; amountCents: number; ts: number }
+
+export function addReceipt(tag: Tag, shop: string, ts: number): void {
+  getDb().runSync(
+    'INSERT OR REPLACE INTO receipts (tag_hash, counter, shop, amount_cents, ts) VALUES (?, ?, ?, ?, ?)',
+    tagHash(tag), tag.counter, shop, tag.amount_cents, ts,
+  );
+}
+
+export function recentReceipts(limit = 5): Receipt[] {
+  return getDb()
+    .getAllSync<{ tag_hash: string; counter: number; shop: string; amount_cents: number; ts: number }>(
+      'SELECT * FROM receipts ORDER BY ts DESC, counter DESC LIMIT ?', limit,
+    )
+    .map((r) => ({ tagHash: r.tag_hash, counter: r.counter, shop: r.shop, amountCents: r.amount_cents, ts: r.ts }));
+}

@@ -1,10 +1,8 @@
-// Merchant result (§8.2, §19.2). Green: verified and backed. Red: names the failed check and rule.
+// Merchant result (§8.2, §19.2): the receipt, stamped VERIFIED or REFUSED, with the reason in words.
 import * as Haptics from 'expo-haptics';
 import { useEffect, useRef } from 'react';
-import { AccessibilityInfo, Animated, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Icon } from '../components/Icon';
-import { Button, colors, font, wholeDollars } from '../components/ui';
+import { AccessibilityInfo, Animated, Easing, StyleSheet, Text, View } from 'react-native';
+import { Button, colors, font, Screen, wholeDollars } from '../components/ui';
 import { useNav } from '../nav';
 import type { CheckResult, Pay, ReasonToken } from '../protocol';
 
@@ -32,87 +30,84 @@ function refusalCopy(reason: ReasonToken, rule: string | null): string {
 export function ResultScreen({ result, pay, capCents }: { result: CheckResult; pay: Pay | null; capCents: number }) {
   const nav = useNav();
   const ok = result.ok;
-  const pop = useRef(new Animated.Value(0.6)).current;
+  const ink = ok ? colors.green : colors.red;
+  // The one orchestrated moment: the stamp comes down once, lands, and the phone thumps.
+  const drop = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    AccessibilityInfo.isReduceMotionEnabled().then((reduce) => {
-      if (reduce) pop.setValue(1);
-      else Animated.spring(pop, { toValue: 1, friction: 5, tension: 120, useNativeDriver: true }).start();
-    }).catch(() => pop.setValue(1));
-  }, [pop]);
-  useEffect(() => {
-    Haptics.notificationAsync(ok ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Error)
-      .catch(() => {});
-  }, [ok]);
+    const land = () =>
+      Haptics.notificationAsync(ok ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Error)
+        .catch(() => {});
+    AccessibilityInfo.isReduceMotionEnabled()
+      .then((reduce) => {
+        if (reduce) {
+          drop.setValue(1);
+          land();
+          return;
+        }
+        Animated.timing(drop, { toValue: 1, duration: 220, delay: 250, easing: Easing.in(Easing.cubic), useNativeDriver: true })
+          .start(() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
+            land();
+          });
+      })
+      .catch(() => drop.setValue(1));
+  }, [drop, ok]);
+  const scale = drop.interpolate({ inputRange: [0, 1], outputRange: [2.4, 1] });
+  const rotate = drop.interpolate({ inputRange: [0, 1], outputRange: ['-16deg', '-8deg'] });
+  const opacity = drop.interpolate({ inputRange: [0, 0.4, 1], outputRange: [0, 0.6, 1] });
 
+  const amount = wholeDollars(pay?.t.amount_cents ?? 0);
   return (
-    <SafeAreaView style={[styles.fill, { backgroundColor: ok ? colors.okBg : colors.refuseBg }]} edges={['top', 'bottom']}>
-      <View style={styles.body}>
-        <View style={styles.markWrap}>
-        {[0, 1, 2].map((i) => <Ripple key={i} delay={i * 450} />)}
-        <Animated.View style={[styles.markRing, { transform: [{ scale: pop }] }]}>
-          <Icon name={ok ? 'check' : 'x'} size={76} color="#fff" strokeWidth={2.75} />
-        </Animated.View>
+    <Screen>
+      <View style={styles.receipt}>
+        <Text style={styles.kicker}>Payment received offline</Text>
+        <View style={styles.row}>
+          <Text style={styles.what}>Copy no. {pay?.t.counter ?? '-'}</Text>
+          <Text style={styles.amount}>{amount}</Text>
         </View>
-        <Text style={styles.head} accessibilityRole="header">{ok ? 'Verified' : 'Refused'}</Text>
-        {ok ? (
-          <>
-            <Text style={styles.amount}>{wholeDollars(pay?.t.amount_cents ?? 0)}</Text>
-            <Text style={styles.copy}>
-              Backed by Capital One, {wholeDollars(pay?.t.cum_cents ?? 0)} of {wholeDollars(capCents)} used.
-            </Text>
-          </>
-        ) : (
-          <Text style={styles.copy}>{refusalCopy(result.reason, result.rule)}</Text>
-        )}
-        <View style={styles.detail}>
-          <Text style={styles.detailText}>
-            {ok
-              ? 'All six checks passed on this phone, with no internet.'
-              : `Check ${result.check} failed · ${result.reason}${result.conflict ? ' · signed evidence saved' : ''}`}
-          </Text>
+        <Text style={styles.meta}>
+          {ok
+            ? `Backed by Capital One. ${wholeDollars(pay?.t.cum_cents ?? 0)} of ${wholeDollars(capCents)} used.`
+            : 'Not accepted. Do not hand over the goods.'}
+        </Text>
+        <View style={styles.stampArea}>
+          <Animated.View
+            style={[styles.stamp, { borderColor: ink, opacity, transform: [{ scale }, { rotate }] }]}
+            accessible
+            accessibilityRole="header"
+            accessibilityLabel={ok ? 'Verified' : 'Refused'}
+          >
+            <View style={[styles.stampInner, { borderColor: ink }]}>
+              <Text style={[styles.stampText, { color: ink }]}>{ok ? 'VERIFIED' : 'REFUSED'}</Text>
+            </View>
+          </Animated.View>
         </View>
       </View>
-      <View style={styles.footer}>
-        <Button title="Done" kind="light" big onPress={nav.home} />
-      </View>
-    </SafeAreaView>
+
+      <Text style={[styles.why, { color: ok ? colors.ink : colors.red }]}>
+        {ok ? 'All six checks passed on this phone, with no internet.' : refusalCopy(result.reason, result.rule)}
+      </Text>
+      {!ok ? (
+        <Text style={styles.detail}>
+          Check {result.check} failed ({result.reason}).{result.conflict ? ' The signed evidence is saved and will reach the bank with the next phone online.' : ''}
+        </Text>
+      ) : null}
+      <Button title="Done" big onPress={nav.home} />
+    </Screen>
   );
 }
 
-/** A ring that expands and fades out behind the mark, twice. Skipped under Reduce Motion. */
-function Ripple({ delay }: { delay: number }) {
-  const t = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    let stop = false;
-    AccessibilityInfo.isReduceMotionEnabled().then((reduce) => {
-      if (reduce || stop) return;
-      Animated.loop(
-        Animated.timing(t, { toValue: 1, duration: 1400, delay, useNativeDriver: true }),
-        { iterations: 2 },
-      ).start();
-    }).catch(() => {});
-    return () => {
-      stop = true;
-    };
-  }, [delay, t]);
-  const scale = t.interpolate({ inputRange: [0, 1], outputRange: [1, 2.4] });
-  const opacity = t.interpolate({ inputRange: [0, 0.1, 1], outputRange: [0, 0.35, 0] });
-  return <Animated.View style={[styles.ripple, { opacity, transform: [{ scale }] }]} />;
-}
-
 const styles = StyleSheet.create({
-  markWrap: { width: 136, height: 136, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
-  ripple: { position: 'absolute', width: 136, height: 136, borderRadius: 68, borderWidth: 2, borderColor: '#FFFFFF' },
-  fill: { flex: 1 },
-  body: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28, gap: 14 },
-  markRing: {
-    width: 136, height: 136, borderRadius: 68, backgroundColor: '#FFFFFF26',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  head: { fontFamily: font.display, fontSize: 60, lineHeight: 62, color: '#fff', letterSpacing: -1.5 },
-  amount: { fontFamily: font.display, fontSize: 48, lineHeight: 52, color: '#fff', letterSpacing: -1, fontVariant: ['tabular-nums'] },
-  copy: { fontFamily: font.semibold, fontSize: 24, lineHeight: 31, color: '#fff', textAlign: 'center', letterSpacing: -0.3 },
-  detail: { backgroundColor: '#00000022', borderRadius: 14, paddingHorizontal: 14, paddingVertical: 10, marginTop: 8 },
-  detailText: { fontFamily: font.medium, fontSize: 15, lineHeight: 20, color: '#FFFFFFE6', textAlign: 'center' },
-  footer: { paddingHorizontal: 20, paddingBottom: 12 },
+  receipt: { backgroundColor: colors.card, borderRadius: 8, padding: 22, gap: 6, marginTop: 24 },
+  kicker: { fontFamily: font.regular, fontSize: 16, color: colors.muted },
+  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
+  what: { fontFamily: font.bold, fontSize: 20, color: colors.ink, paddingBottom: 10 },
+  amount: { fontFamily: font.display, fontSize: 72, lineHeight: 76, height: 76, color: colors.carbon, fontVariant: ['tabular-nums'] },
+  meta: { fontFamily: font.regular, fontSize: 17, lineHeight: 24, color: colors.ink },
+  stampArea: { height: 190, alignItems: 'center', justifyContent: 'center' },
+  stamp: { borderWidth: 5, borderRadius: 10, padding: 5 },
+  stampInner: { borderWidth: 2, borderRadius: 6, paddingHorizontal: 22, height: 96, justifyContent: 'center', overflow: 'hidden' },
+  stampText: { fontFamily: font.display, fontSize: 78, lineHeight: 80, height: 80, letterSpacing: 3, textAlignVertical: 'center' },
+  why: { fontFamily: font.bold, fontSize: 24, lineHeight: 31 },
+  detail: { fontFamily: font.regular, fontSize: 16, lineHeight: 23, color: colors.muted },
 });

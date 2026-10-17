@@ -2,10 +2,8 @@ import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import {
-  Geist_400Regular, Geist_500Medium, Geist_600SemiBold, Geist_700Bold, Geist_800ExtraBold, useFonts,
-} from '@expo-google-fonts/geist';
-import { BricolageGrotesque_700Bold, BricolageGrotesque_800ExtraBold } from '@expo-google-fonts/bricolage-grotesque';
+import { AtkinsonHyperlegible_400Regular, AtkinsonHyperlegible_700Bold, useFonts } from '@expo-google-fonts/atkinson-hyperlegible';
+import { BigShouldersDisplay_700Bold, BigShouldersDisplay_800ExtraBold } from '@expo-google-fonts/big-shoulders-display';
 import { getDeviceKey } from './src/keys';
 import { NavContext, type Nav, type Route } from './src/nav';
 import { getRole } from './src/settings';
@@ -25,8 +23,8 @@ import { WalletScreen } from './src/screens/WalletScreen';
 export default function App() {
   const [keyReady, setKeyReady] = useState(false);
   const [fontsLoaded, fontError] = useFonts({
-    Geist_400Regular, Geist_500Medium, Geist_600SemiBold, Geist_700Bold, Geist_800ExtraBold,
-    BricolageGrotesque_700Bold, BricolageGrotesque_800ExtraBold,
+    AtkinsonHyperlegible_400Regular, AtkinsonHyperlegible_700Bold,
+    BigShouldersDisplay_700Bold, BigShouldersDisplay_800ExtraBold,
   });
   const ready = keyReady && (fontsLoaded || !!fontError); // a font failure falls back to the system face
   const [route, setRoute] = useState<Route>({ name: 'home' });
@@ -83,7 +81,7 @@ export default function App() {
     <SafeAreaProvider>
       <NavContext.Provider value={nav}>
         {render()}
-        <StatusBar style="light" />
+        <StatusBar style={route.name === 'judge' ? 'light' : 'dark'} />
       </NavContext.Provider>
     </SafeAreaProvider>
   );

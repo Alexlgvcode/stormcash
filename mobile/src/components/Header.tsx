@@ -11,12 +11,7 @@ const LABEL_NAMES: Record<string, string> = { MAYA: 'Maya', PHARMACY: 'Pharmacy'
 
 export function Logo({ light }: { light?: boolean }) {
   return (
-    <View style={styles.logoRow}>
-      <View style={styles.mark}>
-        <Text style={styles.markText}>S</Text>
-      </View>
-      <Text style={[styles.word, light && { color: '#fff' }]}>StormCash</Text>
-    </View>
+    <Text style={[styles.word, light && { color: '#fff' }]} accessibilityRole="header">StormCash</Text>
   );
 }
 
@@ -31,7 +26,7 @@ export function Header() {
     <View style={styles.row}>
       <Pressable onLongPress={() => nav.go({ name: 'demo' })} delayLongPress={600} accessibilityHint="Long-press for the demo menu">
         <Logo />
-        {label ? <Text style={styles.label}>{LABEL_NAMES[label] ?? label} · demo phone</Text> : null}
+        {label ? <Text style={styles.label}>Demo phone: {LABEL_NAMES[label] ?? label}</Text> : null}
       </Pressable>
       <View style={styles.right}>
         <Status text={online ? 'Online' : 'Offline'} tone={online ? 'green' : 'amber'} />
@@ -43,10 +38,7 @@ export function Header() {
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  logoRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  mark: { width: 30, height: 30, borderRadius: 15, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
-  markText: { color: colors.onPrimary, fontFamily: font.heavy, fontSize: 17 },
-  word: { fontFamily: font.bold, fontSize: 22, color: colors.ink, letterSpacing: -0.6 },
-  label: { fontFamily: font.medium, fontSize: 14, color: colors.muted, marginTop: 4, marginLeft: 38 },
+  word: { fontFamily: font.display, fontSize: 32, lineHeight: 34, color: colors.carbon },
+  label: { fontFamily: font.regular, fontSize: 15, color: colors.muted, marginTop: 2 },
   right: { alignItems: 'flex-end', gap: 6 },
 });

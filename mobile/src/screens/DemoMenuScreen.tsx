@@ -87,7 +87,7 @@ export function DemoMenuScreen() {
           <Row style={{ justifyContent: 'space-between', flexWrap: 'nowrap' }}>
             <View style={{ flex: 1, gap: 2 }}>
               <Body>Demo topology</Body>
-              <Muted>Pharmacy ↔ Maya ↔ Gas Station. Pharmacy and Gas Station never link.</Muted>
+              <Muted>Maya links to the Pharmacy and the Gas Station. Those two never link to each other.</Muted>
             </View>
             <Switch value={topology} onValueChange={toggleTopology} trackColor={{ true: colors.primary }} />
           </Row>

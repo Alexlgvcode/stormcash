@@ -6,7 +6,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Icon } from '../components/Icon';
 import { Ticket } from '../components/Ticket';
 import { Scanner } from '../components/Scanner';
-import { Button, Chip, colors, ErrorNote, FadeUp, font, Label, Meter, Muted, Row, Screen, Title, radius, TopBar } from '../components/ui';
+import { Button, Chip, colors, ErrorNote, font, Label, Meter, Muted, Row, Screen, Title, radius, TopBar } from '../components/ui';
 import { useTick } from '../hooks';
 import { deviceKey } from '../keys';
 import { useNav } from '../nav';
@@ -101,19 +101,15 @@ export function ChargeScreen() {
     return (
       <Screen>
         <TopBar onBack={cancel} />
-        <FadeUp>
-          <Title>Customer scans this</Title>
-        </FadeUp>
-        <FadeUp delay={80}>
-          <Ticket
-            value={step.qr}
-            kicker="Payment request"
-            title={mc.display_name}
-            amount={`$${step.request.rq.amount_cents / 100}`}
-            footnote="Signed by this shop. Works with no internet."
-            dim={expired}
-          />
-        </FadeUp>
+        <Title>Customer scans this</Title>
+        <Ticket
+          value={step.qr}
+          kicker="Payment request"
+          title={mc.display_name}
+          amount={`$${step.request.rq.amount_cents / 100}`}
+          footnote="Signed by this shop. Works with no internet."
+          dim={expired}
+        />
         <Meter value={left} max={REQ_TTL_S} color={left > 30 ? colors.primary : colors.amber} />
         <Muted>{expired ? 'This code expired. Start again.' : `Expires in ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`}</Muted>
         <Button title="Scan customer's code" big onPress={() => setStep({ s: 'scan' })} disabled={expired} />

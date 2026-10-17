@@ -3,9 +3,8 @@ import { useEffect, useReducer, useState } from 'react';
 import * as api from '../api';
 import { Header } from '../components/Header';
 import { StyleSheet, Text, View } from 'react-native';
-import { Radar } from '../components/Radar';
 import { syncManager } from '../sync/manager';
-import { Button, Cell, colors, ErrorNote, FadeUp, font, Group, Meter, Screen, Status, wholeDollars } from '../components/ui';
+import { Button, Cell, colors, ErrorNote, font, Group, Label, Meter, Muted, Screen, Status, wholeDollars } from '../components/ui';
 import { useOnline } from '../hooks';
 import { KEY_REF } from '../keys';
 import { useNav } from '../nav';
@@ -13,7 +12,7 @@ import { verifyObject } from '../protocol';
 import { getDisplayName, getServerPub } from '../settings';
 import { countsByKind, nowS } from '../store/items';
 import { currentPolicy } from '../store/policy';
-import { latestCert, saveCertVersion, walletState } from '../store/wallet';
+import { latestCert, recentReceipts, saveCertVersion, walletState } from '../store/wallet';
 
 const STORM_CAP = 5000;
 
@@ -24,7 +23,6 @@ export function WalletScreen() {
   const [error, setError] = useState<string | null>(null);
   const [, rerender] = useReducer((x: number) => x + 1, 0);
   useEffect(() => syncManager.subscribe(rerender), []);
-  const nearby = syncManager.status.connected.length;
   const cert = latestCert();
   const state = walletState();
   if (!cert || !state) return null;
@@ -52,43 +50,59 @@ export function WalletScreen() {
   };
 
   const status = frozen
-    ? { text: 'Certificate frozen', tone: 'red' as const }
+    ? { text: 'Frozen. A shop found this money spent twice.', tone: 'red' as const }
     : expired
-      ? { text: 'Certificate expired', tone: 'amber' as const }
+      ? { text: 'Expired. Renews when any phone gets online.', tone: 'amber' as const }
       : { text: 'Backed by Capital One', tone: 'green' as const };
   const storm = cert.cap_cents >= STORM_CAP;
+  const stubs = recentReceipts(4);
+  const name = getDisplayName() ?? 'Your';
 
   return (
     <Screen>
       <Header />
 
-      <FadeUp style={styles.hero}>
-        <Radar blips={nearby} />
-        <Text style={styles.heroLabel}>{getDisplayName() ?? 'Your wallet'} can spend</Text>
-        <Text style={styles.heroFigure} adjustsFontSizeToFit numberOfLines={1}>{wholeDollars(left)}</Text>
-        <Text style={styles.heroSub}>of {wholeDollars(cert.cap_cents)}, with no internet</Text>
-        <View style={{ marginTop: 18, gap: 12 }}>
-          <Meter value={state.cumCents} max={cert.cap_cents} color={colors.primary} track={colors.well} />
-          <Status text={status.text} tone={status.tone} />
+      <View style={styles.sheet} accessible accessibilityLabel={`${wholeDollars(left)} left to spend of ${wholeDollars(cert.cap_cents)}. ${status.text}.`}>
+        <View style={styles.sheetTop}>
+          <Text style={styles.book}>{name}'s book</Text>
+          <Text style={styles.copyNo}>next copy no. {state.counter + 1}</Text>
         </View>
-      </FadeUp>
+        <Text style={styles.figure} adjustsFontSizeToFit numberOfLines={1}>{wholeDollars(left)}</Text>
+        <Text style={styles.sheetSub}>left to spend, of {wholeDollars(cert.cap_cents)}. No internet needed.</Text>
+        <Meter value={state.cumCents} max={cert.cap_cents} color={colors.carbon} track={colors.sheetEdge} />
+        <Status text={status.text} tone={status.tone} />
+      </View>
 
-      <FadeUp delay={90}>
-      <Button title="Pay a shop" subtitle="Scan the shop's code" big onPress={() => nav.go({ name: 'pay' })}
-        disabled={frozen || expired || left === 0} />
-      </FadeUp>
+      <Button title="Pay a shop" big onPress={() => nav.go({ name: 'pay' })} disabled={frozen || expired || left === 0} />
 
-      <FadeUp delay={180}>
+      <View style={{ gap: 4 }}>
+        <Label>Recent copies</Label>
+        {stubs.length === 0 ? (
+          <Muted>No payments yet. Each one you make leaves a copy here.</Muted>
+        ) : (
+          stubs.map((r) => (
+            <View key={r.tagHash} style={styles.stub}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.stubShop}>{r.shop}</Text>
+                <Text style={styles.stubMeta}>
+                  Copy no. {r.counter}, {new Date(r.ts * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                </Text>
+              </View>
+              <Text style={styles.stubAmount}>{wholeDollars(r.amountCents)}</Text>
+            </View>
+          ))
+        )}
+      </View>
+
       <Group>
         <Cell
           title="Storm Mode"
-          detail={storm ? `On. Capital One holds ${wholeDollars(cert.cap_cents)} in escrow.` : `Raise your limit to ${wholeDollars(STORM_CAP)} before the storm.`}
+          detail={storm ? `On. Capital One holds ${wholeDollars(cert.cap_cents)} for you.` : `Raise your limit to ${wholeDollars(STORM_CAP)} before the storm.`}
           accessory={storm ? <Text style={styles.on}>On</Text> : undefined}
         />
-        <Cell title="Records carried" detail="Delivered phone to phone" value={String(carrying)} onPress={() => nav.go({ name: 'records' })} />
-        <Cell title="Certificate" detail={expired ? 'Renews when any phone is online' : `Renews in ${hoursLeft} h`} value={`v${cert.cert_ver}`} />
+        <Cell title="Records to deliver" detail="Phones pass them on until one is online" value={String(carrying)} onPress={() => nav.go({ name: 'records' })} />
+        <Cell title="Certificate" detail={expired ? 'Renews when any phone is online' : `Renews in ${hoursLeft} hours`} value={`v${cert.cert_ver}`} />
       </Group>
-      </FadeUp>
       {!storm ? (
         <Button
           title={online ? 'Turn on Storm Mode' : 'Storm Mode needs internet'}
@@ -104,9 +118,18 @@ export function WalletScreen() {
 }
 
 const styles = StyleSheet.create({
-  hero: { paddingTop: 28, paddingBottom: 8, minHeight: 250 },
-  heroLabel: { fontFamily: font.medium, fontSize: 17, color: colors.muted },
-  heroFigure: { fontFamily: font.display, fontSize: 112, lineHeight: 116, color: colors.ink, letterSpacing: -4, fontVariant: ['tabular-nums'] },
-  heroSub: { fontFamily: font.medium, fontSize: 17, color: colors.muted },
-  on: { fontFamily: font.semibold, fontSize: 17, color: colors.primary },
+  sheet: {
+    backgroundColor: colors.sheet, borderRadius: 8, padding: 20, gap: 10,
+    borderBottomWidth: 4, borderBottomColor: colors.sheetEdge, // the stack of copies underneath
+  },
+  sheetTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
+  book: { fontFamily: font.bold, fontSize: 17, color: colors.ink },
+  copyNo: { fontFamily: font.regular, fontSize: 15, color: '#6B5A12', fontVariant: ['tabular-nums'] },
+  figure: { fontFamily: font.display, fontSize: 132, lineHeight: 128, color: colors.carbon, marginTop: 4, fontVariant: ['tabular-nums'] },
+  sheetSub: { fontFamily: font.regular, fontSize: 17, lineHeight: 24, color: colors.ink, marginBottom: 6 },
+  stub: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, gap: 12 },
+  stubShop: { fontFamily: font.bold, fontSize: 18, color: colors.ink },
+  stubMeta: { fontFamily: font.regular, fontSize: 15, color: colors.muted, fontVariant: ['tabular-nums'] },
+  stubAmount: { fontFamily: font.display, fontSize: 34, color: colors.carbon, fontVariant: ['tabular-nums'] },
+  on: { fontFamily: font.bold, fontSize: 17, color: colors.carbon },
 });
