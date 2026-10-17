@@ -235,11 +235,29 @@ function Traps({ rules, desk }: { rules: EvalRun | null; desk: EvalRun | null })
   );
 }
 
-/** One scored section: the strip, the comparison, the scenarios, then the two runs. */
+/** The few numbers a judge should read first, big, from the scored runs only. */
+function BigFacts({ rules, desk }: { rules: EvalRun | null; desk: EvalRun | null }) {
+  if (!desk) return null;
+  const df = desk.metrics.honest_flagged;
+  const dc = desk.metrics.real_caught;
+  const cv = desk.metrics.citations_valid;
+  return (
+    <Strip big items={[
+      { label: "Honest cases wrongly flagged", value: `${df.flagged} of ${df.total}`,
+        sub: rules ? `Rules alone: ${rules.metrics.honest_flagged.flagged} of ${rules.metrics.honest_flagged.total}` : undefined },
+      { label: "Real cases caught", value: `${dc.caught} of ${dc.total}`,
+        sub: rules ? `Rules alone: ${rules.metrics.real_caught.caught} of ${rules.metrics.real_caught.total}` : undefined },
+      ...(cv ? [{ label: "Answers that only cite real records", value: `${cv.valid} of ${cv.checked}`, sub: desk.model ?? undefined }] : []),
+    ]} />
+  );
+}
+
+/** One scored section: the big numbers, the strip, the comparison, the scenarios, then the two runs. */
 function Scored({ section, heldout, children }: { section: EvalSection; heldout: boolean; children?: ReactNode }) {
   const { rules_only: rules, stormdesk: desk } = section.columns;
   return (
     <div className="space-y-10">
+      <BigFacts rules={rules} desk={desk} />
       <SectionStrip rules={rules} desk={desk} heldout={heldout} />
       {heldout && (
         <p className="-mt-6 max-w-[90ch] text-secondary">
@@ -294,7 +312,7 @@ export function EvalsTab() {
 
   return (
     <div className="pb-12">
-      <PageHeader title="Evals" subtitle="StormDesk measured with Chalk Evaluations on labeled simulated towns"
+      <PageHeader title="How good is the agent?" subtitle="StormDesk measured with Chalk Evaluations on labeled simulated towns"
         takeaway={data ? (heldoutShown
           ? evalsTakeaway(heldout!.columns.rules_only, heldout!.columns.stormdesk, true)
           : evalsTakeaway(rules, desk, false)) ?? undefined : undefined}>

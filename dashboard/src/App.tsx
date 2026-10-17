@@ -1,7 +1,7 @@
-// One page, five tabs, persistent sidebar (spec §18, issue #93). The tab lives
+// One page, five tabs, persistent top navigation (spec §18, issue #93). The tab lives
 // in the URL hash so a reload lands on the same tab; it opens on Accounts.
 import { useEffect, useState } from "react";
-import { Sidebar } from "./components/Sidebar";
+import { TopNav } from "./components/TopNav";
 import { EventsProvider } from "./events";
 import { ProofPage } from "./proof/ProofPage";
 import { AccountsTab } from "./tabs/Accounts";
@@ -42,9 +42,9 @@ function Dashboard() {
 
   return (
     <EventsProvider>
-      <div className="flex min-h-screen bg-page text-ui text-ink">
-        <Sidebar tab={tab} />
-        <main className="min-w-0 flex-1 px-10 pt-8">
+      <div className="min-h-screen bg-page text-ui text-ink">
+        <TopNav tab={tab} />
+        <main className="mx-auto min-w-0 max-w-[1280px] px-10 pt-8">
           {tab === "accounts" && <AccountsTab />}
           {tab === "cases" && <CasesTab />}
           {tab === "town" && <TownTab />}

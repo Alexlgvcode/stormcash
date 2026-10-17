@@ -102,11 +102,11 @@ export function AgreementLine({ result, webOk, cpp }: { result: Agreement; webOk
   if (result === "cpp_unavailable") return null;
   if (result === "both_verified") {
     return (
-      <div role="status" className="py-2.5">
+      <div role="status" className="mt-3 rounded-2xl bg-success-bg px-4 py-3.5">
         <StatusItem tone="success">
           <span className="font-semibold text-success">Verified by 2 independent implementations</span>
         </StatusItem>
-        <p className="mt-1 text-th text-secondary">
+        <p className="mt-1 text-th text-ink">
           Your browser's WebCrypto and our C++ verifier each checked every signature and the rule, with no code in
           common.
         </p>
@@ -115,22 +115,22 @@ export function AgreementLine({ result, webOk, cpp }: { result: Agreement; webOk
   }
   if (result === "neither_verified") {
     return (
-      <div role="status" className="py-2.5">
+      <div role="status" className="mt-3 rounded-2xl bg-danger-bg px-4 py-3.5">
         <StatusItem tone="danger">
           <span className="font-semibold text-danger">Neither implementation verified this proof</span>
         </StatusItem>
-        <p className="mt-1 text-th text-secondary">
+        <p className="mt-1 text-th text-ink">
           {WEB_WORDS(webOk)}, and {CPP_WORDS[cpp?.status ?? "invalid"]}. The details are below.
         </p>
       </div>
     );
   }
   return (
-    <div role="alert" className="py-2.5">
+    <div role="alert" className="mt-3 rounded-2xl bg-warning-bg px-4 py-3.5">
       <StatusItem tone="warning">
         <span className="font-semibold text-warning">The two implementations disagree</span>
       </StatusItem>
-      <p className="mt-1 text-th text-secondary">
+      <p className="mt-1 text-th text-ink">
         {WEB_WORDS(webOk)}, but {CPP_WORDS[cpp?.status ?? "invalid"]}. Treat this proof as unverified until that's
         explained.
       </p>

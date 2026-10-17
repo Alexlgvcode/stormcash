@@ -406,7 +406,8 @@ export function DroidTab() {
     : `Droid ran ${t0.droid_runs} ${t0.droid_runs === 1 ? "time" : "times"} in the product: ${t0.valid} gave valid answers, for ${
       credits(t0.credits_total)} Factory credits in all. A person approves anything it proposes.`);
   const header = (
-    <PageHeader title="Droid" subtitle="Every Droid run, what it cost, and the guardrails that fired" takeaway={takeaway || undefined}>
+    <PageHeader title="Droid at work" subtitle="Every Droid run in the product, what it cost, and the guardrails that fired"
+      takeaway={takeaway || undefined}>
       <Tabs tabs={VIEWS} value={view} onChange={setView} />
     </PageHeader>
   );

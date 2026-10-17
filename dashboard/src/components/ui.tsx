@@ -1,6 +1,6 @@
-// The dashboard's shared building blocks (issue #93): page header, underlined
-// tabs, sections (a heading over a hairline), plain tables, status pills and
-// buttons. No cards: the only rounded things are pills (4px) and buttons (6px).
+// The dashboard's shared building blocks (issue #93), in the bank style of Alex's
+// "Capital One" mockup: a light navy headline, segmented pill tabs, sections (a
+// light heading over a rule), account-style rows and tables, chips and pill buttons.
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, TdHTMLAttributes, ThHTMLAttributes } from "react";
 import { Icon, type IconName } from "./Icon";
 
@@ -16,7 +16,7 @@ const PILL: Record<Tone, string> = {
 
 export function Pill({ tone, title, children }: { tone: Tone; title?: string; children: ReactNode }) {
   return (
-    <span title={title} className={`inline-flex items-center whitespace-nowrap rounded-pill px-2 py-0.5 text-th font-medium ${PILL[tone]}`}>
+    <span title={title} className={`inline-flex items-center whitespace-nowrap rounded-pill px-2.5 py-0.5 text-th font-semibold ${PILL[tone]}`}>
       {children}
     </span>
   );
@@ -30,18 +30,16 @@ export function PageHeader({ title, subtitle, takeaway, children }: {
   children?: ReactNode;
 }) {
   return (
-    <header className="mb-6">
-      <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-        <h1 className="text-title font-medium text-heading">{title}</h1>
-        {subtitle && <p className="text-ui text-secondary">{subtitle}</p>}
-      </div>
-      {takeaway && <p className="mt-3 max-w-[90ch] text-section text-ink">{takeaway}</p>}
-      {children && <div className="mt-5">{children}</div>}
+    <header className="mb-8">
+      <h1 className="text-title font-light text-heading">{title}</h1>
+      {subtitle && <p className="mt-1.5 text-ui text-secondary">{subtitle}</p>}
+      {takeaway && <p className="mt-4 max-w-[90ch] text-[18px] leading-7 text-ink">{takeaway}</p>}
+      {children && <div className="mt-6">{children}</div>}
     </header>
   );
 }
 
-/** Underlined text tabs over a full-width hairline; the selected one is carbon with a 2px underline. */
+/** Segmented pill tabs; the selected one is filled navy. */
 export function Tabs<T extends string>({
   tabs,
   value,
@@ -52,15 +50,15 @@ export function Tabs<T extends string>({
   onChange: (id: T) => void;
 }) {
   return (
-    <div role="tablist" className="flex gap-7 border-b border-rule">
+    <div role="tablist" className="flex flex-wrap gap-2">
       {tabs.map((t) => (
         <button
           key={t.id}
           role="tab"
           aria-selected={value === t.id}
           onClick={() => onChange(t.id)}
-          className={`-mb-px border-b-2 pb-2.5 text-ui font-medium ${
-            value === t.id ? "border-accent text-accent" : "border-transparent text-nav hover:text-heading"
+          className={`rounded-full px-4 py-1.5 text-ui ${
+            value === t.id ? "bg-heading font-semibold text-white" : "bg-neutral-bg text-secondary hover:bg-accent-tint hover:text-heading"
           }`}
         >
           {t.label}
@@ -70,12 +68,12 @@ export function Tabs<T extends string>({
   );
 }
 
-/** A heading over a thin rule. */
+/** A light navy heading over a rule. */
 export function Section({ title, right, children }: { title: string; right?: ReactNode; children: ReactNode }) {
   return (
     <section>
       <div className="flex flex-wrap items-end justify-between gap-3 border-b border-rule pb-2">
-        <h2 className="text-section font-medium text-heading">{title}</h2>
+        <h2 className="text-section font-light text-heading">{title}</h2>
         {right}
       </div>
       <div className="mt-1">{children}</div>
@@ -99,7 +97,7 @@ export function Th({ num, className = "", ...rest }: ThHTMLAttributes<HTMLTableC
   return (
     <th
       {...rest}
-      className={`border-b border-rule py-2 pr-6 text-th font-medium text-secondary last:pr-0 ${num ? "text-right" : ""} ${className}`}
+      className={`border-b border-rule py-2.5 pr-6 text-th font-semibold text-secondary last:pr-0 ${num ? "text-right" : ""} ${className}`}
     />
   );
 }
@@ -114,7 +112,7 @@ export function Td({
   return (
     <td
       {...rest}
-      className={`py-3 pr-6 align-top last:pr-0 ${rule ? "border-b border-rule" : ""} ${
+      className={`py-3.5 pr-6 align-top last:pr-0 ${rule ? "border-b border-rule" : ""} ${
         num ? "whitespace-nowrap text-right tabular-nums" : ""
       } ${className}`}
     />
@@ -149,21 +147,24 @@ export function Button({
   return (
     <button
       {...rest}
-      className={`whitespace-nowrap rounded-button font-medium disabled:opacity-60 ${
-        small ? "px-2.5 py-1 text-th" : "px-3.5 py-1.5 text-ui"
-      } ${primary ? "bg-accent text-white hover:bg-accent/90" : "border border-rule bg-page text-ink hover:bg-accent-tint"} ${className}`}
+      className={`whitespace-nowrap rounded-button border-[1.5px] border-accent font-semibold disabled:opacity-50 ${
+        small ? "px-3 py-1 text-th" : "px-[18px] py-2 text-ui"
+      } ${primary ? "bg-accent text-white hover:bg-accent/90" : "bg-page text-accent hover:bg-accent-tint"} ${className}`}
     />
   );
 }
 
-/** A summary strip: label over value, items split by vertical hairlines, ruled above and below. */
-export function Strip({ items }: { items: { label: string; value: ReactNode }[] }) {
+/** Facts in a row: a small label over a navy value; `big` for the few numbers a judge should read first. */
+export function Strip({ items, big = false }: { items: { label: string; value: ReactNode; sub?: ReactNode }[]; big?: boolean }) {
   return (
-    <div className="flex flex-wrap gap-y-3 border-y border-rule py-3">
-      {items.map((it, i) => (
-        <div key={it.label} className={i === 0 ? "pr-6" : "border-l border-rule px-6"}>
+    <div className="flex flex-wrap gap-x-12 gap-y-4 py-1">
+      {items.map((it) => (
+        <div key={it.label} className="min-w-0">
           <div className="text-th text-secondary">{it.label}</div>
-          <div className="text-heading">{it.value}</div>
+          <div className={big ? "text-[30px] leading-10 font-light text-heading" : "text-[18px] leading-7 font-semibold text-heading"}>
+            {it.value}
+          </div>
+          {it.sub && <div className="text-th text-secondary">{it.sub}</div>}
         </div>
       ))}
     </div>
@@ -189,7 +190,7 @@ export function TextInput(props: InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
       {...props}
-      className={`rounded-button border border-rule px-3 py-1.5 text-ui text-ink placeholder:text-secondary focus:border-accent focus:outline-none ${
+      className={`rounded-full border-[1.5px] border-rule px-4 py-1.5 text-ui text-ink placeholder:text-secondary focus:border-accent focus:outline-none ${
         props.className ?? ""
       }`}
     />

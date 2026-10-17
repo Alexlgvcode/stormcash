@@ -123,34 +123,33 @@ function BalanceRow({ card, rec }: { card: AccountCard; rec: ReconcileAccount | 
 
   const { account, owner } = accountAndOwner(card);
   const pill = rec ? bankPill(rec) : null;
+  // An account row in the bank style: who and which account, what the bank says, the balance big on the right.
   return (
-    <tr>
-      <Td className="font-medium text-heading">{account}</Td>
-      <Td>{owner}</Td>
-      <Td num>
-        {delta !== null && (
-          <span className="mr-2">
-            <Pill tone={delta > 0 ? "success" : "danger"}>{signedDollars(delta)}</Pill>
-          </span>
-        )}
+    <li className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-b border-rule py-4">
+      <div className="min-w-0">
+        <div className="text-[17px] font-semibold text-heading">{owner} · {account}</div>
+        <div className="mt-1 flex flex-wrap items-center gap-2 text-th text-secondary">
+          {pill ? (
+            <Pill tone={TONE[pill.tone]} title={rec?.error ?? undefined}>
+              {pill.tone === "ok" ? "Matches the bank" : pill.text}
+            </Pill>
+          ) : (
+            <span>Checking with the bank…</span>
+          )}
+          {value !== null && <span>from Nessie transactions</span>}
+        </div>
+      </div>
+      <div className="flex items-center gap-3">
+        {delta !== null && <Pill tone={delta > 0 ? "success" : "danger"}>{signedDollars(delta)}</Pill>}
         {value !== null ? (
-          <span className="font-medium text-heading">{dollars(value)}</span>
+          <span className="text-[28px] leading-9 font-light tabular-nums text-ink">{dollars(value)}</span>
         ) : (
           <span className="text-secondary" title={card.nessie_error ?? undefined}>
             {card.nessie_account_id ? "Nessie unavailable" : "No Nessie account"}
           </span>
         )}
-      </Td>
-      <Td>
-        {pill ? (
-          <Pill tone={TONE[pill.tone]} title={rec?.error ?? undefined}>
-            {pill.text}
-          </Pill>
-        ) : (
-          <span className="text-secondary">Checking…</span>
-        )}
-      </Td>
-    </tr>
+      </div>
+    </li>
   );
 }
 
@@ -161,6 +160,31 @@ function SetupToggle({ on, set, hidden }: { on: boolean; set: (v: boolean) => vo
       <input type="checkbox" checked={on} onChange={(e) => set(e.target.checked)} className="h-4 w-4 accent-accent" />
       Show setup calls{!on && hidden > 0 ? ` (${hidden} hidden)` : ""}
     </label>
+  );
+}
+
+/** Recent money movements as bank-statement rows: what happened, when and its status, the amount on the right. */
+function ActivityList({ calls }: { calls: NessieCall[] }) {
+  if (calls.length === 0) return <p className="py-3 text-secondary">No Nessie calls yet.</p>;
+  return (
+    <ul>
+      {calls.map((c) => {
+        const { description, cents } = callLine(c);
+        const status = callStatus(c.status);
+        return (
+          <li key={c.call_id} className="flex items-center justify-between gap-6 border-b border-rule py-3.5">
+            <div className="min-w-0">
+              <div className="break-words text-ink">{description}</div>
+              <div className="mt-1 flex items-center gap-2 text-th text-secondary">
+                <span className="tabular-nums">{clockTime(c.created_at)}</span>
+                <Pill tone={status.ok ? "success" : "danger"}>{status.text}</Pill>
+              </div>
+            </div>
+            {cents !== null && <span className="text-[22px] font-light tabular-nums text-ink">{dollars(cents)}</span>}
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
@@ -222,27 +246,17 @@ function Balances({ snap, rec, calls, setup, setSetup }: {
         {nessie.queued > 0 && <StatusItem tone="warning">Payouts waiting for Nessie: {nessie.queued}</StatusItem>}
         {rec.result && <span className="text-secondary">Checked {clockTime(rec.result.checked_at)}</span>}
       </StatusLine>
-      <Table>
-        <thead>
-          <tr>
-            <Th>Account</Th>
-            <Th>Owner</Th>
-            <Th num>Balance</Th>
-            <Th>Bank</Th>
-          </tr>
-        </thead>
-        <tbody>
-          {snap.accounts.map((card) => (
-            <BalanceRow key={card.key} card={card} rec={byKey.get(card.key)} />
-          ))}
-        </tbody>
-      </Table>
+      <ul className="border-t border-rule">
+        {snap.accounts.map((card) => (
+          <BalanceRow key={card.key} card={card} rec={byKey.get(card.key)} />
+        ))}
+      </ul>
       {town.merchants > 0 && (
         <p className="mt-4 text-secondary">Simulated town: {town.merchants} shops, ledger only, never sent to Nessie</p>
       )}
       <div className="mt-10">
-        <Section title="Latest Nessie calls" right={<SetupToggle on={setup} set={setSetup} hidden={calls.length - shown.length} />}>
-          <CallTable calls={shown.slice(0, LATEST_CALLS)} />
+        <Section title="Recent Nessie activity" right={<SetupToggle on={setup} set={setSetup} hidden={calls.length - shown.length} />}>
+          <ActivityList calls={shown.slice(0, LATEST_CALLS)} />
         </Section>
       </div>
     </>

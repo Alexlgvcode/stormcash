@@ -77,15 +77,17 @@ export function ProofPage({ caseId }: { caseId: number }) {
   const bothFinished = (web === "ok" || web === "failed") && cpp !== null && cpp.kind !== "running";
 
   return (
+    <>
+    <div className="border-b border-rule px-4 py-3.5 text-[18px] font-bold text-heading">StormCash</div>
     <main className="mx-auto max-w-xl space-y-8 px-4 py-6">
       <header>
-        <Eyebrow>StormCash · Case #{proof.case_id}</Eyebrow>
-        <h1 className="mt-1 text-[26px] leading-tight font-semibold text-heading">{text.title}</h1>
+        <Eyebrow>Case #{proof.case_id}</Eyebrow>
+        <h1 className="mt-1 text-[28px] leading-tight font-light text-heading">{text.title}</h1>
         <p className="mt-2 text-ink">{text.why}</p>
       </header>
 
       <div className="space-y-2">
-        <Button primary disabled={busy} onClick={verify} className="w-full py-3 text-section">
+        <Button primary disabled={busy} onClick={verify} className="w-full py-3 text-[18px]">
           {busy ? "Verifying…" : web ? "Verify again" : "Verify it yourself"}
         </Button>
         {webError && <p className="text-danger">{webError}</p>}
@@ -133,5 +135,6 @@ export function ProofPage({ caseId }: { caseId: number }) {
         (stormcash-verify) compiled to WebAssembly, with its own P-256 (p256-m) and SHA-256.
       </p>
     </main>
+    </>
   );
 }

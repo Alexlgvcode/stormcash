@@ -9,7 +9,7 @@ import { caseTitle, casesTakeaway } from "../cases";
 import { RULE_TEXT, TagTable, useVerify, VerifyResult } from "../components/Evidence";
 import { OwnerFreezes } from "../components/OwnerFreeze";
 import { CaseStormDesk, FlagsView } from "../components/StormDesk";
-import { Button, Eyebrow, Facts, Note, PageHeader, Pill, Section, Strip, Tabs } from "../components/ui";
+import { Button, Facts, Note, PageHeader, Pill, Section, Strip, Tabs } from "../components/ui";
 import { useEvents } from "../events";
 import { clockTime, dollars } from "../format";
 
@@ -136,32 +136,27 @@ function CaseView({ row, paths }: { row: CaseSummary; paths: Map<string, RelayPa
     <div className="min-w-0 space-y-10">
       <div className="space-y-4">
         <div>
-          <div className="flex items-center gap-2">
-            <Eyebrow>Case #{c.case_id}</Eyebrow>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <h2 className="text-title font-light text-heading">
+              {amount !== undefined && RULE_VERB[c.rule] ? (
+                <><span className="tabular-nums">{dollars(amount)}</span> {RULE_VERB[c.rule]}</>
+              ) : text.title}
+            </h2>
+            <Pill tone="danger">{detectedText(c)}</Pill>
             {row.simulated && <Pill tone="neutral">simulated</Pill>}
           </div>
-          <div className="mt-1 flex flex-wrap items-center gap-3">
-            {amount !== undefined && RULE_VERB[c.rule] ? (
-              <>
-                <span className="text-[30px] leading-9 font-semibold tabular-nums text-heading">{dollars(amount)}</span>
-                <span className="text-section text-secondary">{RULE_VERB[c.rule]}</span>
-              </>
-            ) : (
-              <span className="text-[30px] leading-9 font-semibold text-heading">{text.title}</span>
-            )}
-            <Pill tone="danger">{detectedText(c)}</Pill>
-            {canVerify && (
-              <div className="ml-auto flex gap-2">
-                <Button onClick={() => setShowQR((v) => !v)}>{showQR ? "Hide Proof QR" : "Proof QR"}</Button>
-                <Button primary disabled={busy} onClick={verify}>
-                  {busy ? "Verifying…" : "Verify it yourself"}
-                </Button>
-              </div>
-            )}
-          </div>
-          <p className="mt-2 max-w-[80ch] text-ink">
-            <span className="font-medium text-heading">{text.title}.</span> {text.why}
+          <p className="mt-1.5 text-secondary">
+            Case #{c.case_id} · {text.title} · proven by signed records, not a score
           </p>
+          <p className="mt-3 max-w-[80ch] text-ink">{text.why}</p>
+          {canVerify && (
+            <div className="mt-5 flex flex-wrap gap-2.5">
+              <Button primary disabled={busy} onClick={verify}>
+                {busy ? "Verifying…" : "Verify it yourself"}
+              </Button>
+              <Button onClick={() => setShowQR((v) => !v)}>{showQR ? "Hide Proof QR" : "Proof QR"}</Button>
+            </div>
+          )}
         </div>
         <Strip
           items={[
