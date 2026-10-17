@@ -166,18 +166,20 @@ CREATE TABLE flags (                    -- StormDesk output (one per candidate)
   agent_session_id TEXT,
   agent_transcript JSONB,               -- tool calls for replay on dashboard
   status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','approved','rejected','dismissed','invalid')),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  review JSONB,                         -- [v4.15] the reviewer's second opinion (§14.7b)
+  agents_disagree BOOLEAN NOT NULL DEFAULT FALSE -- [v4.15] a valid review didn't agree: open for a person
 );
 
 CREATE TABLE stormdesk_runs (           -- [v4.3] every StormDesk run, for replay and audit (§14.7, §14.8)
   run_id BIGSERIAL PRIMARY KEY,
-  job TEXT NOT NULL CHECK (job IN ('investigate','triage','respond')),
+  job TEXT NOT NULL CHECK (job IN ('investigate','triage','respond','review')), -- [v4.15] review (§14.7b)
   case_id BIGINT REFERENCES cases,
   candidate_id BIGINT REFERENCES candidates,
   merchant_id BYTEA,
   runner TEXT NOT NULL,                 -- 'droid' | 'fake' (a fake run is never shown as an agent result)
   status TEXT NOT NULL CHECK (status IN ('running','succeeded','invalid','failed')),
-  output JSONB,                         -- the structured output (Flag / CaseFile / AppealReply)
+  output JSONB,                         -- the structured output (Flag / CaseFile / AppealReply / Review)
   citations_valid BOOLEAN,
   transcript JSONB NOT NULL DEFAULT '{}', -- {runner, steps: [{tool, input, ok}], missing_citations, error}
   session_id TEXT,

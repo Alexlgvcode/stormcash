@@ -16,6 +16,7 @@
 > **v4.12 (Oct 17):** StormDesk prompt v2 (§14.4): how to weigh soft evidence, written after reading v1's eval errors, so not a blind holdout. Marked **[v4.12]**.
 > **v4.13 (Oct 17):** resident FREEZE by text built (§17.2): residents get a Photon handle (`resident_contacts`), a FREEZE text freezes the cert through the hard-rule freeze path and publishes a POLICY, `cert_status.owner_freeze_at` feeds cap_drain's `owner_freeze_request`, and resident threads live in `messages` (§11.1, §12.1, §12.3, §13.2). Migration `004_resident_freeze.sql`. Marked **[v4.13]**.
 > **v4.14 (Oct 17):** prompt v2 evaluated complete on the 43-row dataset, and on held-out seeds fixed before the run (#100, §15.3): the held-out section on the Evals tab, the prompt-version guard, and an idempotent eval gateway. Marked **[v4.14]**.
+> **v4.15 (Oct 17):** a reviewer Droid (§14.7b): a second session tries to refute each triage Flag with the same read-only tools before a person sees it; a valid disagreement marks the flag "agents disagree" and keeps it open for a person, who still decides. `STORMDESK_REVIEW`, `POST /v1/stormdesk/review`, `flags.review` / `agents_disagree`, `stormdesk_runs.job = 'review'` (§6.3, §11.1, §12.1, §14.1, §22.4). Migration `005_stormdesk_review.sql`. Marked **[v4.15]**.
 > **Builds on:** "StormCash: The 10/10 Build" v3 (Oct 16, Alexandre Lugovoi, on Brian Maina's Oct 11 draft). Everything new since v3 is marked **[v4]**.
 
 ---
@@ -290,6 +291,7 @@ BACKGROUND_TASKS=1                                # [v4.3] Nessie replay (10 s) 
 STORMDESK_RUNNER=auto                             # [v4.3] droid | fake | auto (§14.7a)
 STORMDESK_MODEL=                                  # [v4.3] empty = Droid picks
 STORMDESK_AUTO=1                                  # [v4.3] worker runs StormDesk on new cases and candidates
+STORMDESK_REVIEW=1                                # [v4.15] a reviewer Droid checks every triage (§14.7b); 0 = off
 ```
 
 The server's public key is compiled into the mobile app (`mobile/src/config.ts: SERVER_PUB`). Generate the server key once on Friday and do not rotate it.
@@ -819,18 +821,20 @@ CREATE TABLE flags (                    -- StormDesk output (one per candidate)
   agent_session_id TEXT,
   agent_transcript JSONB,               -- tool calls for replay on dashboard
   status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','approved','rejected','dismissed','invalid')),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  review JSONB,                         -- [v4.15] the reviewer's second opinion (§14.7b)
+  agents_disagree BOOLEAN NOT NULL DEFAULT FALSE -- [v4.15] a valid review didn't agree: open for a person
 );
 
 CREATE TABLE stormdesk_runs (           -- [v4.3] every StormDesk run, for replay and audit (§14.7, §14.8)
   run_id BIGSERIAL PRIMARY KEY,
-  job TEXT NOT NULL CHECK (job IN ('investigate','triage','respond')),
+  job TEXT NOT NULL CHECK (job IN ('investigate','triage','respond','review')), -- [v4.15] review (§14.7b)
   case_id BIGINT REFERENCES cases,
   candidate_id BIGINT REFERENCES candidates,
   merchant_id BYTEA,
   runner TEXT NOT NULL,                 -- 'droid' | 'fake' (a fake run is never shown as an agent result)
   status TEXT NOT NULL CHECK (status IN ('running','succeeded','invalid','failed')),
-  output JSONB,                         -- the structured output (Flag / CaseFile / AppealReply)
+  output JSONB,                         -- the structured output (Flag / CaseFile / AppealReply / Review)
   citations_valid BOOLEAN,
   transcript JSONB NOT NULL DEFAULT '{}', -- {runner, steps: [{tool, input, ok}], missing_citations, error}
   session_id TEXT,
@@ -1063,6 +1067,7 @@ All JSON. Byte fields base64url. Prefix `/v1`. Auth for demo: none on reads; res
 | `GET /v1/flags` / `GET /v1/flags/{id}` | | flag + candidate features + agent transcript | WS5 |
 | `POST /v1/flags/{id}/approve` / `reject` | `{note}` | executes actions (§14.6), returns approval. **[v4.3]** `X-SC-Operator` names the operator; `GET /v1/flags/{id}/approvals` lists decisions | WS5 |
 | `POST /v1/stormdesk/run` | `{candidate_id}` or `{case_id}` | `{flag}` or `{case_file_md}` (sync; used by evals) | WS5 |
+| `POST /v1/stormdesk/review` **[v4.15]** | `{flag_id}` or `{candidate_id}` (the stored flag), or `{candidate_id, proposal}` (a Flag to review, e.g. an eval's stored output; `flags` untouched) | the review run: `{output: Review, after_review: {status, agents_disagree, kind, proposed_action}, flag?, runner, model, usage, prompt_version, duration_s, …}` (sync, operator header). 409 for a decided or invalid flag, or a proposal whose citations don't hold (§14.7b) | WS5 |
 | `GET /v1/stormdesk/runs` / `GET /v1/stormdesk/runs/{id}` **[v4.3]** | `?case_id&candidate_id` | stored runs; one run with its full transcript for replay (§14.8). `POST /v1/stormdesk/run` needs the operator header | WS5 |
 | `GET /v1/evals` **[v4.8]** | | the saved Chalk eval runs for the Evals tab: the newest file per comparison column (full), the others as summaries (§18.5) | WS3 |
 | `GET /v1/town` | | regions, merchants (x, y, simulated), live dots, recent payments, uploads, alerts | WS4/WS2 |
@@ -1179,6 +1184,7 @@ The detectors are designed to fire on **traps** too (§16.4). A rules-only syste
 | A hard case opens | **Investigate:** gather evidence, independently re-verify both signatures and the rule with the deterministic verifier tool, compute exposure and who is owed what, write a case file and recovery plan | `CaseFile` → `cases.case_file_md` |
 | A candidate is created | **Triage:** decide whether it's real, cite evidence, choose severity and action, or dismiss with a reason | `Flag` → `flags` |
 | A merchant appeals by message (§17) | **Respond:** compare the claim with the logs, reply with evidence, escalate or resolve | `AppealReply` → `messages` |
+| A triage stores an open or dismissed flag **[v4.15]** | **Review:** a second session tries to refute the Flag; it never acts (§14.7b) | `Review` → `flags.review` |
 
 Jobs run in a worker (`stormdesk/worker.py`): an asyncio queue, max 4 concurrent Droid sessions.
 
@@ -1334,6 +1340,31 @@ Reject = flag `rejected`, nothing executes. Every approval writes an `approvals`
 - **SSE `stormdesk_step`:** `{run_id, job, subject, runner, index, tool, input_summary, ok}` per tool call, then `{run_id, done, status}`. A `flag` event follows triage.
 - `query_features` asks Chalk (§15.2) **[v4.6]**; the Postgres fallback (§22.4: the detectors' frozen features) answers when Chalk is off or fails.
 - Checked on the seeded town with the fake runner: all 22 hard cases and 12 candidates give valid outputs with verified citations.
+
+### 14.7b Reviewer Droid: agents check agents, a person decides [v4.15]
+
+- **Job `review`** (`runner.py`, `service.py`, `prompt.py`). After a triage stores an `open` or `dismissed` flag, a second, independent Droid session tries to refute it. Its own system prompt (`REVIEW_PROMPT`, `REVIEW_PROMPT_VERSION = 1`): don't trust StormDesk's summary or reasoning, re-run the tools, check that every cited record exists and supports the claim it is cited for, look for what was missed (a dismissal can be wrong too); then StormDesk's "Facts you must respect" and v2 weighing, verbatim. It gets the candidate id and StormDesk's structured `Flag` (with its `reasoning` field), never the first run's transcript or session. The same 11 read-only MCP tools, `disabled_tools`, permission handler and citation check (§14.7) apply.
+- **Output** (`schemas.Review`): `verdict: agree | disagree | insufficient_evidence`, `reasons` (≤ 4), `evidence_ids`, and, when it doesn't agree, `suggested_kind`, `suggested_severity`, `suggested_action`.
+- **What it does to the flag** (`service.after_review`, deterministic). The review is stored as `flags.review` (the output plus its run id, runner, status, citations, model, usage, prompt version and duration). Only a valid review by an agent counts:
+  - `agree`: the flag stays as StormDesk proposed it.
+  - `disagree` or `insufficient_evidence`: `flags.agents_disagree = true`, and the flag is `open` for a person (a dismissal is reopened).
+  - StormDesk's kind and proposed action never change, and Approve runs only that action (§14.6). The reviewer's suggestion is shown, never executed. The reviewer can't act.
+  - A review with a missing citation or no output, and the fake reviewer's answer, are shown and don't count. Invalid flags aren't reviewed (they never reach a person). A decided flag stays decided. A re-triage clears the review, and a review that finishes after a re-triage is kept as a run only.
+- **Fake reviewer.** `FakeRunner` re-reads the candidate and its records (payments, cert chain or region) and compares the proposal with the rules-only baseline: `agree` when they match, `disagree` for a dismissal, `insufficient_evidence` otherwise. Its reasons start with "Fake reviewer:" and it never escalates a flag: a rules-only comparison isn't a second opinion (the baseline flags every honest subject, §15.3).
+- **Recording**, exactly as a triage: a `stormdesk_runs` row with `job = 'review'` and the candidate id, its runner, `model`, `model_requested`, `usage` (Factory credits), `prompt_version` (the reviewer's), `duration_s` (now on every run), steps, and `reviewed` (flag id, StormDesk run id, the proposal). Live steps are `stormdesk_step` events with subject `review of candidate #N`, then a `flag` event.
+- **Every Droid run** (triage, investigation and review) now also stores, in its transcript:
+  - `attempts`: one `{attempt, ok, error}` per session, so a structured-output retry leaves a trace.
+  - `permission_denials`: one `{tool, server, reason}` per action the permission handler refused, and `[]` when it refused none.
+  - On a fallback, the Droid attempt's own lists are under `fallback_attempts` / `fallback_permission_denials`.
+  - The keys are absent on fake-runner runs and on older runs: not recorded, never zero.
+- **Switch.** `STORMDESK_REVIEW=1`, the default when the server loads its environment (bare `Settings` in tests: off), reviews every triage that stores an open or dismissed flag, with the runner the desk would pick (Droid, or the labelled fake runner on fallback). The `POST /v1/stormdesk/run` response then has `review`. `STORMDESK_REVIEW=0` turns it off. `POST /v1/stormdesk/review` reviews a stored flag on request, or a Flag passed in with its candidate (§12.1).
+- **Dashboard** (the StormDesk flag panel): a "Second opinion" section with "Reviewer agrees / disagrees / not enough evidence", the reviewer's badge (model and credits, or "Fake runner · rules only"), its reasons, the records it cited (checked), what it would do instead, and its own steps, live or replayed. A flag where the agents disagree says "Agents disagree · a person decides" in its header and in the list. "Ask the reviewer" / "Review again" calls the endpoint.
+- **Not built:** reviewing investigations (hard cases are proofs) and appeal replies.
+- **Honesty.** The reviewer prompt was written before any review ran and without reading any held-out row; its author knew run B's aggregate scores (§15.3).
+- **First live reviews, Oct 17** (`claude-sonnet-5-5`, demo DB, seed 42), both answered on the first attempt with valid citations:
+  - Corner Store (flag 16, StormDesk run 88, prompt v2, hold pool payouts): review run 89 **agreed**. 14 steps (`ToolSearch` and 13 tool calls), 10 cited ids, 56,198 credits, 43.6 s.
+  - Stolen phone, Resident 174 (flag 17, the fake runner's freeze_cert baseline): review run 90 **agreed**. 9 steps, 5 cited ids, 16,828 credits, 30.0 s. It also noted that the baseline's text missed the region mismatch and the idle gap.
+  - Neither shows a disagreement. How often the reviewer disagrees, and whether that helps, is for an eval on stored proposals (§15.3).
 
 ### 14.8 Demo replay
 
@@ -1862,6 +1893,7 @@ If judging slots are < 3 min, drop the Town beat from the core and show StormDes
 | Nessie unusable for the whole demo **[v4.3]** | ledger-only money, Accounts tab shows ledger | `NESSIE_DISABLED=1` |
 | Phone can't sign API writes yet **[v4.3]** | accept unsigned writes | `API_SIG_REQUIRED=0` |
 | Droid slow or failing | replay stored transcripts | dashboard toggle |
+| Reviewer slow, failing or too costly **[v4.15]** | triage alone: the flag as StormDesk proposed it | `STORMDESK_REVIEW=0` |
 | Chalk eval task can't reach tunnel | run agent locally, upload outputs, score in Chalk | `chalk/evals/run_local.py` |
 | Photon webhook issues | outbound notice only; show the thread from the DB | config |
 | Venue Wi-Fi blocks server | phone hotspot for Mac 2 and the gas station | — |

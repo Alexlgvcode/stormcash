@@ -1,10 +1,14 @@
-"""StormDesk's system prompt (spec §14.4) and the per-job instructions."""
+"""StormDesk's system prompts (spec §14.4, §14.7b) and the per-job instructions."""
 
 from __future__ import annotations
+
+import json
 
 # v2 (Oct 17) adds "How to weigh soft evidence". It was written after reading v1's errors on the
 # eval dataset (#33), so a v2 score on that same dataset is not a blind holdout.
 PROMPT_VERSION = 2
+# The reviewer's own prompt (§14.7b), versioned on its own. v1 (Oct 17) was written before any review ran.
+REVIEW_PROMPT_VERSION = 1
 
 STORMDESK_PROMPT = """You are StormDesk, the back-office fraud analyst for StormCash, an offline payment system
 used after disasters. Capital One funds resident escrow accounts; a guarantee pool pays shops
@@ -39,6 +43,24 @@ How to weigh soft evidence:
   pool-funded share and the number of distinct cheater certificates together; no single one
   decides."""
 
+REVIEW_PROMPT = """You are the StormDesk reviewer, an independent second opinion for StormCash, an offline
+payment system used after disasters. Capital One funds resident escrow accounts; a guarantee pool
+pays shops for accepted payments above a cheater's escrow.
+
+Another analyst, StormDesk, has proposed a decision on a soft candidate. Before a person sees it,
+your job is to try to refute it.
+- Don't trust StormDesk's summary or reasoning. Re-run the tools yourself and read the records.
+- Check every id StormDesk cites: does the record exist, and does it actually support the claim it
+  is cited for? A real id cited for the wrong claim counts against the proposal.
+- Look for what StormDesk missed. A dismissal can be wrong, as can a flag.
+- verdict "agree": your own reading of the records supports the same decision (the same kind, and
+  an action you would accept). "disagree": the records point to a different decision; give the
+  kind, severity and action you would propose. "insufficient_evidence": the records can't settle it.
+- You cannot act. Your verdict and StormDesk's both go to a person, who decides.
+- At most 4 reasons, one short sentence each. Cite in evidence_ids only ids you retrieved yourself.
+
+""" + STORMDESK_PROMPT[STORMDESK_PROMPT.index("Facts you must respect:"):]  # the same facts and weighing as v2
+
 
 def investigate_prompt(case_id: int, rule: str) -> str:
     return (
@@ -64,4 +86,15 @@ def respond_prompt(merchant_id: str, message: str) -> str:
         "signed logs (get_device_log, get_contacts, get_merchant_payments, get_messages). Return an "
         "AppealReply: a short reply to send, whether the claim matches the logs, the ids you cite, and "
         "whether a person must review it."
+    )
+
+
+def review_prompt(candidate_id: int, kind: str, proposal: dict) -> str:
+    """The reviewer gets the candidate and StormDesk's structured output, nothing else from its run."""
+    return (
+        f"Review StormDesk's proposal for soft candidate #{candidate_id} ({kind}). Its structured output:\n"
+        f"{json.dumps(proposal, indent=1, sort_keys=True)}\n"
+        "Read the candidate with get_candidate and check the evidence yourself with the other tools. Return a "
+        "Review: your verdict, at most 4 short reasons, the ids you checked, and if you disagree, the kind, "
+        "severity and action you would propose."
     )

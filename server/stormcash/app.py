@@ -79,6 +79,11 @@ def build_deps(settings: Settings, nessie_transport: httpx.BaseTransport | None 
         ).fetchone()
         if check is None or "held" not in check["d"]:
             raise RuntimeError("payouts can't be held yet: apply server/migrations/003_payouts_held.sql")
+        check = conn.execute(
+            "SELECT pg_get_constraintdef(oid) AS d FROM pg_constraint WHERE conname = 'stormdesk_runs_job_check'"
+        ).fetchone()
+        if check is None or "review" not in check["d"]:
+            raise RuntimeError("StormDesk can't store reviews yet: apply server/migrations/005_stormdesk_review.sql")
         ensure_regions(conn)
     return deps
 
