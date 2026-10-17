@@ -24,7 +24,7 @@ export function MerchantHomeScreen() {
       <Header />
       <View style={styles.sheet}>
         <Text style={styles.heroLabel}>Takes StormCash with no internet in {region.replace(/\b\w/g, (c) => c.toUpperCase())}</Text>
-        <Text style={styles.heroName} adjustsFontSizeToFit numberOfLines={2}>{mc.display_name}</Text>
+        <Text maxFontSizeMultiplier={1.15} style={styles.heroName} adjustsFontSizeToFit numberOfLines={2}>{mc.display_name}</Text>
         <Status text="Registered with StormCash" tone="green" />
       </View>
 
@@ -46,7 +46,7 @@ export function MerchantHomeScreen() {
 function Stat({ value, label, alert }: { value: number; label: string; alert?: boolean }) {
   return (
     <View style={{ flex: 1 }}>
-      <Text style={[styles.statValue, alert && { color: colors.red }]}>{value}</Text>
+      <Text maxFontSizeMultiplier={1.15} style={[styles.statValue, alert && { color: colors.red }]}>{value}</Text>
       <Text style={styles.statLabel}>{label}</Text>
     </View>
   );

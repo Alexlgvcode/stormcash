@@ -56,7 +56,7 @@ export function WalletScreen() {
       : { text: 'Backed by Capital One', tone: 'green' as const };
   const storm = cert.cap_cents >= STORM_CAP;
   const stubs = recentReceipts(4);
-  const name = getDisplayName() ?? 'Your';
+  const name = getDisplayName();
 
   return (
     <Screen>
@@ -64,10 +64,10 @@ export function WalletScreen() {
 
       <View style={styles.sheet} accessible accessibilityLabel={`${wholeDollars(left)} left to spend of ${wholeDollars(cert.cap_cents)}. ${status.text}.`}>
         <View style={styles.sheetTop}>
-          <Text style={styles.book}>{name}'s book</Text>
+          <Text style={styles.book}>{name ? `${name}'s book` : 'Your book'}</Text>
           <Text style={styles.copyNo}>next copy no. {state.counter + 1}</Text>
         </View>
-        <Text style={styles.figure} adjustsFontSizeToFit numberOfLines={1}>{wholeDollars(left)}</Text>
+        <Text maxFontSizeMultiplier={1.15} style={styles.figure} adjustsFontSizeToFit numberOfLines={1}>{wholeDollars(left)}</Text>
         <Text style={styles.sheetSub}>left to spend, of {wholeDollars(cert.cap_cents)}. No internet needed.</Text>
         <Meter value={state.cumCents} max={cert.cap_cents} color={colors.carbon} track={colors.sheetEdge} />
         <Status text={status.text} tone={status.tone} />
@@ -88,7 +88,7 @@ export function WalletScreen() {
                   Copy no. {r.counter}, {new Date(r.ts * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
                 </Text>
               </View>
-              <Text style={styles.stubAmount}>{wholeDollars(r.amountCents)}</Text>
+              <Text maxFontSizeMultiplier={1.15} style={styles.stubAmount}>{wholeDollars(r.amountCents)}</Text>
             </View>
           ))
         )}
@@ -122,7 +122,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.sheet, borderRadius: 8, padding: 20, gap: 10,
     borderBottomWidth: 4, borderBottomColor: colors.sheetEdge, // the stack of copies underneath
   },
-  sheetTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
+  sheetTop: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'baseline', columnGap: 12 },
   book: { fontFamily: font.bold, fontSize: 17, color: colors.ink },
   copyNo: { fontFamily: font.regular, fontSize: 15, color: '#6B5A12', fontVariant: ['tabular-nums'] },
   figure: { fontFamily: font.display, fontSize: 132, lineHeight: 128, color: colors.carbon, marginTop: 4, fontVariant: ['tabular-nums'] },

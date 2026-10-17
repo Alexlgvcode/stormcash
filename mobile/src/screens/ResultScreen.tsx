@@ -63,7 +63,7 @@ export function ResultScreen({ result, pay, capCents }: { result: CheckResult; p
         <Text style={styles.kicker}>Payment received offline</Text>
         <View style={styles.row}>
           <Text style={styles.what}>Copy no. {pay?.t.counter ?? '-'}</Text>
-          <Text style={styles.amount}>{amount}</Text>
+          <Text maxFontSizeMultiplier={1.15} style={[styles.amount, { marginLeft: 'auto' }]}>{amount}</Text>
         </View>
         <Text style={styles.meta}>
           {ok
@@ -78,7 +78,7 @@ export function ResultScreen({ result, pay, capCents }: { result: CheckResult; p
             accessibilityLabel={ok ? 'Verified' : 'Refused'}
           >
             <View style={[styles.stampInner, { borderColor: ink }]}>
-              <Text style={[styles.stampText, { color: ink }]}>{ok ? 'VERIFIED' : 'REFUSED'}</Text>
+              <Text allowFontScaling={false} adjustsFontSizeToFit numberOfLines={1} style={[styles.stampText, { color: ink }]}>{ok ? 'VERIFIED' : 'REFUSED'}</Text>
             </View>
           </Animated.View>
         </View>
@@ -100,14 +100,14 @@ export function ResultScreen({ result, pay, capCents }: { result: CheckResult; p
 const styles = StyleSheet.create({
   receipt: { backgroundColor: colors.card, borderRadius: 8, padding: 22, gap: 6, marginTop: 24 },
   kicker: { fontFamily: font.regular, fontSize: 16, color: colors.muted },
-  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
+  row: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'flex-end', columnGap: 12 },
   what: { fontFamily: font.bold, fontSize: 20, color: colors.ink, paddingBottom: 10 },
-  amount: { fontFamily: font.display, fontSize: 72, lineHeight: 76, height: 76, color: colors.carbon, fontVariant: ['tabular-nums'] },
+  amount: { fontFamily: font.display, fontSize: 72, lineHeight: 78, color: colors.carbon, fontVariant: ['tabular-nums'] },
   meta: { fontFamily: font.regular, fontSize: 17, lineHeight: 24, color: colors.ink },
   stampArea: { height: 190, alignItems: 'center', justifyContent: 'center' },
-  stamp: { borderWidth: 5, borderRadius: 10, padding: 5 },
-  stampInner: { borderWidth: 2, borderRadius: 6, paddingHorizontal: 22, height: 96, justifyContent: 'center', overflow: 'hidden' },
-  stampText: { fontFamily: font.display, fontSize: 78, lineHeight: 80, height: 80, letterSpacing: 3, textAlignVertical: 'center' },
+  stamp: { borderWidth: 5, borderRadius: 10, padding: 5, maxWidth: '92%' },
+  stampInner: { borderWidth: 2, borderRadius: 6, paddingHorizontal: 18, paddingTop: 6, paddingBottom: 2, alignItems: 'center' },
+  stampText: { fontFamily: font.display, fontSize: 72, lineHeight: 82, letterSpacing: 2 },
   why: { fontFamily: font.bold, fontSize: 24, lineHeight: 31 },
   detail: { fontFamily: font.regular, fontSize: 16, lineHeight: 23, color: colors.muted },
 });

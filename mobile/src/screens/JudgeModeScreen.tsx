@@ -33,7 +33,7 @@ export function JudgeModeScreen() {
       <View style={styles.banner}>
         <Text style={styles.bannerText}>Demo: attacker tool</Text>
       </View>
-      <Text style={styles.lead}>You're Maya, and you're cheating. Try to spend the same money twice.</Text>
+      <Text maxFontSizeMultiplier={1.15} style={styles.lead}>You're Maya, and you're cheating. Try to spend the same money twice.</Text>
 
       <Card style={{ backgroundColor: colors.navyRaised }}>
         <Label color={colors.onNavyMuted}>Wallet now</Label>
