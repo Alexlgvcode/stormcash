@@ -1,10 +1,10 @@
 # dashboard/
 
-React + Vite + TypeScript + Tailwind dashboard (WS3, reviewer B): Accounts, Cases, Town and Evals tabs, plus the public `/proof/:caseId` page.
+React + Vite + TypeScript + Tailwind dashboard (WS3, reviewer B): Accounts, Cases, Town, Evals and Droid tabs, plus the public `/proof/:caseId` page.
 
 - **Spec:** §18
 - **Done when:** the full core demo runs with only dashboard clicks + phones, and every tab survives a page reload.
-- **Built so far:** header (Demo mode, connection dot, Reset demo, clock); the Accounts tab (live Nessie balances that animate on change, Nessie call log, Ledger balanced ✓, Nessie queued counter, simulated town totals); the Cases tab and proof page; the Town tab (map, relay paths, and sliders over a quick in-memory re-sim, all labelled simulated); the intro slide for the demo's opening beat. The Evals tab comes later.
+- **Built so far:** header (Demo mode, connection dot, Reset demo, clock); the Accounts tab (live Nessie balances that animate on change, Nessie call log, Ledger balanced ✓, Nessie queued counter, simulated town totals); the Cases tab and proof page; the Town tab (map, relay paths, and sliders over a quick in-memory re-sim, all labelled simulated); the intro slide for the demo's opening beat; the Evals tab; the Droid tab (`#droid`, spec §18.7: Droid's stored runs, their tool calls, totals per job and the guardrails that fired).
 
 ## Run
 

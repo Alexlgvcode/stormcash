@@ -151,6 +151,7 @@ StormDesk is the back office of the running product, in [`server/stormcash/storm
 - **Citation check** (`citations.py`): every id the agent cites must exist in the database, or the result is stored as invalid and never shown as actionable. The reviewer's citations are checked the same way.
 - **Every run is stored** with its transcript, model, tokens and Factory credits (`stormdesk_runs`). Each tool call streams live to the dashboard (`stormdesk_step` events). A stored run can be replayed step by step ("Replay of run at …").
 - **A person decides.** Approve or Reject on the dashboard runs deterministic code (`approvals.py`): hold a shop's pool payouts, lower its limit, freeze a certificate, or dispatch a relay. Hard rules never go through the agent.
+- **The Droid tab** on the dashboard (`#droid`, `GET /v1/droid/console`) shows all of this from the stored runs: every Droid run with its model, prompt version, credits, time and outcome, a click-through to its tool calls, totals per job, and the guardrails that actually fired (invalid citations rejected, fallbacks). Fake-runner runs are labelled and never counted as Droid's.
 
 ![Live tool calls from a real Droid run](docs/images/stormdesk-live-steps.png)
 
