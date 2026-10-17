@@ -6,6 +6,7 @@ import { EventsProvider } from "./events";
 import { ProofPage } from "./proof/ProofPage";
 import { AccountsTab } from "./tabs/Accounts";
 import { CasesTab } from "./tabs/Cases";
+import { EvalsTab } from "./tabs/Evals";
 import { TownTab } from "./tabs/Town";
 
 const TABS = [
@@ -19,10 +20,6 @@ type TabId = (typeof TABS)[number]["id"];
 function tabFromHash(): TabId {
   const id = location.hash.replace("#", "");
   return TABS.some((t) => t.id === id) ? (id as TabId) : "accounts";
-}
-
-function NotBuilt({ name }: { name: string }) {
-  return <p className="p-8 text-xl text-slate-400">The {name} tab isn't built yet.</p>;
 }
 
 export default function App() {
@@ -68,7 +65,7 @@ function Dashboard() {
           {tab === "accounts" && <AccountsTab />}
           {tab === "cases" && <CasesTab />}
           {tab === "town" && <TownTab />}
-          {tab === "evals" && <NotBuilt name="Evals" />}
+          {tab === "evals" && <EvalsTab />}
         </main>
       </div>
     </EventsProvider>

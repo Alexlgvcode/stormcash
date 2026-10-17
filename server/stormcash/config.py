@@ -44,6 +44,8 @@ class Settings:
     stormdesk_runner: str = "auto"
     stormdesk_model: str = ""  # empty: Droid picks ("auto")
     stormdesk_auto: bool = True  # run the worker on new cases and candidates
+    # The Evals tab's Chalk results (§18.5); empty: chalk/evals/results in this checkout.
+    evals_results_dir: str = ""
 
     @property
     def server_pub(self) -> bytes:
@@ -95,4 +97,5 @@ def load_settings(env_file: Path | None = SERVER_DIR / ".env") -> Settings:
         stormdesk_runner=(env.get("STORMDESK_RUNNER") or "auto").lower(),
         stormdesk_model=env.get("STORMDESK_MODEL", ""),
         stormdesk_auto=_flag(env.get("STORMDESK_AUTO"), True),
+        evals_results_dir=env.get("EVALS_RESULTS_DIR", ""),
     )
