@@ -1,8 +1,8 @@
 {
   "name": "stormdesk-triage",
   "note": "One row per detector candidate from simulated towns (spec \u00a715.3). Every subject is simulated.",
-  "rows": 48,
-  "honest_rows": 27,
+  "rows": 43,
+  "honest_rows": 20,
   "seeds": [
     {
       "seed": 42,
@@ -10,23 +10,23 @@
       "start": 1791936000,
       "hours": 72,
       "candidates": 10,
-      "labelled_subjects": 28
+      "labelled_subjects": 32
     },
     {
       "seed": 7,
       "database": "stormcash_eval_7",
       "start": 1791936000,
       "hours": 72,
-      "candidates": 9,
-      "labelled_subjects": 28
+      "candidates": 8,
+      "labelled_subjects": 32
     },
     {
       "seed": 13,
       "database": "stormcash_eval_13",
       "start": 1791936000,
       "hours": 72,
-      "candidates": 9,
-      "labelled_subjects": 28
+      "candidates": 8,
+      "labelled_subjects": 32
     },
     {
       "seed": 99,
@@ -34,25 +34,24 @@
       "start": 1791936000,
       "hours": 72,
       "candidates": 9,
-      "labelled_subjects": 28
+      "labelled_subjects": 32
     },
     {
       "seed": 2026,
       "database": "stormcash_eval_2026",
       "start": 1791936000,
       "hours": 72,
-      "candidates": 11,
-      "labelled_subjects": 28
+      "candidates": 8,
+      "labelled_subjects": 32
     }
   ],
   "scenarios": {
     "colluder": 9,
-    "dark_region": 3,
+    "dark_region": 5,
     "stolen_phone": 9,
     "trap_quiet_region": 4,
-    "trap_remote_shop": 2,
-    "trap_stockup": 12,
-    "trap_victim_shop": 9
+    "trap_stockup": 10,
+    "trap_victim_shop": 6
   },
   "detector_misses": [
     {
@@ -64,25 +63,18 @@
     },
     {
       "seed": 7,
-      "subject_id": "swannanoa",
-      "name": "Swannanoa",
-      "scenario": "dark_region",
-      "expected_kind": "region_dark"
+      "subject_id": "95e4a6caecbf0a397cfa97b64ab28ef3",
+      "name": "West Asheville Outfitters",
+      "scenario": "colluder",
+      "expected_kind": "merchant_silence"
     },
     {
       "seed": 13,
-      "subject_id": "1e064e10e9c469c775379eca022f352e",
-      "name": "Resident 248",
+      "subject_id": "3721ce6708559dea0188677b57b4276b",
+      "name": "Resident 041",
       "scenario": "stolen_phone",
       "expected_kind": "cap_drain"
-    },
-    {
-      "seed": 99,
-      "subject_id": "swannanoa",
-      "name": "Swannanoa",
-      "scenario": "dark_region",
-      "expected_kind": "region_dark"
     }
   ],
-  "built_from_git_sha": "a2c7e5476c160066612acdf0443b010c2e7a7d31"
+  "built_from_git_sha": "02998b03346b3a3d3281c89f05d7ef3848c4e0f6"
 }
