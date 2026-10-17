@@ -2,7 +2,9 @@
 import { useState } from 'react';
 import { Alert, StyleSheet, TextInput } from 'react-native';
 import { Body, Button, Chip, colors, Muted, Row, Screen, Title } from '../components/ui';
-import { deleteDeviceKey, deviceKey, getDeviceKey } from '../keys';
+import {
+  deleteDeviceKey, deviceKey, enclaveAvailable, getDeviceKey, setWantsEnclave, wantsEnclave,
+} from '../keys';
 import { useNav } from '../nav';
 import {
   getDemoLabel, getRole, getServerPub, setDemoLabel, setServerPub, type DemoLabel,
@@ -18,6 +20,7 @@ export function DemoMenuScreen() {
   const [label, setLabel] = useState(getDemoLabel());
   const [topology, setTopology] = useState(isTopologyOn());
   const [serverPub, setServerPubState] = useState(getServerPub());
+  const [enclave, setEnclave] = useState(wantsEnclave());
 
   const pickLabel = async (l: DemoLabel) => {
     setDemoLabel(l);
@@ -39,6 +42,7 @@ export function DemoMenuScreen() {
         onPress: async () => {
           await syncManager.stop();
           resetDb();
+          setWantsEnclave(enclave); // the key choice survives the reset
           await deleteDeviceKey();
           await getDeviceKey();
           nav.go({ name: 'setup' });
@@ -67,8 +71,20 @@ export function DemoMenuScreen() {
       />
       <Muted>On: Pharmacy ↔ Maya ↔ Gas Station only (Pharmacy and Gas Station never link).</Muted>
 
-      <Body>Device public key</Body>
+      <Body>Device public key ({deviceKey().hardware ? 'Secure Enclave' : 'software key'})</Body>
       <Muted selectable>{deviceKey().pub}</Muted>
+      <Button
+        title={`Hardware key on next setup: ${enclave ? 'on' : 'off'}`}
+        kind="secondary"
+        disabled={!enclaveAvailable()}
+        onPress={() => {
+          setWantsEnclave(!enclave);
+          setEnclave(!enclave);
+        }}
+      />
+      <Muted>
+        {enclaveAvailable() ? 'Takes effect after Reset local data, then register again.' : 'Secure Enclave not available here.'}
+      </Muted>
 
       <Body>Server public key</Body>
       <TextInput
