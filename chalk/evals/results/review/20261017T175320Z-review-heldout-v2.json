@@ -1,0 +1,665 @@
+{
+  "schema_version": 1,
+  "eval": "stormdesk-review",
+  "complete": true,
+  "model": "claude-sonnet-5-5",
+  "reviewer_prompt_version": 1,
+  "timestamp": 1792259600,
+  "timestamp_iso": "2026-10-17T17:53:20Z",
+  "git_sha": "351df62a542ec3728d26d33e2489b7918e898b0b",
+  "chalk": {
+    "v2_alone": {
+      "evaluation_id": "cmvcp2gg601wk014wc3sxyju4",
+      "evaluation_name": "StormDesk reviewer eval: v2 alone \u00b7 heldout-v2",
+      "run_id": "28f97eca-0402-4c86-9c76-5e380eae6dc0",
+      "status": "SUCCEEDED",
+      "dataset_revision_id": "44f12570-ebab-4f82-9e62-ce0eaf2af075"
+    },
+    "v2_with_reviewer": {
+      "evaluation_id": "cmvcp2vl801q7013e0gnu1o1p",
+      "evaluation_name": "StormDesk reviewer eval: v2 + reviewer \u00b7 heldout-v2",
+      "run_id": "e3ecc828-c97e-41d3-9cf8-d7185b3d8013",
+      "status": "SUCCEEDED",
+      "dataset_revision_id": "44f12570-ebab-4f82-9e62-ce0eaf2af075"
+    }
+  },
+  "dataset": {
+    "name": "stormdesk-review-heldout-v2",
+    "rows": 20,
+    "honest_rows": 11,
+    "seeds": [
+      1,
+      2
+    ],
+    "source_run_id": "51b74f56-d8d8-466b-a07c-3ddf8baa8064",
+    "prompt_versions": [
+      2
+    ],
+    "models": [
+      "claude-sonnet-5-5"
+    ],
+    "sha256": "1b02afe6bb20c4b58efbc773f4158ad1f5e59bf8ef0820d92427493738e15ed2"
+  },
+  "routing_rule": "v2 alone: a row reaches a person when its kind isn't 'none'. v2 + reviewer: service.after_review (a valid agent review that disagrees or finds the evidence insufficient keeps or reopens it; anything else leaves v2's decision). Kind and action never change.",
+  "v2_alone": {
+    "real_reach_a_person": {
+      "n": 6,
+      "of": 9
+    },
+    "honest_reach_a_person": {
+      "n": 0,
+      "of": 11
+    },
+    "kind_and_action_correct": {
+      "n": 17,
+      "of": 20
+    },
+    "task_errors": 0,
+    "scorers": {
+      "no-false-alarm": 1.0,
+      "real-reaches-person": 0.85,
+      "routing-correct": 0.85,
+      "valid-json": 1.0
+    }
+  },
+  "v2_with_reviewer": {
+    "real_reach_a_person": {
+      "n": 8,
+      "of": 9
+    },
+    "honest_reach_a_person": {
+      "n": 0,
+      "of": 11
+    },
+    "kind_and_action_correct": {
+      "n": 17,
+      "of": 20
+    },
+    "task_errors": 0,
+    "scorers": {
+      "no-false-alarm": 1.0,
+      "real-reaches-person": 0.95,
+      "review-citations-valid": 1.0,
+      "routing-correct": 0.95,
+      "valid-json": 1.0
+    }
+  },
+  "reviewer": {
+    "verdicts": {
+      "agree": 17,
+      "insufficient_evidence": 2,
+      "disagree": 1
+    },
+    "review_statuses": {
+      "succeeded": 20
+    },
+    "escalated": 3,
+    "escalated_where_v2_was_wrong": 2,
+    "escalated_where_v2_was_right": 1,
+    "real_cases_v2_dismissed_now_seen": 2,
+    "honest_dismissals_reopened": 0,
+    "agreed_with_a_wrong_v2": 1,
+    "suggestion_matches_label_when_escalated": 0,
+    "invalid_reviews_shown": 0,
+    "factory_credits": 799185.0,
+    "duration_s": {
+      "mean": 32.7,
+      "max": 89.6
+    },
+    "runners_seen": {
+      "droid": 20
+    },
+    "models_seen": [
+      "claude-sonnet-5-5"
+    ],
+    "session_models_seen": [
+      "claude-sonnet-5-5"
+    ],
+    "prompt_versions_seen": [
+      1
+    ],
+    "guard_breaks": {}
+  },
+  "rows": [
+    {
+      "row_id": "1:1",
+      "subject_name": "Resident 256",
+      "label_scenario": "trap_stockup",
+      "honest_subject": true,
+      "label_kind": "none",
+      "label_action": "none",
+      "v2_kind": "none",
+      "v2_action": "none",
+      "v2_right": true,
+      "v2_reaches_person": false,
+      "verdict": "agree",
+      "review_status": "succeeded",
+      "agents_disagree": false,
+      "reaches_person_after_review": false,
+      "suggested_kind": "none",
+      "suggested_action": "none",
+      "reasons": [
+        "All 4 tags verify: hashes match, signatures are valid, no pair breaks a rule, and the chain is linked to a settled total of 5000, equal to the cap.",
+        "The candidate shows no theft signals: all spending was in the home region asheville-downtown, there was no idle gap before it, and the owner made no freeze request. The cap rose from 2000 to 5000 at cert v2, issued 10 minutes before the first spend, which fits a Storm Mode top-up.",
+        "Every payment was settled and funded 100% from escrow (0 from the pool). The 4th tag (800 cents) came about 20 hours later, so it is not part of the burst. The balances tool returned only the simulated ledger (0 cents), so escrow could not be checked against Nessie.",
+        "Downtown Grocer is busy: it settled about 20 escrow-funded payments from many different certs and shows no sign of silence or pool-funded activity. The region has no alerts, so the dismissal (kind none, info, no action) is reasonable."
+      ],
+      "review_run_id": 14,
+      "factory_credits": 39292.0,
+      "duration_s": 22.6
+    },
+    {
+      "row_id": "1:2",
+      "subject_name": "Resident 225",
+      "label_scenario": "trap_stockup",
+      "honest_subject": true,
+      "label_kind": "none",
+      "label_action": "none",
+      "v2_kind": "none",
+      "v2_action": "none",
+      "v2_right": true,
+      "v2_reaches_person": false,
+      "verdict": "agree",
+      "review_status": "succeeded",
+      "agents_disagree": false,
+      "reaches_person_after_review": false,
+      "suggested_kind": "none",
+      "suggested_action": "none",
+      "reasons": [
+        "The cert spent 4200 of its 5000 cap at three shops in its home region (asheville-downtown) in 10 minutes. That is the honest stocking-up pattern after Storm Mode, not a stolen-phone drain, which would be outside the home region.",
+        "verify_tags shows all 4 tags have valid hashes and signatures and no pair breaks a rule. Every tag is escrow-funded with funded_pool_cents 0, so the guarantee pool has no exposure.",
+        "StormDesk misreads gap_since_last_activity_min: null means no earlier activity, not 'not idle'. The cert was issued at 1791936000 and first spent at 1791943800, right after the cap rose to 5000 in v2, so the conclusion still holds.",
+        "The last tag (800 cents at Swannanoa Books, 9.5 hours later) is escrow-funded, and that shop has no pool-funded payments. Downtown Grocer's records show the same escrow-only, same-minute pattern from other certs, so neither shop looks suspicious."
+      ],
+      "review_run_id": 15,
+      "factory_credits": 28317.0,
+      "duration_s": 25.7
+    },
+    {
+      "row_id": "1:3",
+      "subject_name": "Resident 295",
+      "label_scenario": "trap_stockup",
+      "honest_subject": true,
+      "label_kind": "none",
+      "label_action": "none",
+      "v2_kind": "none",
+      "v2_action": "none",
+      "v2_right": true,
+      "v2_reaches_person": false,
+      "verdict": "agree",
+      "review_status": "succeeded",
+      "agents_disagree": false,
+      "reaches_person_after_review": false,
+      "suggested_kind": "none",
+      "suggested_action": "none",
+      "reasons": [
+        "The cert spent 4,200c of its 5,000c cap in 15 minutes, but it stayed in asheville-downtown (region_mismatch false). It paid three downtown shops at 1,500c, 1,400c and 1,300c, each with hops 0. That is not the idle-then-out-of-region burst a stolen phone would show.",
+        "verify_tags: all 4 tags have valid signatures and matching hashes, and none of the 6 pairs breaks a hard rule. The chain is counters 1 to 4 with matching prev_hash values, and the settled total of 5,000c equals the cap.",
+        "Every payment on the chain was funded 100% from escrow and 0c from the pool. The cert is still active. No freeze request is on record (owner_freeze_request false), and the region has no alerts.",
+        "Downtown Books, Downtown Bakery and Downtown Hardware show only escrow-funded payments (funded_pool_cents 0). Many other certs in the region also drain their caps there, so the pattern is typical for the region. StormDesk's \"no idle period\" point is weak, since a null gap means no earlier activity. The cert sat unspent for about 2 hours after v1 was issued, and the payments came 10 minutes after the cap rose to v2. I could not pull device contacts or logs, but the payment and chain evidence already points to innocent use."
+      ],
+      "review_run_id": 16,
+      "factory_credits": 30530.0,
+      "duration_s": 23.9
+    },
+    {
+      "row_id": "1:4",
+      "subject_name": "Downtown Pharmacy",
+      "label_scenario": "trap_victim_shop",
+      "honest_subject": true,
+      "label_kind": "none",
+      "label_action": "none",
+      "v2_kind": "none",
+      "v2_action": "none",
+      "v2_right": true,
+      "v2_reaches_person": false,
+      "verdict": "agree",
+      "review_status": "succeeded",
+      "agents_disagree": false,
+      "reaches_person_after_review": false,
+      "suggested_kind": "none",
+      "suggested_action": "none",
+      "reasons": [
+        "Downtown Pharmacy (8c65587901f00078665f95166f326ee2) has one pool-funded payment (tag b5fae525..., 1500c escrow plus 2000c pool). It comes from cert 8ec509e12ed926dd223e407403c08022, which is frozen. Only one distinct cheater cert reaches the shop.",
+        "verify_tags confirms tags b5fae525... and e9ef474a... both have valid signatures and break SAME_COUNTER (both counter 1). The pharmacy got the second spend, after Downtown Shelter took 3500c from escrow. That fits a shop that was a victim of one cheater.",
+        "The shop is not silent. Its device log chain is intact. ACCEPT entry 6d6e75b1... (seq 50) is followed by CONTACT entry 6091b634... (seq 51), and contact 9a2ddaac... is paired on both sides (shop received 35 items). The 12 other payments over the longer record are all escrow-funded, from many different active certs.",
+        "The 100% pool share comes from a sample of one payment. The region asheville-downtown has no alerts and its uploads are current. I found no sign the shop kept the money or that a pattern continues. One small gap: the frozen features show paired_contact_share 0, but the contact records show a paired contact. This doesn't change the outcome."
+      ],
+      "review_run_id": 17,
+      "factory_credits": 22334.0,
+      "duration_s": 23.4
+    },
+    {
+      "row_id": "1:5",
+      "subject_name": "Corner Store",
+      "label_scenario": "colluder",
+      "honest_subject": false,
+      "label_kind": "merchant_silence",
+      "label_action": "hold_pool_payout",
+      "v2_kind": "merchant_silence",
+      "v2_action": "hold_pool_payout",
+      "v2_right": true,
+      "v2_reaches_person": true,
+      "verdict": "agree",
+      "review_status": "succeeded",
+      "agents_disagree": false,
+      "reaches_person_after_review": true,
+      "suggested_kind": "merchant_silence",
+      "suggested_action": "hold_pool_payout",
+      "reasons": [
+        "I re-verified the SAME_COUNTER pairs for the three certs. Each spent counter 1 at Downtown Shelter (escrow-only) and then at Corner Store ($15 escrow, $20 pool, 0 hops), so $60 of pool money is at stake. I confirmed all three Corner Store tags and the shop's three ACCEPT log entries.",
+        "Corner Store's device log is intact. It shows no contacts between 9a2e1af4... (1792025340) and 689b10cc... (1792060200), and the only entries in that gap are the three cheater ACCEPTs. The shop was in frequent contact before and after, and 0 contacts per hour compares with a neighbor median of 0.167.",
+        "StormDesk missed that Corner Store has its own hard MERCHANT_KNEW case (case 11). At 1792060500 the shop accepted tag 51112b76... while its ACCEPT entry 2bf44c7f... listed held id 529dfea2... (the same cert's Shelter spend). That is a fourth cheater cert, the pattern continued, and the shop kept accepting after it had been told. StormDesk's note that it did not retrieve that case understates the evidence.",
+        "I accept hold_pool_payout, but severity should be urgent rather than review. The merchant notice should not ask the shop to explain a connectivity gap as the main explanation. The innocent-victim reading is much weaker given case 11."
+      ],
+      "review_run_id": 18,
+      "factory_credits": 68618.0,
+      "duration_s": 62.1
+    },
+    {
+      "row_id": "1:6",
+      "subject_name": "Resident 081",
+      "label_scenario": "stolen_phone",
+      "honest_subject": false,
+      "label_kind": "cap_drain",
+      "label_action": "freeze_cert",
+      "v2_kind": "cap_drain",
+      "v2_action": "freeze_cert",
+      "v2_right": true,
+      "v2_reaches_person": true,
+      "verdict": "agree",
+      "review_status": "succeeded",
+      "agents_disagree": false,
+      "reaches_person_after_review": true,
+      "suggested_kind": "cap_drain",
+      "suggested_action": "freeze_cert",
+      "reasons": [
+        "The chain shows 4300 of the 5000 cap spent in 8 minutes: three settled tags (1500, 1500, 1300) at three West Asheville shops. The cert's home region is black-mountain. The detector features show an idle cert with no prior activity, region mismatch and 86% drain.",
+        "All three payments were funded entirely from escrow (pool 0). The resident's escrow is the loss, and the simulated ledger still holds 700 cents a thief could drain, so freeze_cert is justified.",
+        "The three shops show no sign of collusion: pool-funded share is 0 and they keep receiving payments from many other certs. They look like victims, so no merchant action is needed.",
+        "Cert b457d541 (home region swannanoa) repeats the same script at the same three shops about 4 hours later (1500, 1500, 1300, 86% drain). It looks like the same actor on a second phone and should get its own review, which this proposal doesn't cover."
+      ],
+      "review_run_id": 19,
+      "factory_credits": 29970.0,
+      "duration_s": 19.4
+    },
+    {
+      "row_id": "1:7",
+      "subject_name": "Resident 342",
+      "label_scenario": "stolen_phone",
+      "honest_subject": false,
+      "label_kind": "cap_drain",
+      "label_action": "freeze_cert",
+      "v2_kind": "cap_drain",
+      "v2_action": "freeze_cert",
+      "v2_right": true,
+      "v2_reaches_person": true,
+      "verdict": "agree",
+      "review_status": "succeeded",
+      "agents_disagree": false,
+      "reaches_person_after_review": true,
+      "suggested_kind": "cap_drain",
+      "suggested_action": "freeze_cert",
+      "reasons": [
+        "The records support a stolen-phone cap drain. Cert b457d541\u2026 (home swannanoa, Flash Flood Warning sim-1-swannanoa) spent 4300 of its 5000 cap at 3 West Asheville shops in 480s, with no earlier spending since issue.",
+        "The three tags (c91a4f92\u2026, 057e5efd\u2026, fb9096c5\u2026) have valid signatures, matching hashes and no broken pairs, so no hard rule fires. All were escrow-funded with zero pool money, so the loss is the resident's escrow, and the ledger shows 700 cents left to drain.",
+        "StormDesk missed that cert 7ceb72a2\u2026 (home black-mountain) made the same 1500/1500/1300 purchases at the same three shops 4 hours earlier. It is also outside its home region and shows the same drain_share. This looks like a repeating pattern, so a human should check that cert too.",
+        "The shops look like victims: the payments are escrow-funded, and I found no pool-funded pattern and no shop silence. The owner has not requested a freeze, so freeze_cert needs a human to confirm the owner's whereabouts first."
+      ],
+      "review_run_id": 20,
+      "factory_credits": 37169.0,
+      "duration_s": 32.0
+    },
+    {
+      "row_id": "1:8",
+      "subject_name": "Downtown Deli",
+      "label_scenario": "trap_victim_shop",
+      "honest_subject": true,
+      "label_kind": "none",
+      "label_action": "none",
+      "v2_kind": "none",
+      "v2_action": "none",
+      "v2_right": true,
+      "v2_reaches_person": false,
+      "verdict": "agree",
+      "review_status": "succeeded",
+      "agents_disagree": false,
+      "reaches_person_after_review": false,
+      "suggested_kind": "none",
+      "suggested_action": "none",
+      "reasons": [
+        "verify_tags re-proves SAME_COUNTER between tag 8b252b23\u2026 (Deli) and tag 4e194bf5\u2026. The tags are the cert's two counter-1 tags with the same prev_hash 793bcbf4\u2026. The cert is already frozen, so the 2000-cent pool share is covered by that hard case.",
+        "Only one cheater cert (2607090137a5a199bf890be26e5119e4) reached the Deli, so distinct_cheater_certs is 1. The window has one accepted payment, which is why pool_funded_share is 1.0 and silence_ratio is 0.",
+        "The Deli has about 30 earlier settled payments from many different active certs, all escrow-funded with 0 pool cents. That is a busy, normally syncing shop. Its contacts_per_hour of 0 comes from a single window, and region asheville-downtown has no alerts and a recent upload.",
+        "The cheater paid the Shelter (merchant 3c947917da72ad6d00ad02f137ad3c48) 3500 from escrow first. It then paid the Deli, where only 1500 of the 3500 was escrow-backed and 2000 came from the pool. That pattern fits a victim of one double-spender, so no limit cut or payout hold is warranted."
+      ],
+      "review_run_id": 21,
+      "factory_credits": 26446.0,
+      "duration_s": 22.3
+    },
+    {
+      "row_id": "1:9",
+      "subject_name": "Downtown Pet Supply",
+      "label_scenario": "colluder",
+      "honest_subject": false,
+      "label_kind": "merchant_silence",
+      "label_action": "hold_pool_payout",
+      "v2_kind": "none",
+      "v2_action": "none",
+      "v2_right": false,
+      "v2_reaches_person": false,
+      "verdict": "agree",
+      "review_status": "succeeded",
+      "agents_disagree": false,
+      "reaches_person_after_review": false,
+      "suggested_kind": "none",
+      "suggested_action": "none",
+      "reasons": [
+        "I re-verified all three SAME_COUNTER pairs with verify_tags, including the pair StormDesk could not check (f48fe62a vs shelter tag f8298aa0). Each of the three certs spent counter 1 at Downtown Shelter first and at the shop later, so the shop is the later acceptor.",
+        "The shop did go quiet. Its last contact was at 1792113180 and its next at 1792150560, with three pool-funded accepts in between (log entries aa0893c8, f7813026, 7343ffc6). But the shelter was also silent from before the window until 1792149720, which matches neighbor_median 0 and silence_ratio 0.",
+        "Before the window the shop's log chain was intact and its 14 payments were all escrow-funded. It has 0 prior flagged windows, accepted at 0 hops with empty held_ids, and payments of 3500c are under the 5000c cap. I found no sign of a shop working with the cheaters.",
+        "StormDesk's exposure_cents of 0 is too low: the pool paid the shop 6000c (2000c on each of three payments). That loss is already settled by the hard cases on those frozen certs, so none of the shop's behavior calls for a new action."
+      ],
+      "review_run_id": 22,
+      "factory_credits": 82371.0,
+      "duration_s": 59.5
+    },
+    {
+      "row_id": "1:10",
+      "subject_name": "Black Mountain",
+      "label_scenario": "trap_quiet_region",
+      "honest_subject": true,
+      "label_kind": "none",
+      "label_action": "none",
+      "v2_kind": "none",
+      "v2_action": "none",
+      "v2_right": true,
+      "v2_reaches_person": false,
+      "verdict": "agree",
+      "review_status": "succeeded",
+      "agents_disagree": false,
+      "reaches_person_after_review": false,
+      "suggested_kind": "none",
+      "suggested_action": "none",
+      "reasons": [
+        "The region_dark features come from the Postgres fallback (Chalk is off), and the records contradict them. Black Mountain Diner settled tag 58cba8a3\u2026 at device_ts 1792150740, about 1.2h before as_of, and funded it entirely from escrow.",
+        "The Diner's ACCEPT entry 8c4dbfd6\u2026 is in a log with an intact chain. That log runs to ts 1792174680, well after last_upload_at 1791976200, so the server is still receiving data from the region.",
+        "Black Mountain Market (ad64ef71\u2026) has an intact log to ts 1792163220 and settled tag 94cddad8\u2026 at 1792087740. Both tags verify with valid signatures and no rule broken. Every settled payment I saw has pool share 0, so there is no cap-drain or collusion signal.",
+        "The Market's frozen cert (868afb49\u2026) was refused with check C2 (REFUSE entry ffb95d24\u2026) and no money moved. This looks like a hard case already handled, not a regional blackout. A small mismatch (active_certs 42 vs 45) supports checking how the fallback computes these features, but no relay is needed."
+      ],
+      "review_run_id": 23,
+      "factory_credits": 52390.0,
+      "duration_s": 26.8
+    },
+    {
+      "row_id": "1:11",
+      "subject_name": "Swannanoa",
+      "label_scenario": "dark_region",
+      "honest_subject": false,
+      "label_kind": "region_dark",
+      "label_action": "dispatch_relay",
+      "v2_kind": "none",
+      "v2_action": "none",
+      "v2_right": false,
+      "v2_reaches_person": false,
+      "verdict": "insufficient_evidence",
+      "review_status": "succeeded",
+      "agents_disagree": true,
+      "reaches_person_after_review": true,
+      "suggested_kind": "region_dark",
+      "suggested_action": "none",
+      "reasons": [
+        "The dismissal says uploads resumed because last_upload_at is 1792194360. That is 8.7h after the candidate's window_end of 1792162800, and the region status as_of of 1792154940 is earlier than it. So the gap could have been real at window_end and the upload could be later.",
+        "Settled payments at Swannanoa Feed Store (86fd773fb9b61db95edd9e3c310cc01e) and Swannanoa Pharmacy (ee1f0ea8223a6f96f4b81947ef34b65b) don't show the shops were syncing in the window. Offline payments settle whenever the next upload arrives, even if it comes in one late batch.",
+        "Both shops went quiet well before window_end. The last Feed Store settled payment is at device_ts 1792106700 and the last Pharmacy attempt is at 1792089480 (refused_evidence). That is more than 14h of silence while Flash Flood Warning sim-1-swannanoa stays active until 1792238400.",
+        "The Postgres fallback re-serves the same frozen features (55 certs, share 1, 58.1h) at any as_of, while region status shows 60 certs and 9 expiring. I can't tell whether the region was dark at window_end, so 'not dark' is unproven; I also found no fraud or pool exposure, since the sampled payments are escrow-funded. A person should check the live upload times, and a relay is unlikely to be needed now that an upload has landed."
+      ],
+      "review_run_id": 24,
+      "factory_credits": 31335.0,
+      "duration_s": 27.9
+    },
+    {
+      "row_id": "2:1",
+      "subject_name": "Resident 377",
+      "label_scenario": "trap_stockup",
+      "honest_subject": true,
+      "label_kind": "none",
+      "label_action": "none",
+      "v2_kind": "none",
+      "v2_action": "none",
+      "v2_right": true,
+      "v2_reaches_person": false,
+      "verdict": "agree",
+      "review_status": "succeeded",
+      "agents_disagree": false,
+      "reaches_person_after_review": false,
+      "suggested_kind": "none",
+      "suggested_action": "none",
+      "reasons": [
+        "The first three payments (1500c, 1400c, 1300c) were at three downtown shops, all in the home region asheville-downtown. The features show region_mismatch false, no idle gap, no owner freeze request, and the cap had been raised to 5000c at cert_ver 2 ten minutes before the first payment. That fits an honest resident stocking up, not a stolen phone.",
+        "All 4 tags verify: hashes match, signatures are valid, and none of the 6 pairs breaks a hard rule. Counters run 1 to 4 and cumulative spend is 5000c, equal to the cap and not over it.",
+        "Every payment was funded 100% from escrow (funded_pool_cents 0), so the pool has no exposure. The shops I checked (Downtown Gas & Go, West Asheville Bike Shop) show only ordinary traffic from several certs, with no pool-funded payments.",
+        "One correction to StormDesk: the 4th payment (800c, about 10 hours later) was at West Asheville Bike Shop in west-asheville, outside the home region. It is a single small payment that uses the last of the cap, and the shop's other payments are ordinary, so this doesn't change the dismissal. Re-open it if the owner reports the phone stolen or a hard rule fires."
+      ],
+      "review_run_id": 12,
+      "factory_credits": 23741.0,
+      "duration_s": 27.9
+    },
+    {
+      "row_id": "2:2",
+      "subject_name": "Resident 392",
+      "label_scenario": "trap_stockup",
+      "honest_subject": true,
+      "label_kind": "none",
+      "label_action": "none",
+      "v2_kind": "none",
+      "v2_action": "none",
+      "v2_right": true,
+      "v2_reaches_person": false,
+      "verdict": "agree",
+      "review_status": "succeeded",
+      "agents_disagree": false,
+      "reaches_person_after_review": false,
+      "suggested_kind": "none",
+      "suggested_action": "none",
+      "reasons": [
+        "All 4 tags verify: hashes match, signatures are valid, and no pair breaks a hard rule. The counters run 1\u20134 with no fork.",
+        "All 4 payments were settled 100% from escrow with 0 pool-funded. Spending stayed in the home region (asheville-downtown), and the owner has not asked for a freeze. That does not fit a stolen phone.",
+        "The cert's v2 cap rose to 5000 about 10 minutes before the first spend. The 3 shops are busy downtown shops with many unrelated escrow-funded payments, and region alerts are empty. The 4th tag came about 10.7 hours later, so it is outside the burst.",
+        "The Diner did take a pool-funded payment, but from a different, frozen cert (be6afcaa56d122e271d462e131e347fc). It does not involve this cert, and case 2 concerns another cert (b8c25491741f3a7b2a847ae3414573ed). Dismissal with no action is reasonable."
+      ],
+      "review_run_id": 13,
+      "factory_credits": 40979.0,
+      "duration_s": 27.5
+    },
+    {
+      "row_id": "2:3",
+      "subject_name": "Downtown Deli",
+      "label_scenario": "trap_victim_shop",
+      "honest_subject": true,
+      "label_kind": "none",
+      "label_action": "none",
+      "v2_kind": "none",
+      "v2_action": "none",
+      "v2_right": true,
+      "v2_reaches_person": false,
+      "verdict": "agree",
+      "review_status": "succeeded",
+      "agents_disagree": false,
+      "reaches_person_after_review": false,
+      "suggested_kind": "none",
+      "suggested_action": "none",
+      "reasons": [
+        "verify_tags shows tags 658490a5\u2026 (Downtown Deli) and 79ebb6c1\u2026 (Downtown Shelter) break SAME_COUNTER. Cert d6b6dff6\u2026 is already caught by a hard rule, and it is the only cheater cert at the Deli (distinct_cheater_certs=1).",
+        "The Deli's only pool-funded payment is that tag, with 2000 cents from the pool. Its other 27 payments in the records I pulled are all escrow-funded, so the pool-funded share of 0.5 comes from just 2 accepted payments in the window.",
+        "The Deli is not silent. Its device log is intact (seq 61-64), with two paired CONTACT entries (7a4c11fd\u2026, 93b2a7a6\u2026). The low contact rate (0.333/h against a neighbor median of 2.75/h) rests on 2 neighbors and 2 contacts. The region has no alerts and no earlier windows were flagged.",
+        "One caveat: the exposure_cents of 0 understates the 2000-cent pool payout. That payout belongs with the hard case on cert d6b6dff6\u2026, not with the shop, so it doesn't change the dismissal."
+      ],
+      "review_run_id": 14,
+      "factory_credits": 28112.0,
+      "duration_s": 25.2
+    },
+    {
+      "row_id": "2:4",
+      "subject_name": "Corner Store",
+      "label_scenario": "colluder",
+      "honest_subject": false,
+      "label_kind": "merchant_silence",
+      "label_action": "hold_pool_payout",
+      "v2_kind": "merchant_silence",
+      "v2_action": "hold_pool_payout",
+      "v2_right": true,
+      "v2_reaches_person": true,
+      "verdict": "disagree",
+      "review_status": "succeeded",
+      "agents_disagree": true,
+      "reaches_person_after_review": true,
+      "suggested_kind": "none",
+      "suggested_action": "none",
+      "reasons": [
+        "The SAME_COUNTER facts hold. Re-verified pairs are e336a6ce/e7afef10, 36bb9449/61c2056d and a5446534/d517e087. Corner Store got $20 of pool funding on each of the 3 certs, $60 in total.",
+        "The silence claim fails. Downtown Shelter, which StormDesk called a normally syncing victim, has the same gap: no CONTACT between seq 82 (ts 1792025520) and seq 87 (ts 1792059000). Corner Store's own gap runs from seq 104 to seq 108. The detector features show silence_ratio 0 and neighbor median 0, so this is a quiet night in the region, not a shop going quiet relative to its neighbors.",
+        "Corner Store's three pool-funded accepts (seq 105-107) all have empty held_ids. Each cert had already spent the same counter-1 tag at the Shelter, which took the escrow, so Corner Store was the second recipient. That fits a shop hit blind while offline, not collusion.",
+        "The one damaging item is the seq 109 accept of d2c63b2e with the conflicting Shelter tag 6de6b0df in held_ids. It was denied_knowing with $0 paid, so it belongs to the hard MERCHANT_KNEW rule, not to soft silence evidence. StormDesk never cited that case id, and I could not find it in cases 1-5. Corner Store is already pool_eligible=false and the $60 has already settled, so a hold now does little. A person should still look at the knowing accept."
+      ],
+      "review_run_id": 15,
+      "factory_credits": 94982.0,
+      "duration_s": 89.6
+    },
+    {
+      "row_id": "2:5",
+      "subject_name": "Resident 317",
+      "label_scenario": "stolen_phone",
+      "honest_subject": false,
+      "label_kind": "cap_drain",
+      "label_action": "freeze_cert",
+      "v2_kind": "cap_drain",
+      "v2_action": "freeze_cert",
+      "v2_right": true,
+      "v2_reaches_person": true,
+      "verdict": "agree",
+      "review_status": "succeeded",
+      "agents_disagree": false,
+      "reaches_person_after_review": true,
+      "suggested_kind": "cap_drain",
+      "suggested_action": "freeze_cert",
+      "reasons": [
+        "The cert sat idle for about 40h after issue, then spent 4300 of its 5000c cap (86%) in 480s at 3 shops in west-asheville. Its home region is asheville-downtown. That fits a stolen phone, so freeze_cert at review severity is reasonable.",
+        "I re-ran verify_tags on the 3 tags. Signatures are valid and no pair breaks a rule, so this is a soft suspicion and not a hard-rule proof. All 4300c came from escrow and 0 from the pool, so the loss falls on the resident, with 700c left on the simulated ledger.",
+        "The three shops look like victims. Each took one 0-hop payment from this cert, all settled, and each has many normal payments from other certs. I found no silence or pool-funded pattern.",
+        "StormDesk missed a second cert, 69e2aa86036b643077b1c92344ae5e01, with an identical pattern. It also made payments of 1500c, 1500c and 1300c at the same three shops, 4h later, with 0 hops and 700c left. The operator should check both certs together, since total exposure is about 8600c and the pattern is repeating."
+      ],
+      "review_run_id": 16,
+      "factory_credits": 36412.0,
+      "duration_s": 27.0
+    },
+    {
+      "row_id": "2:6",
+      "subject_name": "Resident 008",
+      "label_scenario": "stolen_phone",
+      "honest_subject": false,
+      "label_kind": "cap_drain",
+      "label_action": "freeze_cert",
+      "v2_kind": "cap_drain",
+      "v2_action": "freeze_cert",
+      "v2_right": true,
+      "v2_reaches_person": true,
+      "verdict": "agree",
+      "review_status": "succeeded",
+      "agents_disagree": false,
+      "reaches_person_after_review": true,
+      "suggested_kind": "cap_drain",
+      "suggested_action": "freeze_cert",
+      "reasons": [
+        "The cert's three tags are valid and break no pair rule, so this is a soft cap_drain suspicion. Its first tag came about 42h after v2 was issued. The three shops (all west-asheville) took 1500, 1500 and 1300 within 8 minutes, which is 4300 of the 5000 cap. The home region is asheville-downtown.",
+        "All 4300 cents came from escrow and 0 from the pool. The loss would fall on the resident, and the simulated ledger shows 700 cents still spendable. A freeze caps that remaining loss and is reversible.",
+        "StormDesk missed that cert e56258a203ed9237eeaf0fe8dcd8a525 made the same 1500/1500/1300 drain at the same three shops about 4h earlier, with the same home region and no earlier activity. This points to a repeating pattern and supports the freeze. The operator should look at that cert too.",
+        "The three shops each took one escrow-funded payment and also have normal payments from other certs, so there is no sign of merchant collusion and no merchant action is needed. Chalk was off (Postgres fallback), and device log and contact checks were not run because no device id was available."
+      ],
+      "review_run_id": 17,
+      "factory_credits": 36223.0,
+      "duration_s": 28.6
+    },
+    {
+      "row_id": "2:7",
+      "subject_name": "Downtown Diner",
+      "label_scenario": "trap_victim_shop",
+      "honest_subject": true,
+      "label_kind": "none",
+      "label_action": "none",
+      "v2_kind": "none",
+      "v2_action": "none",
+      "v2_right": true,
+      "v2_reaches_person": false,
+      "verdict": "agree",
+      "review_status": "succeeded",
+      "agents_disagree": false,
+      "reaches_person_after_review": false,
+      "suggested_kind": "none",
+      "suggested_action": "none",
+      "reasons": [
+        "Only one cheater cert reached the diner. Tags 5e6ddd0b\u2026 and a134a505\u2026 both have valid signatures and break SAME_COUNTER (re-verified), and the cert is frozen. The diner's 2000c pool-funded payment is that cert's overspend.",
+        "The shop's other 26 payments in the history are all escrow-funded, and prior_windows_flagged is 0. A pool_funded_share of 1 rests on a single payment, so it is not a pattern.",
+        "The diner's device log chain is intact. Seq 196-218 show steady contacts up to 1792101240, and the accept at seq 219 (f021fd96\u2026) was direct (0 hops). The 0 contacts_per_hour is a gap in a window with a single payment, not hiding.",
+        "The cheater's other shop, Downtown Shelter, is the more exposed one. It took 3500c from the same cert and then escrow-funded 3500c payments from three other frozen certs (4 in all). That is outside this candidate, but a person may want to look at it."
+      ],
+      "review_run_id": 18,
+      "factory_credits": 30206.0,
+      "duration_s": 22.6
+    },
+    {
+      "row_id": "2:8",
+      "subject_name": "Black Mountain",
+      "label_scenario": "trap_quiet_region",
+      "honest_subject": true,
+      "label_kind": "none",
+      "label_action": "none",
+      "v2_kind": "none",
+      "v2_action": "none",
+      "v2_right": true,
+      "v2_reaches_person": false,
+      "verdict": "agree",
+      "review_status": "succeeded",
+      "agents_disagree": false,
+      "reaches_person_after_review": false,
+      "suggested_kind": "none",
+      "suggested_action": "none",
+      "reasons": [
+        "Both shops have payments with device_ts after last_upload_at (1791978360) that are already settled, so the region is not dark. Market settled tags 5d1f9121\u2026 (1792069020) and 06f63f02\u2026 (1792154400). Books settled tag d5a93074\u2026 (1792065720).",
+        "The detector reading (merchants_open=0, 49.2h since upload) looks stale. The region status and frozen features show the same values, and nothing else supports a blackout: alerts are empty and the active certs keep trading.",
+        "The three cited tags exist and verify_tags shows valid hashes and signatures and no broken rules between them. All the payments I checked were funded entirely from escrow (0 pool cents), so there is no pool or resident exposure from this candidate.",
+        "Two weaker points. Activity is sparse: Market has an 18h gap between 1792003380 and 1792069020, but it resumes about an hour before the window ends. StormDesk's 'many paired contacts' claim cites no contact id and I did not check it. Neither changes the dismissal."
+      ],
+      "review_run_id": 19,
+      "factory_credits": 27315.0,
+      "duration_s": 29.1
+    },
+    {
+      "row_id": "2:9",
+      "subject_name": "Swannanoa",
+      "label_scenario": "dark_region",
+      "honest_subject": false,
+      "label_kind": "region_dark",
+      "label_action": "dispatch_relay",
+      "v2_kind": "none",
+      "v2_action": "none",
+      "v2_right": false,
+      "v2_reaches_person": false,
+      "verdict": "insufficient_evidence",
+      "review_status": "succeeded",
+      "agents_disagree": true,
+      "reaches_person_after_review": true,
+      "suggested_kind": "none",
+      "suggested_action": "none",
+      "reasons": [
+        "StormDesk treats a payment's device_ts (8ba3ff1a\u2026, 1792158420) as proof the server heard from the shop. device_ts is when the phone signed the payment, not when it was uploaded, so a batch upload after the window end would fit the same record.",
+        "The 58.1h and merchants_open=0 features are identical at as_of 1792162800, 1792158420 and 1792191420. They are frozen and I can't tell whether they are wrong or the region really was dark. Chalk is off and the Postgres fallback produced them.",
+        "Region status shows last_upload_at 1792191420, which is after the window end, so any blackout has probably ended and dispatch_relay would now do nothing. But it also shows 13 certs expiring within 12h under the Severe Flash Flood Warning (sim-2-swannanoa), so dismissing as 'not dark' goes further than the records support.",
+        "Neither shop has any pool exposure: all 0 pool cents. Gas & Go (21746f15\u2026) last paid at 1792075740, about 23h before the window end, which fits a quiet shop rather than a dead region. I'd accept info/none as the outcome, but the dismissal reasoning is unsound."
+      ],
+      "review_run_id": 20,
+      "factory_credits": 32443.0,
+      "duration_s": 31.1
+    }
+  ]
+}

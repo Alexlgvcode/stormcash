@@ -17,6 +17,7 @@
 > **v4.13 (Oct 17):** resident FREEZE by text built (§17.2): residents get a Photon handle (`resident_contacts`), a FREEZE text freezes the cert through the hard-rule freeze path and publishes a POLICY, `cert_status.owner_freeze_at` feeds cap_drain's `owner_freeze_request`, and resident threads live in `messages` (§11.1, §12.1, §12.3, §13.2). Migration `004_resident_freeze.sql`. Marked **[v4.13]**.
 > **v4.14 (Oct 17):** prompt v2 evaluated complete on the 43-row dataset, and on held-out seeds fixed before the run (#100, §15.3): the held-out section on the Evals tab, the prompt-version guard, and an idempotent eval gateway. Marked **[v4.14]**.
 > **v4.15 (Oct 17):** a reviewer Droid (§14.7b): a second session tries to refute each triage Flag with the same read-only tools before a person sees it; a valid disagreement marks the flag "agents disagree" and keeps it open for a person, who still decides. `STORMDESK_REVIEW`, `POST /v1/stormdesk/review`, `flags.review` / `agents_disagree`, `stormdesk_runs.job = 'review'` (§6.3, §11.1, §12.1, §14.1, §22.4). Migration `005_stormdesk_review.sql`. Marked **[v4.15]**.
+> **v4.16 (Oct 17):** the reviewer Droid evaluated on held-out rows (§15.3, §14.7b): "v2 alone" vs "v2 + reviewer" as two Chalk Evaluations on run B's frozen outputs; a one-row-at-a-time driver that never sends a review twice. Marked **[v4.16]**.
 > **Builds on:** "StormCash: The 10/10 Build" v3 (Oct 16, Alexandre Lugovoi, on Brian Maina's Oct 11 draft). Everything new since v3 is marked **[v4]**.
 
 ---
@@ -1509,6 +1510,10 @@ Target ~60 rows (time budget: 60 × ~60 s / 6 parallel ≈ 10 min per run).
   - The held-out seeds 1, 2, 3 were fixed in writing before their rows existed. Seed 3 was left out by the credit rule written before run A.
   - Held-out results are their own `eval` (`stormdesk-triage-heldout`), served under `heldout` by `GET /v1/evals` and shown in their own panel.
   - 4 of B's task calls were delivered twice by Chalk (136,808 extra credits), so the gateway's `POST /runs` is now idempotent on a `request_id`.
+- **[v4.16] Reviewer eval (§14.7b), Oct 17.** Run B's 20 held-out prompt-v2 outputs were frozen and reviewed live, one at a time, from this machine (the review endpoint isn't idempotent), then scored in Chalk as "v2 alone" (`28f97eca-0402-4c86-9c76-5e380eae6dc0`) vs "v2 + reviewer" (`e3ecc828-c97e-41d3-9cf8-d7185b3d8013`) on one dataset revision.
+  - Real cases reaching a person: 6/9 → 8/9. Honest subjects reaching a person: 0/11 → 0/11. Kind and action unchanged by design (17/20).
+  - 20 valid reviews on `claude-sonnet-5-5`, reviewer prompt v1, 799,185 credits.
+  - Results are in `chalk/evals/results/review/`.
 - **Pipeline checks, Oct 17**, on the first 48-row dataset, 48 rows each with no row errors: rules-only `85ec3bf0-3cf2-4cd9-bde2-0fb2b0d38326`, fake runner through the tunnel `edfbe2bc-aabe-4aa7-99e5-594e217ecf12`, `run_local.py` `e0bff8a4-53e9-4545-adec-9e45a1538519`. These ran before Factory credits arrived.
 
 ---
