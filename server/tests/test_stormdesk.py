@@ -147,8 +147,11 @@ def test_builtin_tools_are_the_verified_droid_list():
     assert len(runner.BUILTIN_TOOLS) == 34
 
 
-def patch_droid(monkeypatch, results: list) -> list:
-    """Replace droid_sdk.Session with one that streams no events and ends with each result in turn."""
+def patch_droid(monkeypatch, results: list, models: list[str] | None = None) -> list:
+    """Replace droid_sdk.Session with one that streams no events and ends with each result in turn,
+    on the given models (what Factory reports in the session's settings)."""
+    from types import SimpleNamespace
+
     import droid_sdk
 
     opened = []
@@ -175,6 +178,12 @@ def patch_droid(monkeypatch, results: list) -> list:
 
         def stream(self, prompt, output, timeout):
             return Stream(results[len(opened) - 1])
+
+        @property
+        def settings(self):
+            if models is None:
+                raise AttributeError("settings")
+            return SimpleNamespace(model=models[len(opened) - 1])
 
     monkeypatch.setattr(droid_sdk, "Session", Session)
     return opened
@@ -210,8 +219,9 @@ def test_a_droid_run_records_what_it_cost(deps, double_spend, monkeypatch):
         return Usage(input_tokens=421, output_tokens=249, cache_creation_tokens=0, cache_read_tokens=100,
                      thinking_tokens=0, factory_credits=credits)
 
-    # The first attempt's structured output fails (retried once); both attempts' costs add up.
-    patch_droid(monkeypatch, [
+    # The first attempt's structured output fails (retried once); both attempts' costs add up. Factory moved
+    # the second attempt to another model (as it does when Standard Usage runs out): the run says which.
+    patch_droid(monkeypatch, models=["claude-sonnet-5-5", "droid-core"], results=[
         RunFailure(subtype="error_structured_output", text="", messages=(), usage=usage(1000.0),
                    duration=timedelta(0), turn_count=1, session_id="droid-1"),
         RunSuccess(text="", messages=(), usage=usage(2963.0), duration=timedelta(seconds=6), turn_count=3,
@@ -219,7 +229,8 @@ def test_a_droid_run_records_what_it_cost(deps, double_spend, monkeypatch):
     ])
     live = dataclasses.replace(deps, settings=dataclasses.replace(deps.settings, stormdesk_model="claude-sonnet-5-5"))
     out = run(StormDesk(live), Job("triage", candidate_id=cand), runner.DroidRunner(live))
-    assert (out["runner"], out["status"], out["model"]) == ("droid", "succeeded", "claude-sonnet-5-5")
+    assert (out["runner"], out["status"]) == ("droid", "succeeded")
+    assert (out["model"], out["model_requested"]) == ("droid-core", "claude-sonnet-5-5")
     assert out["usage"] == {"input_tokens": 842, "output_tokens": 498, "cache_creation_tokens": 0,
                             "cache_read_tokens": 200, "thinking_tokens": 0, "factory_credits": 3963.0}
     with deps.pool.connection() as conn:
@@ -227,6 +238,7 @@ def test_a_droid_run_records_what_it_cost(deps, double_spend, monkeypatch):
         agent = scalar(conn, "SELECT agent_transcript FROM flags")
     assert row["session_id"] == "droid-2"
     assert row["transcript"]["usage"]["factory_credits"] == agent["usage"]["factory_credits"] == 3963.0
+    assert row["transcript"]["model"] == agent["model"] == "droid-core"
 
 
 class DownDroid:

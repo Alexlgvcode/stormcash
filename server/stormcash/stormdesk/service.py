@@ -78,7 +78,8 @@ def _store(deps, job: Job, run_id: int, outcome: RunOutcome, steps: Steps, fallb
         status = "succeeded" if output is not None and valid else "invalid" if output is not None else "failed"
         transcript = {"runner": outcome.runner, "steps": steps.transcript, "missing_citations": missing,
                       "error": outcome.error, "fallback_from_droid": fallback, "model": outcome.model,
-                      "usage": outcome.usage, "fallback_usage": fallback_usage}
+                      "model_requested": outcome.model_requested, "usage": outcome.usage,
+                      "fallback_usage": fallback_usage}
         run = one(
             conn,
             """UPDATE stormdesk_runs SET runner = %s, status = %s, output = %s, citations_valid = %s, transcript = %s,
@@ -88,7 +89,7 @@ def _store(deps, job: Job, run_id: int, outcome: RunOutcome, steps: Steps, fallb
         )
         result = {"run_id": run_id, "runner": outcome.runner, "status": status, "citations_valid": valid,
                   "missing_citations": missing, "error": outcome.error, "fallback_from_droid": fallback,
-                  "model": outcome.model, "usage": outcome.usage,
+                  "model": outcome.model, "model_requested": outcome.model_requested, "usage": outcome.usage,
                   "output": output.model_dump() if output else None}
         if job.kind == "triage":
             result["flag"] = _save_flag(conn, job, output, valid, outcome, run, transcript)

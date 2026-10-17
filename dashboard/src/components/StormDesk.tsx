@@ -30,9 +30,16 @@ const STATUS_STYLE: Record<string, string> = {
   invalid: "bg-rose-500/15 text-rose-300",
 };
 
-export function RunnerBadge({ runner, model, usage }: {
+/** "Replay of run at 09:23:23 · Droid, claude-sonnet-5-5": a replay always says what produced it. */
+export function replayTitle(startedAt: number, runner: string | null | undefined, model?: string | null): string {
+  const by = runner === "fake" ? "fake runner, rules only" : runner === "droid" ? `Droid, ${model ?? "model not recorded"}` : runner;
+  return `Replay of run at ${clockTime(startedAt)}${by ? ` · ${by}` : ""}`;
+}
+
+export function RunnerBadge({ runner, model, modelRequested, usage }: {
   runner: string | null | undefined;
   model?: string | null;
+  modelRequested?: string | null;
   usage?: Usage | null;
 }) {
   if (runner === "fake") {
@@ -45,7 +52,8 @@ export function RunnerBadge({ runner, model, usage }: {
   }
   if (runner === "droid") {
     const tokens = usage ? (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0) : null;
-    const parts = ["Droid", model && model !== "auto" ? model : null,
+    const switched = model && modelRequested && modelRequested !== "auto" && model !== modelRequested;
+    const parts = ["Droid", model && model !== "auto" ? model : null, switched ? `asked for ${modelRequested}` : null,
       usage?.factory_credits != null ? `${Math.round(usage.factory_credits).toLocaleString("en-US")} credits` : null];
     return (
       <span className="rounded-full bg-violet-500/15 px-3 py-1 text-sm font-semibold text-violet-300"
@@ -272,7 +280,7 @@ function FlagView({ flagId, onChanged }: { flagId: number; onChanged: () => void
         <h2 className="text-3xl font-bold text-white">{KIND_TITLE[flag.kind] ?? flag.kind}</h2>
         <span className={`rounded-full px-3 py-1 text-sm font-semibold ${STATUS_STYLE[flag.status]}`}>{flag.status}</span>
         <span className="rounded-full bg-slate-800 px-3 py-1 text-sm text-slate-300">{flag.severity}</span>
-        <RunnerBadge runner={flag.runner} model={agent?.model} usage={agent?.usage} />
+        <RunnerBadge runner={flag.runner} model={agent?.model} modelRequested={agent?.model_requested} usage={agent?.usage} />
       </div>
       <p className="text-lg text-slate-200">
         {flag.subject_name ?? flag.subject_id}: {flag.summary}
@@ -303,7 +311,7 @@ function FlagView({ flagId, onChanged }: { flagId: number; onChanged: () => void
         <StepList steps={live.steps} live />
       ) : (
         <StepList steps={agent?.steps ?? []}
-          replayLabel={run ? `Replay of run at ${clockTime(run.started_at)}` : undefined} />
+          replayLabel={run ? replayTitle(run.started_at, agent?.runner ?? flag.runner, agent?.model) : undefined} />
       )}
       <button onClick={rerun} className="rounded-lg bg-slate-800 px-4 py-2 text-base text-white hover:bg-slate-700">
         Run StormDesk again
@@ -390,7 +398,8 @@ export function CaseStormDesk({ caseId, onFiled }: { caseId: number; onFiled: ()
     <div className="space-y-3 rounded-2xl border border-slate-800 bg-slate-900 p-4">
       <div className="flex flex-wrap items-center gap-3">
         <h3 className="text-lg font-semibold text-white">StormDesk</h3>
-        <RunnerBadge runner={run?.runner} model={run?.transcript?.model} usage={run?.transcript?.usage} />
+        <RunnerBadge runner={run?.runner} model={run?.transcript?.model} modelRequested={run?.transcript?.model_requested}
+          usage={run?.transcript?.usage} />
         {run && <span className="text-sm text-slate-400">last run {clockTime(run.started_at)} · {run.status}</span>}
         <button disabled={busy} onClick={start}
           className="ml-auto rounded-lg bg-slate-800 px-4 py-2 text-base text-white hover:bg-slate-700 disabled:opacity-50">
@@ -401,7 +410,7 @@ export function CaseStormDesk({ caseId, onFiled }: { caseId: number; onFiled: ()
         <StepList steps={live.steps} live />
       ) : (
         run?.transcript && (
-          <StepList steps={run.transcript.steps} replayLabel={`Replay of run at ${clockTime(run.started_at)}`} />
+          <StepList steps={run.transcript.steps} replayLabel={replayTitle(run.started_at, run.runner, run.transcript.model)} />
         )
       )}
     </div>

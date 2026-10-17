@@ -230,6 +230,7 @@ export interface FlagDetail {
     missing_citations: string[];
     error: string | null;
     model?: string | null;
+    model_requested?: string | null;
     usage?: Usage | null;
   } | null;
 }
@@ -249,6 +250,7 @@ export interface Run {
     missing_citations: string[];
     error: string | null;
     model?: string | null;
+    model_requested?: string | null;
     usage?: Usage | null;
   };
 }
