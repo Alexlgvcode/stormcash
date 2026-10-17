@@ -1,0 +1,102 @@
+{
+  "case_id": 2,
+  "rule": "MERCHANT_KNEW",
+  "server_pub": "A1zUzsxCSJ6Y7T_3FJgFH3gPNkhtTUTYZ9mYGFeE59pX",
+  "cert": {
+    "type": "CERT",
+    "json": {
+      "ci": "YuSGfKLVYGyFzlp7dib2Rg",
+      "cv": 1,
+      "hp": "AnAKxj09s9YfycNW15uoKf3JsjSmsFN54sdqED6m_IgA",
+      "cap": 2000,
+      "ia": 1792250159,
+      "ea": 1792509359,
+      "er": "00000000000000000000a003",
+      "sig": "X6ZZNyGzJtLvfR2vzHRJEBwOlnGQzHVgJqU8Oy5oh8cae_whN8ZlFWZtfzSUOpT_IYNG_REgF1HTucK9PVEUbw"
+    },
+    "fields": {
+      "cert_id": "62e4867ca2d5606c85ce5a7b7626f646",
+      "cert_ver": 1,
+      "holder_pub": "02700ac63d3db3d61fc9c356d79ba829fdc9b234a6b05379e2c76a103ea6fc8800",
+      "cap_cents": 2000,
+      "issued_at": 1792250159,
+      "expires_at": 1792509359,
+      "escrow_ref": "00000000000000000000a003"
+    },
+    "canonical": "SC1|CERT|62e4867ca2d5606c85ce5a7b7626f646|1|02700ac63d3db3d61fc9c356d79ba829fdc9b234a6b05379e2c76a103ea6fc8800|2000|1792250159|1792509359|00000000000000000000a003",
+    "digest": "da1f5afe208420ca16da5575db10ae203654531534cc35d3b13d1e6c00a186b4"
+  },
+  "tag_a": {
+    "type": "TAG",
+    "json": {
+      "ci": "YuSGfKLVYGyFzlp7dib2Rg",
+      "k": 1,
+      "ph": "RhjBwsX8KemOvJtIM0wICzY8ZHOJVzT_Bs7nZ_PLSpU",
+      "amt": 1200,
+      "cum": 1200,
+      "dh": "zsAg2dGY-Uf_zOorJ-wsYhzULzgIQSEbLfe4VwiGK-c",
+      "sig": "V0banqHFeoxE_-UMOjn0mAIPcJ7pxcDgetixIMP7_L5sMSQhhIoru1fr6GwFqJXQcOVrLz1QuAU2DTQTXwnLUA"
+    },
+    "fields": {
+      "cert_id": "62e4867ca2d5606c85ce5a7b7626f646",
+      "counter": 1,
+      "prev_hash": "4618c1c2c5fc29e98ebc9b48334c080b363c6473895734ff06cee767f3cb4a95",
+      "amount_cents": 1200,
+      "cum_cents": 1200,
+      "details_hash": "cec020d9d198f947ffccea2b27ec2c621cd42f380841211b2df7b85708862be7"
+    },
+    "canonical": "SC1|TAG|62e4867ca2d5606c85ce5a7b7626f646|1|4618c1c2c5fc29e98ebc9b48334c080b363c6473895734ff06cee767f3cb4a95|1200|1200|cec020d9d198f947ffccea2b27ec2c621cd42f380841211b2df7b85708862be7",
+    "digest": "9ee180ccdab78a51dc98b2e4c8df6477a7a179cb5b2e93993163c1e05d443a59"
+  },
+  "tag_b": {
+    "type": "TAG",
+    "json": {
+      "ci": "YuSGfKLVYGyFzlp7dib2Rg",
+      "k": 1,
+      "ph": "RhjBwsX8KemOvJtIM0wICzY8ZHOJVzT_Bs7nZ_PLSpU",
+      "amt": 1200,
+      "cum": 1200,
+      "dh": "lt37tCsf9QL4D--5SYHh-_i-H-bX9fahq_6QWNOY6Fo",
+      "sig": "C-DauokFz0wrXwPirVeJ2S4jIl5shcJObg-YnVDfntVhVrHV-zFuWA6uip-EGQtSgvmXVak82wDvcKwA_SviDg"
+    },
+    "fields": {
+      "cert_id": "62e4867ca2d5606c85ce5a7b7626f646",
+      "counter": 1,
+      "prev_hash": "4618c1c2c5fc29e98ebc9b48334c080b363c6473895734ff06cee767f3cb4a95",
+      "amount_cents": 1200,
+      "cum_cents": 1200,
+      "details_hash": "96ddfbb42b1ff502f80fefb94981e1fbf8be1fe6d7f5f6a1abfe9058d398e85a"
+    },
+    "canonical": "SC1|TAG|62e4867ca2d5606c85ce5a7b7626f646|1|4618c1c2c5fc29e98ebc9b48334c080b363c6473895734ff06cee767f3cb4a95|1200|1200|96ddfbb42b1ff502f80fefb94981e1fbf8be1fe6d7f5f6a1abfe9058d398e85a",
+    "digest": "bc9d9b4a34ffd007356cf3241edd9a1c5d4cb94f95a9293aecee90e5719d9512"
+  },
+  "holder_pub": "AnAKxj09s9YfycNW15uoKf3JsjSmsFN54sdqED6m_IgA",
+  "log_entries": [
+    {
+      "type": "DLOG",
+      "json": {
+        "dp": "Avcep4khmMkzW4CZvMTz-1SGiMd4a-nvRUUDaM7bA2lz",
+        "q": 2,
+        "ph": "GAzO0yzUfJAGSugfZaPFkhVSVqvQoWBEoRY0HTffRws",
+        "ts": 1792250159,
+        "kd": "ACCEPT",
+        "th": "vJ2bSjT_0Ac1bPMkHt2aHF1MuU-VqSk67O6Q5XGdlRI",
+        "ci": "YuSGfKLVYGyFzlp7dib2Rg",
+        "hi": [],
+        "sig": "Q4PxcHVc5BsNiM3corp9bcofqPxhjcuJq-lzqQNH-9lM-mf3S7HoXe5WXEgGCjRbMEI7_IVOZ1QB3BpgAEaRrQ"
+      },
+      "fields": {
+        "device_pub": "02f71ea7892198c9335b8099bcc4f3fb548688c7786be9ef45450368cedb036973",
+        "seq": 2,
+        "prev_hash": "180cced32cd47c90064ae81f65a3c592155256abd0a16044a116341d37df470b",
+        "ts": 1792250159,
+        "kind": "ACCEPT",
+        "tag_hash": "bc9d9b4a34ffd007356cf3241edd9a1c5d4cb94f95a9293aecee90e5719d9512",
+        "cert_id": "62e4867ca2d5606c85ce5a7b7626f646",
+        "held_ids": []
+      },
+      "canonical": "SC1|DLOG|02f71ea7892198c9335b8099bcc4f3fb548688c7786be9ef45450368cedb036973|2|180cced32cd47c90064ae81f65a3c592155256abd0a16044a116341d37df470b|1792250159|ACCEPT|bc9d9b4a34ffd007356cf3241edd9a1c5d4cb94f95a9293aecee90e5719d9512|62e4867ca2d5606c85ce5a7b7626f646|",
+      "digest": "6b8bbf4a707becc739df924ad6511e9d2c21bba7af879c1230b3eea6478c075e"
+    }
+  ]
+}

@@ -210,6 +210,7 @@ stormcash/
     features.py
     resolvers/
     evals/
+  cpp/                       # C++ toolkit (off the demo path): stormcash-verify, a third verifier of the §20 vectors and case proofs
   fixtures/
     nws_helene_buncombe.json # replayed alerts, labeled
 ```

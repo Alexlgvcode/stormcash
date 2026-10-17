@@ -49,6 +49,25 @@ jobs:
         working-directory: mobile
         run: npm ci && npm test --if-present
 
+  cpp:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install OpenSSL 3 headers
+        run: sudo apt-get update && sudo apt-get install -y libssl-dev
+      - name: Configure (Debug, ASan + UBSan, warnings as errors)
+        run: cmake -S cpp -B cpp/build -DCMAKE_BUILD_TYPE=Debug -DSTORMCASH_SANITIZE=ON -DSTORMCASH_WERROR=ON
+      - name: Build
+        run: cmake --build cpp/build -j 4
+      - name: Unit tests
+        env:
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: ctest --test-dir cpp/build --output-on-failure
+      - name: Shared vectors (spec/vectors.json)
+        env:
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: cpp/build/verify/stormcash-verify vectors spec/vectors.json --strict
+
   dashboard:
     runs-on: ubuntu-latest
     steps:
