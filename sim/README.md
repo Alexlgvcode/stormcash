@@ -34,7 +34,7 @@ It prints a summary (payments, contacts, uploads, double-spend attempts, median 
 
 ## Scenarios (#25)
 
-With `--scenarios` (the default), `scenarios.plant()` adds every §16.4 scenario and trap on top of the honest town: organic and scripted double spenders, the two colluders with the planted MERCHANT_KNEW at Corner Store, two stolen phones, Swannanoa dark during a replayed Flash Flood Warning, and the remote-shop, victim-shop, stock-up, clock-drift and quiet-region traps. `--no-scenarios` runs the honest town only (it produces no cases and no candidates).
+With `--scenarios` (the default), `scenarios.plant()` adds every §16.4 scenario and trap on top of the honest town: organic and scripted double spenders, the two colluders (each silent for 6 h while taking pool-funded re-spends from 3 cheaters that R5 can't prove) with the planted MERCHANT_KNEW at Corner Store, two stolen phones, Swannanoa dark during a replayed Flash Flood Warning, and the remote-shop, victim-shop, stock-up, clock-drift and quiet-region traps. `--no-scenarios` runs the honest town only (it produces no cases and no candidates).
 
 Each run writes `sim/out/<seed>/labels.json` (ground truth per subject, for the evals) and `stats.json` (double spends refused offline vs caught at settlement, mean loss per cheater, median hours to settlement, hops histogram). Spec §16.4a has the details.
 
