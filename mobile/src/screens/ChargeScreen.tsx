@@ -4,9 +4,9 @@ import * as Haptics from 'expo-haptics';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Icon } from '../components/Icon';
-import { QrCode } from '../components/QrCode';
+import { Ticket } from '../components/Ticket';
 import { Scanner } from '../components/Scanner';
-import { Button, Chip, colors, ErrorNote, font, Label, Meter, Muted, Row, Screen, Title, radius } from '../components/ui';
+import { Button, Chip, colors, ErrorNote, FadeUp, font, Label, Meter, Muted, Row, Screen, Title, radius, TopBar } from '../components/ui';
 import { useTick } from '../hooks';
 import { deviceKey } from '../keys';
 import { useNav } from '../nav';
@@ -58,6 +58,7 @@ export function ChargeScreen() {
   if (step.s === 'amount') {
     return (
       <Screen>
+        <TopBar onBack={cancel} />
         <Title>Charge</Title>
         <View style={{ alignItems: 'center', paddingVertical: 12 }}>
           <Label>{mc.display_name} charges</Label>
@@ -90,7 +91,6 @@ export function ChargeScreen() {
             setStep({ s: 'request', request, qr: requestQr(request) });
           }}
         />
-        <Button title="Cancel" kind="secondary" onPress={cancel} />
       </Screen>
     );
   }
@@ -100,35 +100,40 @@ export function ChargeScreen() {
     const expired = left === 0;
     return (
       <Screen>
-        <Row style={{ justifyContent: 'space-between' }}>
-          <Title>{mc.display_name}</Title>
-          <Title color={colors.primary}>${step.request.rq.amount_cents / 100}</Title>
-        </Row>
-        <Muted>Ask the customer to scan this code with StormCash.</Muted>
-        <View style={{ opacity: expired ? 0.3 : 1 }}>
-          <QrCode value={step.qr} />
-        </View>
+        <TopBar onBack={cancel} />
+        <FadeUp>
+          <Title>Customer scans this</Title>
+        </FadeUp>
+        <FadeUp delay={80}>
+          <Ticket
+            value={step.qr}
+            kicker="Payment request"
+            title={mc.display_name}
+            amount={`$${step.request.rq.amount_cents / 100}`}
+            footnote="Signed by this shop. Works with no internet."
+            dim={expired}
+          />
+        </FadeUp>
         <Meter value={left} max={REQ_TTL_S} color={left > 30 ? colors.primary : colors.amber} />
         <Muted>{expired ? 'This code expired. Start again.' : `Expires in ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`}</Muted>
         <Button title="Scan customer's code" big onPress={() => setStep({ s: 'scan' })} disabled={expired} />
-        <Button title="Cancel" kind="secondary" onPress={cancel} />
       </Screen>
     );
   }
 
   return (
     <Screen>
+      <TopBar onBack={cancel} />
       <Title>Scan customer's code</Title>
       <Muted>Every check runs on this phone. No internet needed.</Muted>
       {error ? <ErrorNote text={error} /> : null}
       <Scanner key={scanKey} onScan={onScan} />
-      <Button title="Cancel" kind="secondary" onPress={cancel} />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  amount: { fontFamily: font.heavy, fontSize: 96, lineHeight: 104, color: colors.ink, letterSpacing: -3, fontVariant: ['tabular-nums'] },
+  amount: { fontFamily: font.display, fontSize: 104, lineHeight: 110, color: colors.ink, letterSpacing: -3, fontVariant: ['tabular-nums'] },
   pad: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 10 },
   key: { width: '31.5%', height: 64, borderRadius: radius.pill, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' },
   keyText: { fontFamily: font.semibold, fontSize: 28, color: colors.ink, fontVariant: ['tabular-nums'] },

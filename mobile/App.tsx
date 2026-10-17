@@ -5,6 +5,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import {
   Geist_400Regular, Geist_500Medium, Geist_600SemiBold, Geist_700Bold, Geist_800ExtraBold, useFonts,
 } from '@expo-google-fonts/geist';
+import { BricolageGrotesque_700Bold, BricolageGrotesque_800ExtraBold } from '@expo-google-fonts/bricolage-grotesque';
 import { getDeviceKey } from './src/keys';
 import { NavContext, type Nav, type Route } from './src/nav';
 import { getRole } from './src/settings';
@@ -25,6 +26,7 @@ export default function App() {
   const [keyReady, setKeyReady] = useState(false);
   const [fontsLoaded, fontError] = useFonts({
     Geist_400Regular, Geist_500Medium, Geist_600SemiBold, Geist_700Bold, Geist_800ExtraBold,
+    BricolageGrotesque_700Bold, BricolageGrotesque_800ExtraBold,
   });
   const ready = keyReady && (fontsLoaded || !!fontError); // a font failure falls back to the system face
   const [route, setRoute] = useState<Route>({ name: 'home' });

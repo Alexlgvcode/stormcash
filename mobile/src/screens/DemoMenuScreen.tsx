@@ -1,7 +1,7 @@
 // Hidden demo menu (long-press the logo, §19.2).
 import { useState } from 'react';
 import { Alert, StyleSheet, Switch, TextInput, View } from 'react-native';
-import { Body, Button, Card, Chip, colors, Field, Muted, radius, Row, Screen, Section, Title } from '../components/ui';
+import { Body, Button, Card, Chip, colors, Field, Muted, radius, Row, Screen, Section, Title, TopBar } from '../components/ui';
 import {
   deleteDeviceKey, deviceKey, enclaveAvailable, getDeviceKey, setWantsEnclave, wantsEnclave,
 } from '../keys';
@@ -70,6 +70,7 @@ export function DemoMenuScreen() {
 
   return (
     <Screen>
+      <TopBar onBack={nav.home} />
       <Title>Demo menu</Title>
       <Muted>Hidden from customers. Long-press the logo to get here.</Muted>
 
@@ -141,7 +142,6 @@ export function DemoMenuScreen() {
       ) : null}
 
       <Button title="Reset local data" kind="danger" onPress={reset} />
-      <Button title="Back" kind="ghost" onPress={nav.home} />
     </Screen>
   );
 }

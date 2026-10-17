@@ -2,7 +2,7 @@
 import * as Haptics from 'expo-haptics';
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { Big, Button, Card, colors, Field, font, Label, Muted, Screen, wholeDollars } from '../components/ui';
+import { Big, Button, Card, colors, Field, font, Label, Muted, Screen, wholeDollars, TopBar } from '../components/ui';
 import { useNav } from '../nav';
 import { latestCert, rollBack, walletState, type RollbackMode } from '../store/wallet';
 
@@ -29,6 +29,7 @@ export function JudgeModeScreen() {
 
   return (
     <Screen tone="dark">
+      <TopBar onBack={nav.home} />
       <View style={styles.banner}>
         <Text style={styles.bannerText}>Demo: attacker tool</Text>
       </View>
@@ -53,7 +54,6 @@ export function JudgeModeScreen() {
       <Muted color="#98A2B3">This is what a modified app or a restored backup could do. Every offline system has to handle it.</Muted>
 
       <Button title="Pay a shop" kind="light" big onPress={() => nav.go({ name: 'pay' })} />
-      <Button title="Back" kind="light" onPress={nav.home} />
     </Screen>
   );
 }
@@ -61,7 +61,7 @@ export function JudgeModeScreen() {
 const styles = StyleSheet.create({
   banner: { backgroundColor: colors.refuseBg, paddingVertical: 14, borderRadius: 999 },
   bannerText: { color: '#fff', fontFamily: font.bold, fontSize: 19, textAlign: 'center', letterSpacing: -0.2 },
-  lead: { color: '#fff', fontFamily: font.bold, fontSize: 24, lineHeight: 30, letterSpacing: -0.5 },
+  lead: { color: '#fff', fontFamily: font.displayBold, fontSize: 28, lineHeight: 31, letterSpacing: -0.6 },
   note: { borderRadius: 16, padding: 16 },
   noteText: { color: '#fff', fontFamily: font.medium, fontSize: 16, lineHeight: 22 },
 });

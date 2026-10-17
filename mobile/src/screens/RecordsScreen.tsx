@@ -1,6 +1,6 @@
 // Records (§19.2): items carried by kind, nearby peers, last sync, last upload + hops, QR sync.
 import { useEffect, useReducer } from 'react';
-import { Big, Button, Card, Field, Label, Muted, Pill, Row, Screen, Section, Title } from '../components/ui';
+import { Big, Button, Card, Field, Label, Muted, Pill, Row, Screen, Section, Title, TopBar } from '../components/ui';
 import { useOnline } from '../hooks';
 import { useNav } from '../nav';
 import { countsByKind } from '../store/items';
@@ -33,6 +33,7 @@ export function RecordsScreen() {
 
   return (
     <Screen>
+      <TopBar onBack={nav.home} />
       <Title>Records</Title>
       <Muted>This phone carries records shop to shop until any phone finds a signal and uploads them.</Muted>
 
@@ -88,7 +89,6 @@ export function RecordsScreen() {
         onPress={() => syncManager.upload()}
       />
       <Button title="Sync by QR" kind="secondary" onPress={() => nav.go({ name: 'qrsync' })} />
-      <Button title="Back" kind="ghost" onPress={nav.home} />
     </Screen>
   );
 }

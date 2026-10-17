@@ -5,7 +5,7 @@ import { Header } from '../components/Header';
 import { StyleSheet, Text, View } from 'react-native';
 import { Radar } from '../components/Radar';
 import { syncManager } from '../sync/manager';
-import { Button, Cell, colors, ErrorNote, font, Group, Meter, Screen, Status, wholeDollars } from '../components/ui';
+import { Button, Cell, colors, ErrorNote, FadeUp, font, Group, Meter, Screen, Status, wholeDollars } from '../components/ui';
 import { useOnline } from '../hooks';
 import { KEY_REF } from '../keys';
 import { useNav } from '../nav';
@@ -62,7 +62,7 @@ export function WalletScreen() {
     <Screen>
       <Header />
 
-      <View style={styles.hero}>
+      <FadeUp style={styles.hero}>
         <Radar blips={nearby} />
         <Text style={styles.heroLabel}>{getDisplayName() ?? 'Your wallet'} can spend</Text>
         <Text style={styles.heroFigure} adjustsFontSizeToFit numberOfLines={1}>{wholeDollars(left)}</Text>
@@ -71,11 +71,14 @@ export function WalletScreen() {
           <Meter value={state.cumCents} max={cert.cap_cents} color={colors.primary} track={colors.well} />
           <Status text={status.text} tone={status.tone} />
         </View>
-      </View>
+      </FadeUp>
 
+      <FadeUp delay={90}>
       <Button title="Pay a shop" subtitle="Scan the shop's code" big onPress={() => nav.go({ name: 'pay' })}
         disabled={frozen || expired || left === 0} />
+      </FadeUp>
 
+      <FadeUp delay={180}>
       <Group>
         <Cell
           title="Storm Mode"
@@ -85,6 +88,7 @@ export function WalletScreen() {
         <Cell title="Records carried" detail="Delivered phone to phone" value={String(carrying)} onPress={() => nav.go({ name: 'records' })} />
         <Cell title="Certificate" detail={expired ? 'Renews when any phone is online' : `Renews in ${hoursLeft} h`} value={`v${cert.cert_ver}`} />
       </Group>
+      </FadeUp>
       {!storm ? (
         <Button
           title={online ? 'Turn on Storm Mode' : 'Storm Mode needs internet'}
@@ -102,7 +106,7 @@ export function WalletScreen() {
 const styles = StyleSheet.create({
   hero: { paddingTop: 28, paddingBottom: 8, minHeight: 250 },
   heroLabel: { fontFamily: font.medium, fontSize: 17, color: colors.muted },
-  heroFigure: { fontFamily: font.heavy, fontSize: 96, lineHeight: 104, color: colors.ink, letterSpacing: -4, fontVariant: ['tabular-nums'] },
+  heroFigure: { fontFamily: font.display, fontSize: 112, lineHeight: 116, color: colors.ink, letterSpacing: -4, fontVariant: ['tabular-nums'] },
   heroSub: { fontFamily: font.medium, fontSize: 17, color: colors.muted },
   on: { fontFamily: font.semibold, fontSize: 17, color: colors.primary },
 });

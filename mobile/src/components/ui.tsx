@@ -4,7 +4,11 @@
 // (no shadows at rest, no hairlines, no outlined boxes), round buttons, sentence-case labels.
 import * as Haptics from 'expo-haptics';
 import type { ReactNode } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native';
+import { useEffect, useRef } from 'react';
+import {
+  AccessibilityInfo, ActivityIndicator, Animated, ImageBackground, Pressable, ScrollView, StyleSheet, Text, View,
+  type ViewStyle,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Icon } from './Icon';
 
@@ -14,6 +18,8 @@ export const font = {
   semibold: 'Geist_600SemiBold',
   bold: 'Geist_700Bold',
   heavy: 'Geist_800ExtraBold',
+  display: 'BricolageGrotesque_800ExtraBold', // figures and headlines only
+  displayBold: 'BricolageGrotesque_700Bold',
 };
 
 export const colors = {
@@ -45,6 +51,9 @@ export const colors = {
 export const space = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 };
 export const radius = { sm: 12, md: 16, lg: 24, pill: 999 };
 
+// Ultra-subtle film grain over the ground (generated locally, tiled).
+const GRAIN = require('../../assets/grain.png');
+
 // ---- Layout ----
 
 export function Screen({
@@ -53,16 +62,61 @@ export function Screen({
   const bg = tone === 'dark' ? colors.navy : colors.bg;
   const body = <View style={[s.screen, style]}>{children}</View>;
   return (
-    <SafeAreaView style={[s.fill, { backgroundColor: bg }]} edges={['top', 'bottom']}>
-      {scroll ? (
-        <ScrollView style={s.fill} contentContainerStyle={s.grow} keyboardShouldPersistTaps="handled">
-          {body}
-        </ScrollView>
-      ) : (
-        body
-      )}
-    </SafeAreaView>
+    <View style={[s.fill, { backgroundColor: bg }]}>
+      <ImageBackground source={GRAIN} resizeMode="repeat" style={StyleSheet.absoluteFill} imageStyle={{ opacity: 1 }} />
+      <SafeAreaView style={s.fill} edges={['top', 'bottom']}>
+        {scroll ? (
+          <ScrollView style={s.fill} contentContainerStyle={s.grow} keyboardShouldPersistTaps="handled">
+            {body}
+          </ScrollView>
+        ) : (
+          body
+        )}
+      </SafeAreaView>
+    </View>
   );
+}
+
+/** Top bar for subscreens: a real back button and the screen title. */
+export function TopBar({ title, onBack, right }: { title?: string; onBack: () => void; right?: ReactNode }) {
+  return (
+    <View style={s.topBar}>
+      <Pressable
+        onPress={() => {
+          Haptics.selectionAsync().catch(() => {});
+          onBack();
+        }}
+        accessibilityRole="button"
+        accessibilityLabel="Back"
+        hitSlop={8}
+        style={({ pressed }) => [s.back, pressed && { backgroundColor: colors.well }]}
+      >
+        <Icon name="chevron-left" size={24} color={colors.ink} strokeWidth={2.25} />
+      </Pressable>
+      {title ? <Text style={s.topTitle} numberOfLines={1}>{title}</Text> : <View style={{ flex: 1 }} />}
+      <View style={{ minWidth: 44, alignItems: 'flex-end' }}>{right}</View>
+    </View>
+  );
+}
+
+/** Fades its children up into place once, after `delay` ms. Skipped under Reduce Motion. */
+export function FadeUp({ children, delay = 0, style }: { children: ReactNode; delay?: number; style?: ViewStyle }) {
+  const t = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    let cancelled = false;
+    AccessibilityInfo.isReduceMotionEnabled()
+      .then((reduce) => {
+        if (cancelled) return;
+        if (reduce) t.setValue(1);
+        else Animated.timing(t, { toValue: 1, duration: 420, delay, useNativeDriver: true }).start();
+      })
+      .catch(() => t.setValue(1));
+    return () => {
+      cancelled = true;
+    };
+  }, [delay, t]);
+  const translateY = t.interpolate({ inputRange: [0, 1], outputRange: [18, 0] });
+  return <Animated.View style={[style, { opacity: t, transform: [{ translateY }] }]}>{children}</Animated.View>;
 }
 
 export function Card({ children, style, tone = 'default' }: { children: ReactNode; style?: ViewStyle; tone?: 'default' | 'navy' }) {
@@ -269,11 +323,14 @@ const s = StyleSheet.create({
   fill: { flex: 1 },
   grow: { flexGrow: 1 },
   screen: { flexGrow: 1, paddingHorizontal: 20, paddingTop: space.md, paddingBottom: space.xl, gap: space.lg },
+  topBar: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: -8, minHeight: 48 },
+  back: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  topTitle: { flex: 1, fontFamily: font.semibold, fontSize: 17, color: colors.ink, textAlign: 'center' },
   card: { backgroundColor: colors.card, borderRadius: radius.lg, padding: 20, gap: space.md },
   cardNavy: { backgroundColor: colors.card },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, alignItems: 'center' },
-  title: { fontFamily: font.bold, fontSize: 30, lineHeight: 34, color: colors.ink, letterSpacing: -0.8 },
-  big: { fontFamily: font.heavy, fontSize: 56, lineHeight: 60, color: colors.ink, letterSpacing: -2, fontVariant: ['tabular-nums'] },
+  title: { fontFamily: font.display, fontSize: 34, lineHeight: 36, color: colors.ink, letterSpacing: -1 },
+  big: { fontFamily: font.display, fontSize: 64, lineHeight: 68, color: colors.ink, letterSpacing: -2, fontVariant: ['tabular-nums'] },
   body: { fontFamily: font.medium, fontSize: 17, lineHeight: 24, color: colors.ink },
   muted: { fontFamily: font.regular, fontSize: 15, lineHeight: 21, color: colors.muted },
   label: { fontFamily: font.semibold, fontSize: 15, lineHeight: 20, color: colors.muted },

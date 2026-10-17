@@ -2,14 +2,14 @@
 import { useState } from 'react';
 import { View } from 'react-native';
 import { confirmWithFaceId } from '../auth';
-import { QrCode } from '../components/QrCode';
+import { Ticket } from '../components/Ticket';
 import { Scanner } from '../components/Scanner';
-import { Big, Button, Cell, ErrorNote, Group, Muted, Screen, Status, Title, wholeDollars } from '../components/ui';
+import { Big, Button, Cell, ErrorNote, Group, Muted, Screen, FadeUp, Status, Title, wholeDollars, TopBar } from '../components/ui';
 import { deviceKey } from '../keys';
 import { useNav } from '../nav';
 import { payQr, preparePayment, signPayment } from '../payments';
 import type { PaymentRequest } from '../protocol';
-import { getServerPub } from '../settings';
+import { getDisplayName, getServerPub } from '../settings';
 import { nowS } from '../store/items';
 import { latestCert, walletState } from '../store/wallet';
 
@@ -48,11 +48,11 @@ export function PayScreen() {
   if (step.s === 'scan') {
     return (
       <Screen>
+        <TopBar onBack={nav.home} />
         <Title>Scan the shop's code</Title>
         <Muted>Point the camera at the code on the shop's phone. No internet needed.</Muted>
         {error ? <ErrorNote text={error} /> : null}
         <Scanner key={scanKey} onScan={onScan} />
-        <Button title="Cancel" kind="secondary" onPress={nav.home} />
       </Screen>
     );
   }
@@ -61,6 +61,7 @@ export function PayScreen() {
     const { mc, rq } = step.request;
     return (
       <Screen>
+        <TopBar onBack={nav.home} />
         <Title>Confirm payment</Title>
         <View style={{ paddingVertical: 24, gap: 8 }}>
           <Muted>Pay {mc.display_name}</Muted>
@@ -72,22 +73,28 @@ export function PayScreen() {
           <Cell title="Left after this" value={wholeDollars(left - rq.amount_cents)} />
         </Group>
         <Button title="Pay with Face ID" big onPress={() => pay(step.request)} />
-        <Button title="Cancel" kind="secondary" onPress={nav.home} />
       </Screen>
     );
   }
 
   return (
     <Screen>
-      <Title>Show this to {step.shop}</Title>
-      <View style={{ opacity: 1 }}>
-          <QrCode value={step.qr} />
-        </View>
-      <View style={{ alignItems: 'center', gap: 4 }}>
-        <Big>{wholeDollars(step.amount)}</Big>
-        <Status text="Signed on this phone" tone="green" />
-        <Muted>{wholeDollars(step.leftAfter)} left in your wallet</Muted>
-      </View>
+      <FadeUp>
+        <Title>Show this to {step.shop}</Title>
+      </FadeUp>
+      <FadeUp delay={80}>
+        <Ticket
+          value={step.qr}
+          kicker={`Paid with ${getDisplayName() ?? "your"} StormCash`}
+          title={step.shop}
+          amount={wholeDollars(step.amount)}
+          footnote={`Signed on this phone at ${new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`}
+        />
+      </FadeUp>
+      <FadeUp delay={160} style={{ alignItems: 'center', gap: 6 }}>
+        <Status text="Your wallet is already updated" tone="green" />
+        <Muted>{wholeDollars(step.leftAfter)} left to spend</Muted>
+      </FadeUp>
       <Button title="Done" onPress={nav.home} />
     </Screen>
   );
