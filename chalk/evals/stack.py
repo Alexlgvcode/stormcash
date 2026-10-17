@@ -130,11 +130,11 @@ def up(args) -> None:
     if args.model:
         gateway_cmd += ["--model", args.model]
     if args.runner == "droid":
-        # Droid keeps a session per run under ~/.factory/sessions/<server cwd, punctuation as ->/; the gateway
+        # Droid keeps a session per run under ~/.factory/sessions/<server cwd, "/" as "-">/; the gateway
         # audits them (one model only, no fallback, a hard credit cap) and takes the exact folder from the
         # first row's session.
         gateway_cmd += ["--require-model", args.model, "--max-credits", str(args.max_credits),
-                        "--sessions-dir", str(SESSIONS_ROOT / re.sub(r"[^A-Za-z0-9_-]", "-", str(EVALS)))]
+                        "--sessions-dir", str(SESSIONS_ROOT / re.sub(r"[^A-Za-z0-9._-]", "-", str(EVALS)))]
     pids["gateway"] = spawn("gateway", gateway_cmd, {**base_env, "EVAL_GATEWAY_TOKEN": token})
     state = {"runner": args.runner, "model": args.model, "max_credits": args.max_credits, "servers": {str(k): v for k, v in servers.items()},
              "gateway_local": f"http://127.0.0.1:{GATEWAY_PORT}", "public_url": None, "pids": pids,

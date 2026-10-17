@@ -28,7 +28,7 @@ The Chalk files are self-contained on purpose: Chalk ships each one to its worke
 - `honest_subject`: true when flagging the subject would be a false flag (every trap).
 - `features`: the candidate's frozen feature snapshot (JSON). `row_id` is `seed:candidate_id`.
 
-The same seeds always give the same rows byte for byte. With these seeds there are **48 rows (27 honest)**, a bit under the spec's ~60 target. `meta.json` also lists the labelled subjects the detectors never raised (4 with these seeds). Neither runner ever sees those subjects, so the Evals tab should say so rather than count them.
+The same seeds always give the same rows byte for byte. With these seeds and the #82 simulator there are **43 rows (20 honest)**, under the spec's ~60 target. `meta.json` also lists the labelled subjects the detectors never raised (3 with these seeds: two colluders and a stolen phone). Which subjects the detectors miss depends on the time of day the scenarios land on; T0 was fixed before any run. Neither runner ever sees those subjects, so the Evals tab should say so rather than count them.
 
 **One database per seed, all local.** The detectors compare a shop with its neighbours, and the towns of two seeds overlap on the same grid, so each seed gets its own database (`stormcash_eval_<seed>`). They live on a local Postgres, never on the hosted Neon demo database, which keeps seed 42 for the demo. `build_dataset.py` refuses a non-local host. The towns are signed with a throwaway eval server key in `.state/server_key.pem`; the demo server's key is never read.
 

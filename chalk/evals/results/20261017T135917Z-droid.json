@@ -1,0 +1,2088 @@
+{
+  "schema_version": 1,
+  "eval": "stormdesk-triage",
+  "runner": "droid",
+  "runner_label": "StormDesk (Droid, claude-sonnet-5-5)",
+  "is_agent_result": true,
+  "complete": true,
+  "table_column": "stormdesk",
+  "model": "claude-sonnet-5-5",
+  "mode": "chalk_task",
+  "timestamp": 1792245557,
+  "timestamp_iso": "2026-10-17T13:59:17Z",
+  "git_sha": "d56cb6cc29e9e1fd6cd89e4b0036882dc5005520",
+  "chalk": {
+    "environment_id": "strm07b30fb9",
+    "suite": "StormCash",
+    "suite_id": "cmvbrw62c02n90128vxo63pbs",
+    "evaluation_id": "cmvcggaep0as9013k2izcwgpc",
+    "evaluation_name": "StormDesk triage: server (Droid)",
+    "run_id": "a91828a0-342b-4030-b046-a926fe5ade9d",
+    "status": "SUCCEEDED",
+    "task_function_version_id": "6dca009f-164d-4d38-b509-ca48a69d8089",
+    "dataset_id": "d4f627dc-fb37-4b3d-b7e5-df87cf05ae81",
+    "dataset_revision_id": "c27167b6-9058-4795-8da8-647289f6e5b0",
+    "result_dataset_id": "74a2f725-217f-525e-ae5f-bf9d1cad0c66",
+    "result_dataset_revision_id": "f32bc1bd-a4d5-4d2c-96ab-3dc36dcdff16",
+    "created_at": "2026-10-17T13:51:30.596000+00:00",
+    "completed_at": "2026-10-17T13:59:17.638000+00:00"
+  },
+  "dataset": {
+    "name": "stormdesk-triage",
+    "rows": 43,
+    "honest_rows": 20,
+    "seeds": [
+      42,
+      7,
+      13,
+      99,
+      2026
+    ],
+    "scenarios": {
+      "colluder": 9,
+      "dark_region": 5,
+      "stolen_phone": 9,
+      "trap_quiet_region": 4,
+      "trap_stockup": 10,
+      "trap_victim_shop": 6
+    },
+    "detector_misses": [
+      {
+        "seed": 42,
+        "subject_id": "47557a7c9f308a898d7929bdb0e1aa5d",
+        "name": "Downtown Laundromat",
+        "scenario": "colluder",
+        "expected_kind": "merchant_silence"
+      },
+      {
+        "seed": 7,
+        "subject_id": "95e4a6caecbf0a397cfa97b64ab28ef3",
+        "name": "West Asheville Outfitters",
+        "scenario": "colluder",
+        "expected_kind": "merchant_silence"
+      },
+      {
+        "seed": 13,
+        "subject_id": "3721ce6708559dea0188677b57b4276b",
+        "name": "Resident 041",
+        "scenario": "stolen_phone",
+        "expected_kind": "cap_drain"
+      }
+    ],
+    "sha256": "6b9b3d3cfbcc3638c75ff16d6f0e28b925c45746cf2c8853e32251b6ff2fdd11"
+  },
+  "runners_seen": {
+    "droid": 43
+  },
+  "models_seen": [
+    "claude-sonnet-5-5"
+  ],
+  "droid_audit": {
+    "tripped": null,
+    "require_model": "claude-sonnet-5-5",
+    "max_credits": 2900000.0,
+    "jobs_done": 43,
+    "jobs_running": 0,
+    "audit": {
+      "sessions": 43,
+      "factory_credits": 1404702.0,
+      "models_seen": [
+        "claude-sonnet-5-5"
+      ]
+    }
+  },
+  "scorers": {
+    "valid-json": {
+      "in_evaluation": true,
+      "mean": 1.0,
+      "scored_rows": 43,
+      "errors": 0
+    },
+    "kind-correct": {
+      "in_evaluation": true,
+      "mean": 0.4884,
+      "scored_rows": 43,
+      "errors": 0
+    },
+    "action-correct": {
+      "in_evaluation": true,
+      "mean": 0.4884,
+      "scored_rows": 43,
+      "errors": 0
+    },
+    "no-false-flag": {
+      "in_evaluation": true,
+      "mean": 0.9535,
+      "scored_rows": 43,
+      "errors": 0,
+      "mean_honest_rows": 0.9
+    },
+    "citations-valid": {
+      "in_evaluation": true,
+      "mean": 0.9767,
+      "scored_rows": 43,
+      "errors": 0
+    }
+  },
+  "metrics": {
+    "real_caught": {
+      "caught": 2,
+      "total": 23,
+      "recall": 0.087
+    },
+    "colluders_caught": {
+      "caught": 1,
+      "total": 9,
+      "recall": 0.1111
+    },
+    "honest_flagged": {
+      "flagged": 2,
+      "total": 20,
+      "false_flag_rate": 0.1
+    },
+    "precision_by_kind": {
+      "merchant_silence": {
+        "flagged": 2,
+        "correct": 2,
+        "precision": 1.0
+      },
+      "cap_drain": {
+        "flagged": 1,
+        "correct": 0,
+        "precision": 0.0
+      },
+      "region_dark": {
+        "flagged": 3,
+        "correct": 1,
+        "precision": 0.3333
+      }
+    },
+    "citations_valid": {
+      "valid": 42,
+      "checked": 43,
+      "rate": 0.9767
+    },
+    "pool_cents": {
+      "note": "pool money in each merchant_silence candidate's 6 h window (its frozen features)",
+      "at_colluders": 46000,
+      "held_correctly": 8000,
+      "held_from_honest_shops": 0
+    },
+    "factory_credits": {
+      "note": "Factory credits of each row's Droid session (the attempt that answered); droid_audit counts every session",
+      "rows_total": 1404702,
+      "rows_with_usage": 43
+    },
+    "rows_without_flag": 0,
+    "task_errors": 0,
+    "fallback_from_droid": 0
+  },
+  "per_scenario": [
+    {
+      "scenario": "colluder",
+      "rows": 9,
+      "honest": false,
+      "label_kind": "merchant_silence",
+      "label_action": "hold_pool_payout",
+      "caught": 1,
+      "dismissed": null,
+      "flagged": 3,
+      "kind_correct": 2,
+      "action_correct": 2,
+      "without_flag": 0
+    },
+    {
+      "scenario": "dark_region",
+      "rows": 5,
+      "honest": false,
+      "label_kind": "region_dark",
+      "label_action": "dispatch_relay",
+      "caught": 1,
+      "dismissed": null,
+      "flagged": 1,
+      "kind_correct": 1,
+      "action_correct": 1,
+      "without_flag": 0
+    },
+    {
+      "scenario": "stolen_phone",
+      "rows": 9,
+      "honest": false,
+      "label_kind": "cap_drain",
+      "label_action": "freeze_cert",
+      "caught": 0,
+      "dismissed": null,
+      "flagged": 0,
+      "kind_correct": 0,
+      "action_correct": 0,
+      "without_flag": 0
+    },
+    {
+      "scenario": "trap_quiet_region",
+      "rows": 4,
+      "honest": true,
+      "label_kind": "none",
+      "label_action": "none",
+      "caught": null,
+      "dismissed": 2,
+      "flagged": 2,
+      "kind_correct": 2,
+      "action_correct": 2,
+      "without_flag": 0
+    },
+    {
+      "scenario": "trap_stockup",
+      "rows": 10,
+      "honest": true,
+      "label_kind": "none",
+      "label_action": "none",
+      "caught": null,
+      "dismissed": 10,
+      "flagged": 0,
+      "kind_correct": 10,
+      "action_correct": 10,
+      "without_flag": 0
+    },
+    {
+      "scenario": "trap_victim_shop",
+      "rows": 6,
+      "honest": true,
+      "label_kind": "none",
+      "label_action": "none",
+      "caught": null,
+      "dismissed": 6,
+      "flagged": 0,
+      "kind_correct": 6,
+      "action_correct": 6,
+      "without_flag": 0
+    }
+  ],
+  "rows": [
+    {
+      "row_id": "7:1",
+      "seed": 7,
+      "candidate_id": 1,
+      "kind": "cap_drain",
+      "subject_id": "df4418aab7c94521de14fcda6bb784b0",
+      "subject_name": "Resident 251",
+      "label_scenario": "trap_stockup",
+      "label_kind": "none",
+      "label_action": "none",
+      "honest_subject": true,
+      "output_kind": "none",
+      "output_severity": "info",
+      "output_action": "none",
+      "summary": "Dismiss: this looks like an honest resident stocking up right after Storm Mode. Every payment was fully funded from escrow, so the pool has no exposure.",
+      "reasoning": "Candidate 1 flagged cert df4418aab7c94521de14fcda6bb784b0 for spending 4200 of its 5000 cent cap (drain_share 0.84) in 15 minutes. Nothing else supports fraud. (1) The spending began 20 minutes after Storm Mode. Cap v2 (5000) was issued at 1791943200, shortly before the first payment, and heavy early spending by honest residents is expected. (2) All four tags settled with funded_pool_cents=0 and funded_escrow_cents equal to the amount. The settled total is 4711, below the 5000 cap, and the Nessie ledger shows 289 cents left. That balance is simulated (ledger only, no real Nessie balance). (3) All four tag signatures and hashes verified, and no pair of tags breaks a hard rule (no SAME_COUNTER, BROKEN_LINK, TOTAL_BACKWARDS or OVER_CAP). (4) The spending was in the home region (region_mismatch false, only asheville-downtown). It went to 3 distinct ordinary shops: Downtown Laundromat, Downtown Bike Shop and Downtown General Store. The three payments were 1500, 1400 and 1300 cents. There was no owner freeze request. (5) The 4th tag (511 cents at West Asheville Deli) came about 33 hours later, which is not a burst. The asheville-downtown region has no alerts. I could not pull the device log or contacts because get_contacts rejected the cert id (it needs a 66-hex device pub or a 32-hex merchant id) and I did not have the device pub. Those checks would not change the call, since the pool exposure is zero and no hard rule fired.",
+      "evidence_ids": [
+        "df4418aab7c94521de14fcda6bb784b0",
+        "195bff29bcfed2c03807da1e51f222aaa2651298dcd61882eec984889f6893c2",
+        "bebfb140f114aae4f6d877515704d93ab40cff1be7faa95826c5b2a36a480c86",
+        "a19b9637810f00df9d7a91386bc883e27fd3c31751fcb1646b6786887ce6136b",
+        "f7cc0980d03ee1f6768b6fc8c65ed80594fee8d5c5dc7029c901395ac9874101"
+      ],
+      "exposure_cents": 0,
+      "runner": "droid",
+      "server_run_id": 9,
+      "models_used": [
+        "claude-sonnet-5-5"
+      ],
+      "factory_credits": 18699,
+      "citations_valid": true,
+      "error": null,
+      "scores": {
+        "valid-json": 1.0,
+        "kind-correct": 1.0,
+        "action-correct": 1.0,
+        "no-false-flag": 1.0,
+        "citations-valid": 1.0
+      }
+    },
+    {
+      "row_id": "7:2",
+      "seed": 7,
+      "candidate_id": 2,
+      "kind": "cap_drain",
+      "subject_id": "1386018ed6e47d36beb052ad78781631",
+      "subject_name": "Resident 307",
+      "label_scenario": "trap_stockup",
+      "label_kind": "none",
+      "label_action": "none",
+      "honest_subject": true,
+      "output_kind": "none",
+      "output_severity": "info",
+      "output_action": "none",
+      "summary": "Dismiss: this looks like an honest resident spending their raised cap after Storm Mode. Escrow covered every payment, so the pool has no exposure.",
+      "reasoning": "The cap_drain suspicion rests on drain_share 0.84 (4200 of 5000 cents spent in 15 minutes) at 20 minutes after Storm Mode. That pattern fits a resident stocking up, not a cheater. Cert 1386018e... went from a 2000-cent cap (v1) to 5000 (v2) at 1791943200, shortly before the spending began. All four tags (counters 1-4) pass verify_tags: hashes match, signatures are valid, and no pair breaks a hard rule. Counters are contiguous and prev_hash links are intact, and cumulative spend is 1500, 2900, 4200, then 5000, never above the cap. Three different shops were paid within the window: Downtown Laundromat (aede04586dbfd4129551d05ba7b51e1f), Downtown Bike Shop (651f42ff02a4b5f9d019cd6c9c01c09a) and Downtown General Store (912d09348747ee269e6b067e250d5b0f). All are in the home region asheville-downtown, with region_mismatch false and no owner freeze request. Every payment settled with funded_escrow_cents equal to the amount and funded_pool_cents 0, so shops were paid from the resident's own escrow. The fourth payment (800 cents, Swannanoa Hardware f90843011476d704bd839866f74b36ff) came about 9.5 hours later (device_ts 1791978420) and is not part of the burst. The ledger shows 0 cents remaining, which is consistent with a fully spent escrow. The balance is simulated, so it adds nothing beyond that. Region status for asheville-downtown shows no alerts. Chalk is off, so features came from the Postgres fallback, which matches the candidate. I could not pull device contacts: get_contacts rejected the cert id as a device id, and I have no device pub. Nothing else points to fraud, so I propose no action.",
+      "evidence_ids": [
+        "1386018ed6e47d36beb052ad78781631",
+        "08d25a03459c1e04397f103c3a38b2aaec951a26217225e646c2817ea4d812d4",
+        "3248c464dd2b39610c363e13c02a9d5c4cb63f345eaf1e0c315e701f0df6598a",
+        "a9c05fbae2e84f74f044f3f3a6485e3504f8f8d328d7140e29d9ad45ab74b1b1",
+        "a5708ee27cee9217524b49299f60bfe71daea731e5bd0ca5c37ab24a83938551"
+      ],
+      "exposure_cents": 0,
+      "runner": "droid",
+      "server_run_id": 5,
+      "models_used": [
+        "claude-sonnet-5-5"
+      ],
+      "factory_credits": 16755,
+      "citations_valid": true,
+      "error": null,
+      "scores": {
+        "valid-json": 1.0,
+        "kind-correct": 1.0,
+        "action-correct": 1.0,
+        "no-false-flag": 1.0,
+        "citations-valid": 1.0
+      }
+    },
+    {
+      "row_id": "7:3",
+      "seed": 7,
+      "candidate_id": 3,
+      "kind": "merchant_silence",
+      "subject_id": "554caf4be0a704669e3ba470d3667b9e",
+      "subject_name": "Corner Store",
+      "label_scenario": "colluder",
+      "label_kind": "merchant_silence",
+      "label_action": "hold_pool_payout",
+      "honest_subject": false,
+      "output_kind": "cap_drain",
+      "output_severity": "review",
+      "output_action": "hold_pool_payout",
+      "summary": "Not silence: Corner Store is active and its contacts are all paired. But in the window it took 3 payments (6000c pool-funded, 100%) from 3 certs that each double-spent. It later accepted a payment that the MERCHANT_KNEW rule denied. Recommend review and a pool payout hold.",
+      "reasoning": "Silence is refuted. Contacts are steady and paired outside the window, and silence_ratio is 0. The window's zero contacts match a neighbor median of 0, and the device log chain is intact. The real signal is pool draining. Each of the 3 window payments (tags 9cbe7f22\u2026, b549b430\u2026, 784c8cc5\u2026) is 3500c: 1500c escrow plus 2000c pool. Each cert (5b6cd073\u2026, 550ad1fa\u2026, 463b869a\u2026) also paid Downtown Shelter (merchant 10fd7cbc\u2026) 3500c in full escrow using the same prev_hash at counter 1. verify_tags confirms SAME_COUNTER for 7bc42cb3\u2026 vs 9cbe7f22\u2026. The other two cert pairs have the same counter-1/same-prev_hash structure in their chains but I did not run verify_tags on them. Those 3 certs are already frozen, so the hard rules have been applied and the 6000c is already settled. Corner Store was the second shop each time, which is what the pool covers. Separately, tag 1cd1657\u2026 (cert ee604c04\u2026) was denied_knowing (MERCHANT_KNEW) and conflicts with 7c13e089\u2026 under SAME_COUNTER. That is a deterministic proof that this shop accepted a tag it knew was a double-spend. Taken together, this looks like a shop that repeatedly takes pool-covered double-spends, possibly colluding. It could also be a victim of 3 cheaters, so I stop at review and do not call it proven. Also odd: get_merchant_payments shows pool_eligible=false yet the pool paid 2000c on each of the 3 payments; an operator should check that. Chalk is off, so features came from the Postgres fallback.",
+      "evidence_ids": [
+        "554caf4be0a704669e3ba470d3667b9e",
+        "10fd7cbc2de7647304293a302893e7c5",
+        "9cbe7f2242425ada99303930cb7a91a09912dd9ad3bd5666665f7ffdf49278e3",
+        "b549b430296082d17ecd1b1ea6832ad9460dad9e3294a38b1dab50d3dbb504fa",
+        "784c8cc51645452b06fd66c435cb6504ed8e8d35545c7317c5fea82df264e780",
+        "7bc42cb3ed74c8b78fea2da642959ae7c46e103e3723ac82a15edc30cdf0129e",
+        "ddac46018c7917679f17e1d35833cdbd8074e7c410b1fb021b00157428e976ce",
+        "ee6b0156f7d0757d1d8d114fad5ba4db25f944647d75d9e44e912a7fe78ed1cf",
+        "1cd1657171dd565a48a47900ed7d9f8fc68b925b98e43aa23912d9aa9a7f4ae8",
+        "7c13e0895cbe983c9ec6f497ec453602163d60ecb5f7f07cd8784ab7caaf95dc",
+        "5b6cd073d5f018f098d7a55fd1cb8c40",
+        "550ad1fad375df70b32685f4305e35e0",
+        "463b869a6da83abe8b65eed27f1d24a7",
+        "ee604c041750edd2c599f04f1403a13c",
+        "8732b12d38f0a7c8898ba94ceaadaa282551b6d7a1dc023c73a740db1c4537ed",
+        "636ab20482dffad8f1216e1091e5c5d2b0db54b35471ffdba63fa632def3973e",
+        "d74f4272958a9e9359d03ed1337f3918d18f680c780c0ceac257c81202d16e5a"
+      ],
+      "exposure_cents": 6000,
+      "runner": "droid",
+      "server_run_id": 4,
+      "models_used": [
+        "claude-sonnet-5-5"
+      ],
+      "factory_credits": 66215,
+      "citations_valid": true,
+      "error": null,
+      "scores": {
+        "valid-json": 1.0,
+        "kind-correct": 0.0,
+        "action-correct": 1.0,
+        "no-false-flag": 1.0,
+        "citations-valid": 1.0
+      }
+    },
+    {
+      "row_id": "7:4",
+      "seed": 7,
+      "candidate_id": 4,
+      "kind": "cap_drain",
+      "subject_id": "1330b62f6992a09eac0c71bf420bcc2e",
+      "subject_name": "Resident 154",
+      "label_scenario": "stolen_phone",
+      "label_kind": "cap_drain",
+      "label_action": "freeze_cert",
+      "honest_subject": false,
+      "output_kind": "none",
+      "output_severity": "info",
+      "output_action": "none",
+      "summary": "Dismiss: the resident spent 4300 of a 5000-cent cap on 3 shops in 8 minutes. Every cent came from escrow, so the pool has no exposure.",
+      "reasoning": "The three tags (counters 1-3) all have valid signatures and matching hashes. verify_tags found no rule broken in any pair, so no hard rule applies. All three payments are settled and fully escrow-funded, with funded_pool_cents 0 each (1500, 1500 and 1300 cents). The cumulative total of 4300 stays under the 5000-cent cap (cert v2), and the ledger shows 700 cents left. That means no guarantee-pool money is at risk. The two soft signals are weak. First, the region mismatch: the home region is swannanoa, but all spending was in west-asheville. Swannanoa has an active Flash Flood Warning (alert sim-7-swannanoa, severe, onset 1791936000), so a displaced resident shopping nearby is a plausible innocent explanation. Second, the high drain share of 0.86 is just stocking up on a modest cap. The payments were spaced about 4 minutes apart at ordinary shops (West Asheville Diner, Bike Shop and Deli), which looks like normal shopping. It was also about 38 hours after Storm Mode began (2288 minutes), not a burst right after it started. The owner has made no freeze request. Limits: I could not pull the device log or contacts, because the candidate gives only a cert id and those tools need a device pub key or a merchant id. Chalk is off, so the features came from the Postgres fallback. Neither gap changes the conclusion, since the exposure is zero and the hard-rule check is clean.",
+      "evidence_ids": [
+        "1330b62f6992a09eac0c71bf420bcc2e",
+        "c08ab22fba0b4d634464534fd9ca43e288c9f722eaa609f1505c666289cc99a5",
+        "739ee1a852d7768a08ee44e8455a8314e33ef98b799fd9a2d70c3791f9b170b7",
+        "13ab8d0386647197908809bded320a74fa9337f068a5ccf3b2cafc4e365e59b1",
+        "3a82f01efc594410bde9c0d0e6aeaf58",
+        "cf58b39bd2173bb7b48b61b0c9d8f949",
+        "5c08d86fff7a1de5280616610f66e253",
+        "sim-7-swannanoa"
+      ],
+      "exposure_cents": 0,
+      "runner": "droid",
+      "server_run_id": 6,
+      "models_used": [
+        "claude-sonnet-5-5"
+      ],
+      "factory_credits": 18461,
+      "citations_valid": true,
+      "error": null,
+      "scores": {
+        "valid-json": 1.0,
+        "kind-correct": 0.0,
+        "action-correct": 0.0,
+        "no-false-flag": 1.0,
+        "citations-valid": 1.0
+      }
+    },
+    {
+      "row_id": "7:5",
+      "seed": 7,
+      "candidate_id": 5,
+      "kind": "cap_drain",
+      "subject_id": "b7474900229f360f2177cc6a4b6fb2a7",
+      "subject_name": "Resident 321",
+      "label_scenario": "stolen_phone",
+      "label_kind": "cap_drain",
+      "label_action": "freeze_cert",
+      "honest_subject": false,
+      "output_kind": "none",
+      "output_severity": "info",
+      "output_action": "none",
+      "summary": "Dismiss cap_drain #5. The cert spent 4300 of its 5000 cap in 3 payments, all funded from escrow. The pool has no exposure and no hard rule is broken.",
+      "reasoning": "The detector flagged a high drain share (0.86), a region mismatch (home asheville-downtown, spending in west-asheville) and 3 merchants in 15 minutes. None of that shows a loss or a proof of cheating. (1) The cert chain has 3 tags at counters 1-3 (1500, 1500 and 1300 cents). cum_cents rises 1500, 3000, 4300, which stays under the 5000 cap. (2) verify_tags shows every hash matches, every signature is valid, and no pair breaks a rule. That rules out SAME_COUNTER, BROKEN_LINK, TOTAL_BACKWARDS and OVER_CAP. (3) Each payment has funded_escrow equal to its amount and funded_pool of 0, so the guarantee pool paid nothing. The simulated ledger shows 700 cents left, which is 5000 minus 4300. (4) The payments went to three west-asheville shops: West Asheville Diner (3a82f01efc594410bde9c0d0e6aeaf58), West Asheville Bike Shop (cf58b39bd2173bb7b48b61b0c9d8f949) and West Asheville Deli (5c08d86fff7a1de5280616610f66e253). They were spaced 240 seconds apart. That is compatible with an honest resident stocking up about 2528 minutes after Storm Mode, and the cap rose from 2000 to 5000 in cert version 2. (5) A region mismatch alone is weak evidence, because residents can shop away from home. west-asheville has no alerts, and there is no owner freeze request. I could not pull the device log or contacts, because those tools need a device pub key or a merchant id and I only had the cert id. I also pulled payments for the Diner only; the other two payments come from the cert chain. Nothing retrieved shows a proof or a pool loss, so I recommend no action.",
+      "evidence_ids": [
+        "b7474900229f360f2177cc6a4b6fb2a7",
+        "b7b459e2b1c2581ea85825f2b5d4edb032c85e441c040f15b5f70c8fe4174bae",
+        "a6751200cc77c6453bd06da2a5d3cadfac931567b70ffb5c40d5b518c036762e",
+        "0155c30e858669e45358a12acffa70433724197814f6d052b96893818f416932",
+        "3a82f01efc594410bde9c0d0e6aeaf58",
+        "cf58b39bd2173bb7b48b61b0c9d8f949",
+        "5c08d86fff7a1de5280616610f66e253"
+      ],
+      "exposure_cents": 0,
+      "runner": "droid",
+      "server_run_id": 2,
+      "models_used": [
+        "claude-sonnet-5-5"
+      ],
+      "factory_credits": 28379,
+      "citations_valid": true,
+      "error": null,
+      "scores": {
+        "valid-json": 1.0,
+        "kind-correct": 0.0,
+        "action-correct": 0.0,
+        "no-false-flag": 1.0,
+        "citations-valid": 1.0
+      }
+    },
+    {
+      "row_id": "7:6",
+      "seed": 7,
+      "candidate_id": 6,
+      "kind": "merchant_silence",
+      "subject_id": "912d09348747ee269e6b067e250d5b0f",
+      "subject_name": "Downtown General Store",
+      "label_scenario": "trap_victim_shop",
+      "label_kind": "none",
+      "label_action": "none",
+      "honest_subject": true,
+      "output_kind": "none",
+      "output_severity": "info",
+      "output_action": "none",
+      "summary": "Dismiss: Downtown General Store looks like a victim of a double-spend, not a silent or colluding shop. The cheater cert is already frozen.",
+      "reasoning": "The candidate rests on one accepted payment in the window, so there is almost no data. silence_ratio is 0, near_cap_share is 0, and one_sided_contacts is 0. contacts_per_hour is 0 against a neighbor median of 0.25. That gap is too small to mean anything with only 2 neighbors. The shop's only payment (908985c0\u2026, 3500c) used cert 93d48756\u2026, and the shop's device log is intact (ACCEPT entry 23cb76fa\u2026). The pool-funded share of 100% comes from that one payment: the cheater's escrow covered 1500c and the pool covered 2000c. verify_tags confirms both tags are validly signed. They also break SAME_COUNTER, because tag 5f5571dd\u2026 at Downtown Shelter reuses counter 1 with the same prev_hash. That is a hard-rule case against the cert holder, and the cert is already frozen. Nothing shows the shop knew about the double-spend (no MERCHANT_KNEW or LOG_TAMPER evidence). The region has no alerts. The shop's contact list is empty. I read that as a quiet shop with a single sale, not as suppressed contact evidence. I have no evidence of merchant misconduct, so I propose no action and no merchant notice.",
+      "evidence_ids": [
+        "912d09348747ee269e6b067e250d5b0f",
+        "908985c063d7e07ff2ea8b88faf5379093b651915ce269648e2047984fa310b5",
+        "93d487568937770f413c13ed5a5b893a",
+        "23cb76fa8d63398b773411e1bca6c5853b55efc26ede7a93db218dd3073f0f3a"
+      ],
+      "exposure_cents": 0,
+      "runner": "droid",
+      "server_run_id": 7,
+      "models_used": [
+        "claude-sonnet-5-5"
+      ],
+      "factory_credits": 18672,
+      "citations_valid": true,
+      "error": null,
+      "scores": {
+        "valid-json": 1.0,
+        "kind-correct": 1.0,
+        "action-correct": 1.0,
+        "no-false-flag": 1.0,
+        "citations-valid": 1.0
+      }
+    },
+    {
+      "row_id": "7:7",
+      "seed": 7,
+      "candidate_id": 7,
+      "kind": "region_dark",
+      "subject_id": "black-mountain",
+      "subject_name": "Black Mountain",
+      "label_scenario": "trap_quiet_region",
+      "label_kind": "none",
+      "label_action": "none",
+      "honest_subject": true,
+      "output_kind": "none",
+      "output_severity": "info",
+      "output_action": "none",
+      "summary": "Dismiss: black-mountain is not dark. Black Mountain Grocer settled a payment and logged contacts after the region's stale 'last upload' time.",
+      "reasoning": "Candidate #7 flags black-mountain for 50h without an upload, 0 merchants open, 48 certs and 31% expiring within 12h. The shop's own records contradict this. Black Mountain Grocer (2fcbc365319cc587f047207b997ee078) has settled payments with device_ts up to 1792095120 (tag 458e7e02...). The region's last_upload_at is 1791975480, which is about 33h earlier. A payment can only settle after an upload, so the upload field or the 'merchants_open 0' feature is stale. The shop's device log (chain intact) has contact entries through ts 1792161240, which is after the region status as_of of 1792161060. The last entry is entry 4bf05106..., contact e3adad00..., a paired contact that received 1 item. The shop is powered, in range of peers and syncing. The cert-expiry share is not a regional signal. The sampled cert 083904db... was issued at 1791936000 and expires at 1792195200, so all certs issued in the same batch expire together. Black Mountain has no weather alerts (alerts is empty), while neighbouring swannanoa has a replayed Flash Flood Warning. Chalk was off, so features came from the Postgres fallback. The only residual oddity is that the grocer has had no payments for about 18h, which fits an ordinary lull. No hard rule is involved, and sending a relay would not be justified.",
+      "evidence_ids": [
+        "2fcbc365319cc587f047207b997ee078",
+        "458e7e02bad39cd8a5d005ac1f8ccadeb62c0df31b0afb6e3e97da1cbee528a5",
+        "6c89d52d44518463ee39469ec75ecdc9d46f7d70e40e5de70ddb23ef055b3a3c",
+        "4bf051061dd435203b327621d44fa4d6e22f66b71dc752b79f58e1bf4ea31736",
+        "e3adad00ab67a9c01dce4ad17f9d58530bf4e3a46e3698a6407de699e2b8e868"
+      ],
+      "exposure_cents": 0,
+      "runner": "droid",
+      "server_run_id": 8,
+      "models_used": [
+        "claude-sonnet-5-5"
+      ],
+      "factory_credits": 63504,
+      "citations_valid": true,
+      "error": null,
+      "scores": {
+        "valid-json": 1.0,
+        "kind-correct": 1.0,
+        "action-correct": 1.0,
+        "no-false-flag": 1.0,
+        "citations-valid": 1.0
+      }
+    },
+    {
+      "row_id": "7:8",
+      "seed": 7,
+      "candidate_id": 8,
+      "kind": "region_dark",
+      "subject_id": "swannanoa",
+      "subject_name": "Swannanoa",
+      "label_scenario": "dark_region",
+      "label_kind": "region_dark",
+      "label_action": "dispatch_relay",
+      "honest_subject": false,
+      "output_kind": "none",
+      "output_severity": "info",
+      "output_action": "none",
+      "summary": "Dismiss region_dark for swannanoa. The silence matches an active Severe Flash Flood Warning, and the region has uploaded again since the candidate window.",
+      "reasoning": "Candidate 8 flagged 55.6 hours without an upload, with 0 merchants open and 42 active certs. Alert sim-7-swannanoa (Flash Flood Warning, Severe, replayed) was active from onset 1791936000 until 1792238400, so a quiet region is expected. Region status shows last_upload_at 1792194660, which is after the window end of 1792155600, so the region is not dark now. Nothing here points to fraud, and with no open shops there is no pool exposure and no merchant to notify. Caveats: the features came from the Postgres fallback because Chalk is off. The status as_of (1792161060) is earlier than last_upload_at, so the clocks may be slightly inconsistent. The status also shows all 45 certs expiring within 12 hours, up from a 0.381 share in the candidate. That is worth a later look if uploads stall again. A relay dispatch is not justified now.",
+      "evidence_ids": [
+        "sim-7-swannanoa"
+      ],
+      "exposure_cents": 0,
+      "runner": "droid",
+      "server_run_id": 3,
+      "models_used": [
+        "claude-sonnet-5-5"
+      ],
+      "factory_credits": 14616,
+      "citations_valid": true,
+      "error": null,
+      "scores": {
+        "valid-json": 1.0,
+        "kind-correct": 0.0,
+        "action-correct": 0.0,
+        "no-false-flag": 1.0,
+        "citations-valid": 1.0
+      }
+    },
+    {
+      "row_id": "13:1",
+      "seed": 13,
+      "candidate_id": 1,
+      "kind": "cap_drain",
+      "subject_id": "d3211aa0de63c989bf364ea7733cf143",
+      "subject_name": "Resident 228",
+      "label_scenario": "trap_stockup",
+      "label_kind": "none",
+      "label_action": "none",
+      "honest_subject": true,
+      "output_kind": "none",
+      "output_severity": "info",
+      "output_action": "none",
+      "summary": "Dismiss: this looks like an honest resident stocking up after Storm Mode. Escrow funded every payment, spending stayed under the cap, and the pool has no exposure.",
+      "reasoning": "The detector flagged 4200 of a 5000 cap (84%) spent in 15 minutes at 3 merchants, 20 minutes after Storm Mode started. That is the normal stocking-up pattern. Cert d3211aa0de63c989bf364ea7733cf143 was raised from 2000 to 5000 cents at v2, 10 minutes before the first payment. The four settled tags total 4748 cents, under the 5000 cap. Every tag has funded_pool_cents=0, so escrow covered every payment and the pool owes nothing. verify_tags shows all four hashes recompute and all signatures are valid. No pair breaks a hard rule (same counter, broken link, total backwards, over cap). The three burst payments were at Downtown Cafe, Downtown Market and Downtown Feed Store, all in the home region asheville-downtown. There is no region mismatch and no owner freeze request. The fourth payment (548 cents, Downtown Hardware, counter 4) came about 11 hours after the burst, so it is not part of it. The region has no alerts. I did not check device logs or contacts because the cert data gives no device id, and nothing retrieved points to cheating. Nothing supports a freeze or a limit change.",
+      "evidence_ids": [
+        "d3211aa0de63c989bf364ea7733cf143",
+        "7121d4187f756aeecaa471da9ff5a051fb6d2e065309fc7c2099d33d29e37a2d",
+        "0da0818478b1c3b5cc4c7e54ed9fe4c09070ca227e2f90a36c91ede2432ecb18",
+        "dffc723cf74676befc872b71ee7f580e915ae10e90a5bef2eb211727c4d717f7",
+        "3256606af7e68b06925f61632707059ebbe028c3fc2865013c4dd164cf27d0bc",
+        "54ac2432513d15d9619788e332bad719",
+        "da2ae1fa8cbaa18e24afc2fcb5007b1d",
+        "998c80c16db98153a760a6376b49fe31"
+      ],
+      "exposure_cents": 0,
+      "runner": "droid",
+      "server_run_id": 1,
+      "models_used": [
+        "claude-sonnet-5-5"
+      ],
+      "factory_credits": 23933,
+      "citations_valid": true,
+      "error": null,
+      "scores": {
+        "valid-json": 1.0,
+        "kind-correct": 1.0,
+        "action-correct": 1.0,
+        "no-false-flag": 1.0,
+        "citations-valid": 1.0
+      }
+    },
+    {
+      "row_id": "13:2",
+      "seed": 13,
+      "candidate_id": 2,
+      "kind": "cap_drain",
+      "subject_id": "736aae7f2958d4b047e1fa2e27dc77a8",
+      "subject_name": "Resident 055",
+      "label_scenario": "trap_stockup",
+      "label_kind": "none",
+      "label_action": "none",
+      "honest_subject": true,
+      "output_kind": "none",
+      "output_severity": "info",
+      "output_action": "none",
+      "summary": "Dismiss cap_drain on cert 736aae7f\u2026: an honest resident spending Storm Mode headroom. The cert is fully escrow-funded, so the pool has zero exposure.",
+      "reasoning": "The detector flagged 84% of the cap (4200 of 5000 cents) spent across 3 shops in 15 minutes, 20 minutes after Storm Mode began. That fits normal stocking up. (1) verify_tags found all 4 tags with valid signatures and matching hashes, and no hard rule broken on any pair (counters 1-4, chain intact). (2) Every payment was funded entirely from escrow: funded_pool_cents is 0 on all four tags and the settled total is 5000 against max_cap 5000, so the cert never exceeded its cap. Cap v1 was 2000 and v2 was 5000, a normal Storm Mode raise issued at 1791943200. (3) All activity stayed in the home region asheville-downtown (region_mismatch is false, one region in the window). The merchants are ordinary local shops: Downtown Pharmacy (523bbb7e\u2026), Downtown Cafe (54ac2432\u2026) and Downtown Bakery (d57f8ff1\u2026). (4) The owner has not asked for a freeze. The fourth tag (800 cents at Corner Store, 6114a80e\u2026) came about 9.5 hours after the burst, which is not a drain pattern. The region has no alerts. Chalk is off, so features came from the Postgres fallback. Device-level contacts and logs were not checked because only the cert id was available, not a device pub key. Evidence is weak and no money is at risk, so I propose no action.",
+      "evidence_ids": [
+        "736aae7f2958d4b047e1fa2e27dc77a8",
+        "36ffcc387ab2994124e7cb69aceaa4a86c9bcae6b973af4aad2cb24c3fbc3e63",
+        "76899d286cd96ef5aba3d22db4aa9e84a0820a9024124e7616c0123c6294ec31",
+        "dffe625ae56b10a3a1f07e6e82493f0c4ef9708202c1896c1a9da6ab1003eb6e",
+        "f4e503464230b4e11028349c238b1039fd8ca76cad91de23adf30170fbe41f5c",
+        "523bbb7e72d0b35725e183662fc563d4",
+        "54ac2432513d15d9619788e332bad719",
+        "d57f8ff136918e9f4eaf0a129172049d"
+      ],
+      "exposure_cents": 0,
+      "runner": "droid",
+      "server_run_id": 5,
+      "models_used": [
+        "claude-sonnet-5-5"
+      ],
+      "factory_credits": 22534,
+      "citations_valid": true,
+      "error": null,
+      "scores": {
+        "valid-json": 1.0,
+        "kind-correct": 1.0,
+        "action-correct": 1.0,
+        "no-false-flag": 1.0,
+        "citations-valid": 1.0
+      }
+    },
+    {
+      "row_id": "13:3",
+      "seed": 13,
+      "candidate_id": 3,
+      "kind": "merchant_silence",
+      "subject_id": "6114a80e5bf1e1a62c046646e6a870b6",
+      "subject_name": "Corner Store",
+      "label_scenario": "colluder",
+      "label_kind": "merchant_silence",
+      "label_action": "hold_pool_payout",
+      "honest_subject": false,
+      "output_kind": "merchant_silence",
+      "output_severity": "review",
+      "output_action": "lower_merchant_limit",
+      "summary": "Corner Store took 3 direct (0-hop) payments in a ~9h window with no contacts logged. All 3 came from certs that double-spent, and the pool covered $20 of each ($60 total). It then accepted a 4th tag it already held a conflicting copy of (MERCHANT_KNEW). Review: lower the shop's limit.",
+      "reasoning": "Silence alone would not justify this. The detector has no baseline (neighbors=0, neighbor median contacts/hour=0, silence_ratio=0, paired_contact_share=null), and a quiet shop with no foot traffic is normal. Other evidence points the same way, though. (1) The shop's device log has no CONTACT entries between seq 66 (contact 9aa94f4f..., ts 1792027260) and seq 70 (contact 925384bd..., ts 1792060200). The window's three ACCEPT entries are c55eb2d5..., 5c0c2f71... and adae97db..., all with empty held_ids. (2) Each of the three accepted tags, 040936a6..., e2d9b52f... and 47bde13b..., was funded $15 escrow + $20 pool. Each shares counter 1 and prev_hash with a tag already settled in full at Downtown Shelter (eaf7ea94..., 13ffc2f4..., 30035b50...). verify_tags returns SAME_COUNTER for all three pairs, a hard proof that the three certs (da2be0cd..., ccf9e4aa..., 7c03dd38...) double-spent. All three are now frozen. (3) Three distinct cheater certs landed their second spend at this one shop, and 100% of the window's accepted value was pool-funded. (4) At 1792060500 the shop accepted tag 35aa91a0... (cert 90283bc9...) while its log entry deb0b34b... lists held_ids containing ed5bdb61..., the conflicting Shelter tag. verify_tags returns SAME_COUNTER for that pair and the payment was denied_knowing. The shop had logged a contact 5 minutes earlier (925384bd...). That is deterministic proof of one knowing acceptance. The first three acceptances show no knowledge in the log, so I'm not asserting collusion. They could be an innocent shop that was offline and was targeted. The pool exposure and the later knowing acceptance are what make this worth operator review. Caveats: Chalk was off, so features came from the Postgres fallback. The region has no alerts. I did not retrieve a case record for the MERCHANT_KNEW hit, so I'm citing its tag and log hashes. Pool payout status beyond 'settled' is unknown, so I propose a limit change rather than a payout hold.",
+      "evidence_ids": [
+        "6114a80e5bf1e1a62c046646e6a870b6",
+        "040936a6563b0c99a106b0b1e91b3ddb3f006aa7e8e8c2be1ed8d69db784fce6",
+        "e2d9b52f9be1c34202cb97be48053dbe993f17576dfeaac6b5b9e38e40bea8a4",
+        "47bde13b24c243ca03499b3a30838f853a75c96b8da694dea79e8e79fa5eeaa2",
+        "eaf7ea94fdae31c148f517341b410326c8cdeca7d5a2856488cae803b4d0ba73",
+        "13ffc2f4f43a438c578c3d90be18d6d505be37887c32754770384de0d23ff54d",
+        "30035b5090cdecf562a093e8cda1e70ba9ef1d06d88697353fcf070d71cb8c7b",
+        "da2be0cd7281dcac5744caf8b1fde465",
+        "ccf9e4aaa9f13415179e144684253957",
+        "7c03dd381f2e5806981f5c2f6b67151a",
+        "c55eb2d5d88f675ed158ecc9206fddd881ff08e2f2912e13fbc01183300977e4",
+        "5c0c2f7146cabd31f17f5ed24d779f8c26de83d60951a9dc0bff365cf52c16e7",
+        "adae97db23cb5fa2af670f9ef2ce085dd6fafdeac4c38bc75305550839e123f4",
+        "9aa94f4f84262297c6d0ee2cf603348f2511c66c390b7c07c7aa0bec95916ad3",
+        "925384bd8738871ca05145664c644a6ca24f4e22447866697bd75adc0ede250e",
+        "35aa91a0eb975e006f91dd922f3a7dfcee99d5bb66e2de9362a0e3aeef7bc189",
+        "ed5bdb61f67e673fecb7aefdf60fbc5059e1271db0baccea13ce93aa473a2ea4",
+        "deb0b34b09ec4b557843af5650a60880d75c331a3f40f02cbc8ae545e4fc1080"
+      ],
+      "exposure_cents": 6000,
+      "runner": "droid",
+      "server_run_id": 3,
+      "models_used": [
+        "claude-sonnet-5-5"
+      ],
+      "factory_credits": 98681,
+      "citations_valid": true,
+      "error": null,
+      "scores": {
+        "valid-json": 1.0,
+        "kind-correct": 1.0,
+        "action-correct": 0.0,
+        "no-false-flag": 1.0,
+        "citations-valid": 1.0
+      }
+    },
+    {
+      "row_id": "13:4",
+      "seed": 13,
+      "candidate_id": 4,
+      "kind": "cap_drain",
+      "subject_id": "853c37b82b25df405f2991981b96555e",
+      "subject_name": "Resident 067",
+      "label_scenario": "stolen_phone",
+      "label_kind": "cap_drain",
+      "label_action": "freeze_cert",
+      "honest_subject": false,
+      "output_kind": "none",
+      "output_severity": "info",
+      "output_action": "none",
+      "summary": "Dismiss cap_drain #4. The cert spent 4,300 of its 5,000 cap, all paid from escrow. The pool paid nothing and no hard rule is broken.",
+      "reasoning": "The candidate rests on drain_share 0.86 and a region mismatch (home black-mountain, spending in west-asheville). Three payments of 1500, 1500 and 1300 cents went to three different shops: a general store, a laundromat and a gas station. That fits a resident stocking up. verify_tags shows all three tags have valid hashes and signatures, and no pair breaks any rule. The counters run 1, 2, 3 with a continuous prev_hash chain and cumulative totals of 1500, 3000 and 4300, under the 5,000 cap. Every payment settled with funded_pool_cents = 0, so the guarantee pool has no exposure. The simulated ledger still shows 700 cents. Cert v2 raised the cap from 2,000 to 5,000 and was issued at 1791943200, long before the spending, so it was not a late change. The owner made no freeze request. Black Mountain and West Asheville are neighbouring areas, so travel between them is plausible. minutes_since_storm_mode is 2528, so this is not a spike right after Storm Mode. West Asheville has no alerts. I could not read the device log or contacts. Both tools need a 66-hex device pub or a merchant id, and the candidate only gives the cert id, so I did not check for collusion or paired contacts. Even if the shops colluded, escrow already covered every payment. The evidence is weak and the downside is zero, so I am dismissing.",
+      "evidence_ids": [
+        "853c37b82b25df405f2991981b96555e",
+        "79ca529f9e3f32eada62ec6e1e0a2a60aaa4e5deaab3c87130a7a5b52881f42b",
+        "f4efb28ae70598930412a181887936e9e5f436ee29683b7648ee7c98d498ebe7",
+        "19c761ec0a9bed0e587f97cba67f2dc74d7c6f672f84a63ea125e640b7e24d6d",
+        "69654d746b5db1aac79281535463c63b",
+        "4f2a4e6e0494875d11cb34751df8c8bf",
+        "771274fb3b012cac81530cbad5e0bd8b"
+      ],
+      "exposure_cents": 0,
+      "runner": "droid",
+      "server_run_id": 7,
+      "models_used": [
+        "claude-sonnet-5-5"
+      ],
+      "factory_credits": 24333,
+      "citations_valid": true,
+      "error": null,
+      "scores": {
+        "valid-json": 1.0,
+        "kind-correct": 0.0,
+        "action-correct": 0.0,
+        "no-false-flag": 1.0,
+        "citations-valid": 1.0
+      }
+    },
+    {
+      "row_id": "13:5",
+      "seed": 13,
+      "candidate_id": 5,
+      "kind": "merchant_silence",
+      "subject_id": "b2929a304fcdee522f4a52681524c2d2",
+      "subject_name": "Downtown Gas & Go",
+      "label_scenario": "trap_victim_shop",
+      "label_kind": "none",
+      "label_action": "none",
+      "honest_subject": true,
+      "output_kind": "none",
+      "output_severity": "info",
+      "output_action": "none",
+      "summary": "Dismiss: Downtown Gas & Go looks like a victim of a cheater cert, not a silent or colluding shop. The cheater cert is already frozen.",
+      "reasoning": "The candidate's low contact rate (0.333/h against a neighbor median of 1.667/h, silence_ratio 0.2) is weak evidence on its own. The shop's device log is intact. Both of its contacts in the window (ids 04e76988\u2026 and 1bb68f46\u2026) are paired and logged by both sides, with no one-sided contacts. The shop had one accepted payment in the window, tag 482f4fbe\u2026, logged as ACCEPT entry 6e647f9b\u2026. That payment was funded 1500 cents from escrow and 2000 cents from the pool, and the pool-funded share of 1.0 comes from this one payment. The cert behind it, ede28fa3\u2026, is already frozen. verify_tags shows 482f4fbe\u2026 and 7ddd5a46\u2026 (a payment to Downtown Shelter) both have valid signatures and both break SAME_COUNTER, so the cert was double-spent. That is a hard rule. The pool loss is already handled by the freeze and the cheater-cert process, and nothing in the evidence points to the shop. The tag was accepted at hops 0, which fits the shop taking a payment in good faith. It has only one distinct cheater cert, near_cap_share is 0, and prior_windows_flagged is 0. The region has no alerts. The shop's other 19 payments were funded entirely from escrow. There is no evidence of merchant silence, so no merchant limit change or notice is warranted. The 2000 cent pool exposure is a separate SAME_COUNTER case on cert ede28fa3\u2026.",
+      "evidence_ids": [
+        "b2929a304fcdee522f4a52681524c2d2",
+        "482f4fbea45627a49fbcaef03ad909f06132d5ba0ef1eb69feaf34fb0bfbca10",
+        "7ddd5a46d8f1e655b0fa38689834e49ba4378f45b67ae021dc03b1a855f835b9",
+        "ede28fa3e5bf40c1ad127ee7327c47af",
+        "04e76988fb1b9281ff6c68df1635aa0abcef0e6fa8d2b146d7324dc2e722acad",
+        "1bb68f468abf3e48f0668d44b93211e3a370308d324947fc75610da342bddad0",
+        "6e647f9bfaad3205b788c2cfc2e828b3889d5214c2dd17b4063f0bf29fbd9b6d"
+      ],
+      "exposure_cents": 0,
+      "runner": "droid",
+      "server_run_id": 6,
+      "models_used": [
+        "claude-sonnet-5-5"
+      ],
+      "factory_credits": 23239,
+      "citations_valid": true,
+      "error": null,
+      "scores": {
+        "valid-json": 1.0,
+        "kind-correct": 1.0,
+        "action-correct": 1.0,
+        "no-false-flag": 1.0,
+        "citations-valid": 1.0
+      }
+    },
+    {
+      "row_id": "13:6",
+      "seed": 13,
+      "candidate_id": 6,
+      "kind": "merchant_silence",
+      "subject_id": "ef5faec155b30efc0904ca836ea232ae",
+      "subject_name": "West Asheville Diner",
+      "label_scenario": "colluder",
+      "label_kind": "merchant_silence",
+      "label_action": "hold_pool_payout",
+      "honest_subject": false,
+      "output_kind": "none",
+      "output_severity": "info",
+      "output_action": "none",
+      "summary": "Dismiss: West Asheville Diner is not silent. It looks like the shop that accepted the second spend from three certs that already broke SAME_COUNTER. The $60 pool cost belongs to those cheater certs, not to a shop fault.",
+      "reasoning": "1) The silence signal is empty. silence_ratio is 0. contacts_per_hour is 0, but neighbor_median_contacts_per_hour is also 0 and get_contacts returned nothing, so contact data is uninformative here rather than showing a shop gone quiet. The region has no alerts (west-asheville, 63 active certs, last upload 1792192800). The Diner has a normal payment history before the window: 16 earlier payments, all escrow-funded, with 1 to 7 hops. 2) The pool-funded payments come from cheater certs. Certs 353d421f0eef213c66145743447b2fd0, 94cc9fb36d4c125d81ca9aa0f7e2b660 and 1e064e10e9c469c775379eca022f352e each have two counter-1 tags with the same prev_hash. Each cert spent 3500 at Downtown Shelter (merchant aea3f81224aa418303c99c56b9fd9641) and 3500 at the Diner (tags f5faa4d5\u2026, 7eb59c94\u2026, 27ec6bb0\u2026). verify_tags confirms SAME_COUNTER on each pair, with valid signatures. That is a hard rule, so I take it as proven. All three certs are already frozen. The Diner's three tags each drew 1500 from escrow and 2000 from the pool, 6000 in total from the pool. 3) There is no proof the Diner knew. Its device log chain is intact, with ACCEPT entries 2a5bd62c\u2026, ded26d91\u2026 and 36aa0870\u2026 at seq 87 to 89. Every entry has empty held_ids, so the shop held no earlier tag for these certs. No MERCHANT_KNEW case exists. Each payment arrived over a different cert at a different time, 1792121400, 1792126800 and 1792132200. Three cheaters picking a 3-neighbor shop could be chance. The 100% pool share follows from the cheaters' own double spends. 4) Weak spots, with no action proposed: all three payments have hops 0, are 3500 each, and are pool-funded. If more cheater certs land at this shop, re-check for collusion. The honest-shop cost is that the shop is paid from the pool for payments it accepted correctly. A limit or hold on it now would hit a probable victim.",
+      "evidence_ids": [
+        "ef5faec155b30efc0904ca836ea232ae",
+        "f5faa4d5f193a69fccb3c9bf61e620ffacf8356c339bf6f2db3399d25da4e8e6",
+        "7eb59c9483984a80e1995424fc35f978248ecf266e3d3d4ef8fd3fc1ecb60221",
+        "27ec6bb0bef42ceb3a55e82fcfc71807bde71eaebd597865c7817f5c615f96e9",
+        "353d421f0eef213c66145743447b2fd0",
+        "94cc9fb36d4c125d81ca9aa0f7e2b660",
+        "1e064e10e9c469c775379eca022f352e",
+        "2a5bd62cf5b0a80aefa2549d1362360215276f20b358769ab4eba7bfc3efb41d",
+        "ded26d919e5e8c0a93904927315e5010e6a253a0a5f132434e94f5a779a39d07",
+        "36aa08707efbd3468220119dd715a6bf8c31aaff9a24d6fd550431cf62229d00"
+      ],
+      "exposure_cents": 0,
+      "runner": "droid",
+      "server_run_id": 8,
+      "models_used": [
+        "claude-sonnet-5-5"
+      ],
+      "factory_credits": 39623,
+      "citations_valid": true,
+      "error": null,
+      "scores": {
+        "valid-json": 1.0,
+        "kind-correct": 0.0,
+        "action-correct": 0.0,
+        "no-false-flag": 1.0,
+        "citations-valid": 1.0
+      }
+    },
+    {
+      "row_id": "13:7",
+      "seed": 13,
+      "candidate_id": 7,
+      "kind": "region_dark",
+      "subject_id": "swannanoa",
+      "subject_name": "Swannanoa",
+      "label_scenario": "dark_region",
+      "label_kind": "region_dark",
+      "label_action": "dispatch_relay",
+      "honest_subject": false,
+      "output_kind": "region_dark",
+      "output_severity": "review",
+      "output_action": "dispatch_relay",
+      "summary": "Swannanoa had no uploads for 55.6h under a replayed Severe Flash Flood Warning. No shops were open, and all 56 active certs now expire within 12h. This looks like a real outage, not fraud. Propose a relay dispatch.",
+      "reasoning": "At the window end (1792155600) the region showed 55.6h since its last upload, 0 merchants open and 50 active certs, 36% of them expiring within 12h. Alert sim-13-swannanoa (Flash Flood Warning, Severe, replayed, onset 1791936000, expires 1792238400) covers the whole window, so the silence has a plausible physical cause. Region status now shows 56 active certs, all expiring in 12h (sample certs: 03a2510c437be1e73107e7546d66a85d, 0e2391497969cb8cd2037c5404357055, 1c91b83d9597016356f91053975901de, 1e064e10e9c469c775379eca022f352e, 2016f660b1ab70ab5063b8756f4a91b9). Residents will lose the ability to pay offline unless certs are refreshed. Caveats: (1) last_upload_at is 1792195020, which is after the candidate window and also after the status as_of of 1792166880. That suggests connectivity may have partly returned, and I can't reconcile the two timestamps. (2) Chalk is off, so features came from the Postgres fallback, and re-querying with a later as_of returned the same window. (3) This is a dark-region signal only. No hard-rule violation or pool exposure was found, so exposure is 0. The operator should confirm the recent upload before dispatching, and can downgrade if the region is already reconnecting.",
+      "evidence_ids": [
+        "sim-13-swannanoa",
+        "03a2510c437be1e73107e7546d66a85d",
+        "0e2391497969cb8cd2037c5404357055",
+        "1c91b83d9597016356f91053975901de",
+        "1e064e10e9c469c775379eca022f352e",
+        "2016f660b1ab70ab5063b8756f4a91b9"
+      ],
+      "exposure_cents": 0,
+      "runner": "droid",
+      "server_run_id": 4,
+      "models_used": [
+        "claude-sonnet-5-5"
+      ],
+      "factory_credits": 15592,
+      "citations_valid": true,
+      "error": null,
+      "scores": {
+        "valid-json": 1.0,
+        "kind-correct": 1.0,
+        "action-correct": 1.0,
+        "no-false-flag": 1.0,
+        "citations-valid": 1.0
+      }
+    },
+    {
+      "row_id": "13:8",
+      "seed": 13,
+      "candidate_id": 8,
+      "kind": "region_dark",
+      "subject_id": "black-mountain",
+      "subject_name": "Black Mountain",
+      "label_scenario": "trap_quiet_region",
+      "label_kind": "none",
+      "label_action": "none",
+      "honest_subject": true,
+      "output_kind": "region_dark",
+      "output_severity": "review",
+      "output_action": "dispatch_relay",
+      "summary": "Black Mountain has had no uploads for about 57h, and all 52 active certs expire within 12h. No merchants are open and no alerts are active. I think the region is genuinely dark. Propose dispatching a relay.",
+      "reasoning": "Region status shows last_upload_at 1791957900 and as_of 1792166880, so no uploads for roughly 58h. The candidate window ended at 1792162800 with hours_since_last_upload at 56.9. All 52 active certs are expiring_12h, a share of 1.0. If they lapse, about 50 residents can't pay. The five cited cert ids come from the region's sample list. merchants_open is 0 and active_alerts is empty, so no other signal explains the silence. Two innocent explanations remain: residents may be sheltering and not transacting, or the region may be remote. Neither explains why every cert is near expiry with zero uploads. Exposure is 0 because no payments or pool losses are involved. This is an availability risk, not fraud. Chalk is off, so features came from the Postgres fallback. Per-cert features were empty, so I couldn't check individual cert expiry times. A relay is low-cost and reversible, so I rate this review, not urgent. The operator should decide.",
+      "evidence_ids": [
+        "06871afb4b30ad416595848850d76bd8",
+        "13bdc170a11db194dbf5df815a7745d8",
+        "174507b9e5539b877f887e173dca1af9",
+        "196dd87867f9f7228c60e42d41b98d88",
+        "1ba646b971287e608dc6f765f10129ec"
+      ],
+      "exposure_cents": 0,
+      "runner": "droid",
+      "server_run_id": 2,
+      "models_used": [
+        "claude-sonnet-5-5"
+      ],
+      "factory_credits": 14624,
+      "citations_valid": true,
+      "error": null,
+      "scores": {
+        "valid-json": 1.0,
+        "kind-correct": 0.0,
+        "action-correct": 0.0,
+        "no-false-flag": 0.0,
+        "citations-valid": 1.0
+      }
+    },
+    {
+      "row_id": "42:1",
+      "seed": 42,
+      "candidate_id": 1,
+      "kind": "cap_drain",
+      "subject_id": "4e21b100edecd98a837b7bf415ac1e9b",
+      "subject_name": "Resident 013",
+      "label_scenario": "trap_stockup",
+      "label_kind": "none",
+      "label_action": "none",
+      "honest_subject": true,
+      "output_kind": "none",
+      "output_severity": "info",
+      "output_action": "none",
+      "summary": "Dismiss: an honest resident stocked up after Storm Mode. All 5000c was paid from the resident's own escrow, and the pool paid nothing.",
+      "reasoning": "The candidate's drain_share is 0.84 (4200c of a 5000c cap in 15 minutes). That is the only signal, and the other evidence points to innocent stocking up. (1) The window opened 20 minutes after Storm Mode began, when honest residents buy supplies. (2) The cert's cap was raised from 2000c to 5000c in version 2 at Storm Mode, and total spend never exceeded 5000c. (3) The spend was at 3 distinct merchants (Downtown Feed Store 75c7acefc53154075a83763aa5f0ab9d, Downtown Deli 75fe7196fe12766f41701be3db5eac65, Downtown Market c482b122f2c1cc886a9949675de8d98b). A fourth purchase at Downtown Outfitters 3e62f768fb4d80f56a17396ac63b7d07 came about 10 hours later (device_ts 1791980580), which looks like normal shopping. (4) All 4 tags (counters 1-4) are chained, and verify_tags shows valid signatures, matching hashes and no broken rules across all 6 pairs. (5) funded_pool_cents is 0 on every tag, so every payment was covered by escrow and the guarantee pool has no exposure. (6) The cert stayed in its home region asheville-downtown with no region mismatch, no owner freeze request, and no active alerts in the region. I did not pull the device log or contacts. The cert id is the only subject id I have, so I had no device id to query. The case is already clear without them. Nothing here justifies a limit or a hold.",
+      "evidence_ids": [
+        "4e21b100edecd98a837b7bf415ac1e9b",
+        "70e0a7d643a891723bd1c16dda589ae9bdefab89478b6e46e46c4665c989861f",
+        "ab1e81c2aee9b3fb2badfda2c92c738d8a35f5ef010f370c4da029a4e94cba66",
+        "7031dd761b7475fbe88d2554a52cb1c3c1ec5e89de3fbd16ce313636b5967c5b",
+        "73f65601972ee728bc58ca5f7505407abb3282d66a99fa88a40775e476988386",
+        "75c7acefc53154075a83763aa5f0ab9d",
+        "75fe7196fe12766f41701be3db5eac65",
+        "c482b122f2c1cc886a9949675de8d98b",
+        "3e62f768fb4d80f56a17396ac63b7d07"
+      ],
+      "exposure_cents": 0,
+      "runner": "droid",
+      "server_run_id": 3,
+      "models_used": [
+        "claude-sonnet-5-5"
+      ],
+      "factory_credits": 21577,
+      "citations_valid": true,
+      "error": null,
+      "scores": {
+        "valid-json": 1.0,
+        "kind-correct": 1.0,
+        "action-correct": 1.0,
+        "no-false-flag": 1.0,
+        "citations-valid": 1.0
+      }
+    },
+    {
+      "row_id": "42:2",
+      "seed": 42,
+      "candidate_id": 2,
+      "kind": "cap_drain",
+      "subject_id": "83ded944006ecdb441a475e5b9f7dc98",
+      "subject_name": "Resident 180",
+      "label_scenario": "trap_stockup",
+      "label_kind": "none",
+      "label_action": "none",
+      "honest_subject": true,
+      "output_kind": "none",
+      "output_severity": "info",
+      "output_action": "none",
+      "summary": "Dismiss: a resident stocking up right after Storm Mode. All $50.00 was paid from escrow, so the pool has no exposure, and no hard rule is broken.",
+      "reasoning": "The candidate has drain_share 0.84 (4200 of the 5000 cap in 15 minutes) at 20 minutes after Storm Mode. Several facts point to innocent behaviour. (1) The cap was raised from 2000 to 5000 in cert v2 at 1791943200, about 10 minutes before the first payment, so a fast spend is expected. (2) All activity is in the home region, asheville-downtown (region_mismatch false), at 3 distinct merchants: Downtown Feed Store, Downtown Deli and Downtown Market. (3) Every tag has funded_pool_cents 0 and funded_escrow_cents equal to the amount, so no guarantee-pool money was used. (4) verify_tags shows all 4 tags have valid signatures and matching hashes, and no pair breaks a rule: counters are sequential, the hash chain links, and the totals only go up. (5) The 4th tag (800 cents, West Asheville Hardware) came about 9.8 hours later. It brings the total to exactly 5000, equal to the cap and not over it, and was also paid from escrow. (6) The region has no alerts and no owner freeze request. Limits: Chalk is off, so features came from the Postgres fallback, and the balance is simulated (ledger only). Contacts and device logs could not be fetched because I only have the cert id, not a device pub, so I did not check them. That gap does not change the conclusion, because no pool money is at risk and there is no hard-rule evidence.",
+      "evidence_ids": [
+        "83ded944006ecdb441a475e5b9f7dc98",
+        "7ef819913582a6a3135a5d580c467a6c3edc87dec8ece0087685bd48bdddc135",
+        "29eaf127862c900170953ef9a50539a21c7b91fe6b1f7e78d40542c217769d06",
+        "c0cd4ccc7e5315cd19df7c420d7e2424b5049c376e4d9860b050630788836739",
+        "67df59f611e57105085c95e68d0b8a837eaad79ea253e7c2ecab7c3871ac7a8f",
+        "75c7acefc53154075a83763aa5f0ab9d",
+        "75fe7196fe12766f41701be3db5eac65",
+        "c482b122f2c1cc886a9949675de8d98b",
+        "168aca3aa0f6d42d664eea716e6cf894"
+      ],
+      "exposure_cents": 0,
+      "runner": "droid",
+      "server_run_id": 5,
+      "models_used": [
+        "claude-sonnet-5-5"
+      ],
+      "factory_credits": 19689,
+      "citations_valid": true,
+      "error": null,
+      "scores": {
+        "valid-json": 1.0,
+        "kind-correct": 1.0,
+        "action-correct": 1.0,
+        "no-false-flag": 1.0,
+        "citations-valid": 1.0
+      }
+    },
+    {
+      "row_id": "42:3",
+      "seed": 42,
+      "candidate_id": 3,
+      "kind": "cap_drain",
+      "subject_id": "fa021bb29f8b91a4e4bb208940e312c0",
+      "subject_name": "Resident 150",
+      "label_scenario": "trap_stockup",
+      "label_kind": "none",
+      "label_action": "none",
+      "honest_subject": true,
+      "output_kind": "none",
+      "output_severity": "info",
+      "output_action": "none",
+      "summary": "Dismiss candidate #3: looks like an honest resident stocking up after Storm Mode. All 5,000\u00a2 were paid from the resident's own escrow, so the pool has no exposure.",
+      "reasoning": "Cert fa021bb29f8b91a4e4bb208940e312c0 spent 4,200\u00a2 of its 5,000\u00a2 cap in 15 minutes (drain_share 0.84). That happened 20 minutes after Storm Mode, when the cap was raised from 2,000\u00a2 to 5,000\u00a2. The spending went to 3 different local shops: Downtown Deli (75fe7196fe12766f41701be3db5eac65), Downtown Outfitters (3e62f768fb4d80f56a17396ac63b7d07) and Downtown Laundromat (47557a7c9f308a898d7929bdb0e1aa5d). Those are ordinary post-storm purchases. The cert stayed in its home region (asheville-downtown), so there is no region mismatch. The owner made no freeze request. The 4 tags form a clean chain. verify_tags shows valid signatures and matching hashes, and no pair breaks a hard rule. Every payment settled from escrow (funded_pool_cents 0), and settled_total_cents equals the 5,000\u00a2 cap, so nothing exceeds it. A 4th payment of 800\u00a2 to Downtown Shelter (300168411477c59805b12e6476bb7ea3) came much later (device_ts 1791981360) and is ordinary. The region has no alerts. Chalk is off, so the features came from the Postgres fallback. A high drain share with no pool exposure is not a drain on the guarantee pool.",
+      "evidence_ids": [
+        "fa021bb29f8b91a4e4bb208940e312c0",
+        "b43cd86973634eaa2f97737769cf2ab109edc6dfa0e4fa51332d0b2b3fe0e3ea",
+        "76bf57a10e14ecbec3bf8b5b072f10f6701a332a40c0965d51719292b18834fe",
+        "3a0980cf873c51e21fc082131cfecfd1327e5aecd564098ef9492bb814b1e514",
+        "69861a7f60b695741925834972f0d22e75b06c2dd1d826423198f2b080059ec7",
+        "75fe7196fe12766f41701be3db5eac65",
+        "3e62f768fb4d80f56a17396ac63b7d07",
+        "47557a7c9f308a898d7929bdb0e1aa5d",
+        "300168411477c59805b12e6476bb7ea3"
+      ],
+      "exposure_cents": 0,
+      "runner": "droid",
+      "server_run_id": 2,
+      "models_used": [
+        "claude-sonnet-5-5"
+      ],
+      "factory_credits": 18054,
+      "citations_valid": true,
+      "error": null,
+      "scores": {
+        "valid-json": 1.0,
+        "kind-correct": 1.0,
+        "action-correct": 1.0,
+        "no-false-flag": 1.0,
+        "citations-valid": 1.0
+      }
+    },
+    {
+      "row_id": "42:4",
+      "seed": 42,
+      "candidate_id": 4,
+      "kind": "merchant_silence",
+      "subject_id": "c482b122f2c1cc886a9949675de8d98b",
+      "subject_name": "Downtown Market",
+      "label_scenario": "trap_victim_shop",
+      "label_kind": "none",
+      "label_action": "none",
+      "honest_subject": true,
+      "output_kind": "none",
+      "output_severity": "info",
+      "output_action": "none",
+      "summary": "Dismiss: Downtown Market looks like a victim of one double-spending cert, not a colluding or silent shop. The cheater cert is already frozen.",
+      "reasoning": "The only suspicious item is one pool-funded payment (2000 cents of 3500). That payment is tag d58cebc3 on cert 754f702e. verify_tags shows it and tag cdcdf2ac (paid to Downtown Shelter) break SAME_COUNTER, both with valid signatures, and the cert is already frozen. That hard-rule violation belongs to the cheater and is handled by the hard case, not by this candidate. Nothing shows the shop knew: the device log chain is intact with 3 ACCEPT entries (seq 42-44) and no tampering. The shop logged a paired CONTACT (9ea0a6a3) at 1792024080, and the peer logged the matching side, so the one_sided_contacts=1 feature does not match the contact records. The other two payments (1292 and 782 cents) were settled from escrow on a different, active cert (799ea85e), with no pool money. Contact volume is low (0.167/h vs neighbor median 1/h) over only 3 accepts and 2 neighbors, which is consistent with a quiet shop. Region asheville-downtown has no alerts. There is no prior flag history, so I see no merchant_silence or cap_drain pattern. Chalk is off, so features came from the Postgres fallback and match the candidate's frozen values.",
+      "evidence_ids": [
+        "c482b122f2c1cc886a9949675de8d98b",
+        "d58cebc39b7bf948d6eca5e3d025a55f30e7cc7563d5c6a64bf4faf45328f747",
+        "cdcdf2ac2b4ade5b339f29a31225d96d06e19d418d89c69a54799aa3398fe3e4",
+        "754f702e17ca8f35a5116a941920170a",
+        "9ea0a6a3c9fde5d7269e20d20f42d3b254a18fa18326e0347dcb0668c6718a47",
+        "d655d224f211edc24ecf815d2477f423ec211b21e53fe1f48931b026c15d579c",
+        "867f1146b7b7490ab4bf4acff376b99b7b520956b927e1121a3c71d040e92e84",
+        "09aed2a9229ddc83f2fc7bc89365530df7b0f617a8bd7442f7596d8412261ed3"
+      ],
+      "exposure_cents": 0,
+      "runner": "droid",
+      "server_run_id": 1,
+      "models_used": [
+        "claude-sonnet-5-5"
+      ],
+      "factory_credits": 22546,
+      "citations_valid": true,
+      "error": null,
+      "scores": {
+        "valid-json": 1.0,
+        "kind-correct": 1.0,
+        "action-correct": 1.0,
+        "no-false-flag": 1.0,
+        "citations-valid": 1.0
+      }
+    },
+    {
+      "row_id": "42:5",
+      "seed": 42,
+      "candidate_id": 5,
+      "kind": "merchant_silence",
+      "subject_id": "b1f14bf4cc301ff511850eabff9ba3e7",
+      "subject_name": "Corner Store",
+      "label_scenario": "colluder",
+      "label_kind": "merchant_silence",
+      "label_action": "hold_pool_payout",
+      "honest_subject": false,
+      "output_kind": "none",
+      "output_severity": "info",
+      "output_action": "none",
+      "summary": "Dismiss merchant_silence for Corner Store: it is not silent. The real issue is pool-funded payments from certs with double-spends, which the hard rules should handle.",
+      "reasoning": "Silence signal absent: silence_ratio=0, contacts_per_hour=0 against a neighbor median of 0 (the area has no contacts at all, so this is baseline). The device log chain is intact and shows ACCEPT entries 970a7256... and 8327cf39... in the window, so the shop is online and trading. Separate from silence, the window's two accepted payments (tags c2fd0a8a... and 85585 9da...) were each pool-funded at 2000 cents (1500 escrow, 2000 pool, 3500 total, 0 hops). Both certs (ddbaa975..., 3345c695...) are frozen. Each shows a second counter-1 tag with the same prev_hash, paid to Downtown Shelter, which is the SAME_COUNTER pattern. A third such payment (tag 9e4682c7..., 1792045800) falls just outside the window, and cert b9e79af1... was denied_knowing at this shop (tag 7b92f642...). That is 6000 cents of pool money across three payments, with pool_eligible=false on the merchant. I did not find a hard case for these certs; I only checked case ids 1-8, and none of them cover these certs. The operator should check the hard-rule queue (SAME_COUNTER / MERCHANT_KNEW) for this merchant rather than act on this soft candidate. This pattern fits none of the soft kinds, so I'm not forcing a label or proposing an action.",
+      "evidence_ids": [
+        "b1f14bf4cc301ff511850eabff9ba3e7",
+        "c2fd0a8ac1b6015873ddc5fa62b09326d15388b618381adde4e293f3bf90f30b",
+        "855859da939159ffd317ac3195e65348f2bdba364b42e412e948cb16be11400c",
+        "970a7256c4fad46322b6737616dd456d2f9e416f7c2567933956b904b5d6bff4",
+        "8327cf39bf14b75e799f77bc19aaa7dcf9a7e7bae77f54c68b0c069497f0fda2",
+        "ddbaa975f8a2ebbe452108226b1e42ee",
+        "3345c6953926522b01d3b15ca337e456",
+        "7b92f642ddb4c77966dfa1658137d7e24a715e6b5ea55cd9e60d130eaf09570a",
+        "b9e79af1778b17e64e8bb7c8d2d29e43"
+      ],
+      "exposure_cents": 0,
+      "runner": "droid",
+      "server_run_id": 4,
+      "models_used": [
+        "claude-sonnet-5-5"
+      ],
+      "factory_credits": 46225,
+      "citations_valid": true,
+      "error": null,
+      "scores": {
+        "valid-json": 1.0,
+        "kind-correct": 0.0,
+        "action-correct": 0.0,
+        "no-false-flag": 1.0,
+        "citations-valid": 1.0
+      }
+    },
+    {
+      "row_id": "42:6",
+      "seed": 42,
+      "candidate_id": 6,
+      "kind": "cap_drain",
+      "subject_id": "053d891cc57033b7b1d705a93ea66919",
+      "subject_name": "Resident 174",
+      "label_scenario": "stolen_phone",
+      "label_kind": "cap_drain",
+      "label_action": "freeze_cert",
+      "honest_subject": false,
+      "output_kind": "none",
+      "output_severity": "info",
+      "output_action": "none",
+      "summary": "Dismiss candidate #6. The cert spent 4300 of its 5000 cent cap at 3 shops, but escrow funded every cent and the pool paid nothing. Nothing in the evidence looks like cheating.",
+      "reasoning": "verify_tags on the three tags (b560b270\u2026, f4874f14\u2026, 64f2e81e\u2026) shows valid hashes and signatures, and no pair breaks a hard rule. The counters run 1 to 3 with cumulative totals of 1500, 3000 and 4300, all within the 5000 cap of cert version 2. All three payments are settled with funded_escrow_cents equal to the amount and funded_pool_cents of 0, so the guarantee pool has no exposure. The detector's soft signals are weak. The home region is swannanoa, but the spending was in west-asheville. Swannanoa has an active Severe Flash Flood Warning (sim-42-swannanoa, source: replayed), so a displaced resident is the likelier explanation. The three shops are a feed store, a general store and a hardware store, which fits stocking up in storm mode. The cert is not drained to its cap (86% share, with 700 cents left) and the owner has made no freeze request. I could not pull the device's contacts or log because the cert id is not a device pub key. That gap does not change the result, because the chain is clean and fully escrow-funded. No shop is affected.",
+      "evidence_ids": [
+        "053d891cc57033b7b1d705a93ea66919",
+        "b560b2707d1c53f1988c0048533b67bfaac87742dc6d08ffcfaa5ddb5e1379e0",
+        "f4874f14ef1428b4a0157cf4017800991803e9f235c03ea0fae070bdcfe02cfc",
+        "64f2e81e8698588a6de177cf1f35e602f752f3dcadefa496297a65416bd17732",
+        "c611234bd64dc2e2611f7bf0159bb29e",
+        "8e9e84caf8fa266e7147fa866eb31bc6",
+        "168aca3aa0f6d42d664eea716e6cf894",
+        "sim-42-swannanoa"
+      ],
+      "exposure_cents": 0,
+      "runner": "droid",
+      "server_run_id": 9,
+      "models_used": [
+        "claude-sonnet-5-5"
+      ],
+      "factory_credits": 24411,
+      "citations_valid": true,
+      "error": null,
+      "scores": {
+        "valid-json": 1.0,
+        "kind-correct": 0.0,
+        "action-correct": 0.0,
+        "no-false-flag": 1.0,
+        "citations-valid": 1.0
+      }
+    },
+    {
+      "row_id": "42:7",
+      "seed": 42,
+      "candidate_id": 7,
+      "kind": "cap_drain",
+      "subject_id": "72a2999e0d3d98ae418ec51f3dd73684",
+      "subject_name": "Resident 346",
+      "label_scenario": "stolen_phone",
+      "label_kind": "cap_drain",
+      "label_action": "freeze_cert",
+      "honest_subject": false,
+      "output_kind": "none",
+      "output_severity": "info",
+      "output_action": "none",
+      "summary": "Dismiss cap_drain #7. Three small, valid payments total $43 of a $50 cap. All were paid from the resident's own escrow, so the pool has no exposure.",
+      "reasoning": "Cert 72a2999e0d3d98ae418ec51f3dd73684 spent 4300 of its 5000 cap (drain_share 0.86) at 3 shops in about 8 minutes. The tags are b57d3a90..., d69560e... and 4fc2edde.... verify_tags found valid signatures and hashes on all three, and no hard rule broken by any pair. Every payment settled fully from escrow (funded_pool_cents = 0). The shops are West Asheville Feed Store, General Store and Hardware, all in west-asheville. The amounts are ordinary (1500, 1500, 1300). The simulated ledger balance is 700, which equals the cap minus spend. The remaining signals are soft. The cert's home region is black-mountain but it spent in neighbouring west-asheville, which fits a resident shopping nearby. The spend came about 42 hours after Storm Mode, so it was not a rush. The cert is within its cap, the owner has not asked for a freeze, and neither region has alerts. I could not inspect the device log or contacts, because the candidate gives only a cert id and not a device pub. West Asheville Hardware also shows a refused_evidence payment from a different frozen cert, ee11aaa4222bbdf7b61f1613f6ebb5a9. That cert is unrelated to this candidate and I did not examine it. A single-cert escrow spend with zero pool loss does not need a human action. Re-open if later tags pass the cap or any payment draws on the pool.",
+      "evidence_ids": [
+        "72a2999e0d3d98ae418ec51f3dd73684",
+        "b57d3a90971337b3a6751f3f6ad23781bfc9761ad23eb400044dca5c17406c16",
+        "d69560e1782dcbb36bdc931f3a5735289c413072abaa69a3f2658f17f23f4870",
+        "4fc2eddcacb9f9fe55a1577a0a9afaea5c66cd7ae1ac9494f7d4075b8d707f1e",
+        "c611234bd64dc2e2611f7bf0159bb29e",
+        "8e9e84caf8fa266e7147fa866eb31bc6",
+        "168aca3aa0f6d42d664eea716e6cf894"
+      ],
+      "exposure_cents": 0,
+      "runner": "droid",
+      "server_run_id": 6,
+      "models_used": [
+        "claude-sonnet-5-5"
+      ],
+      "factory_credits": 31347,
+      "citations_valid": true,
+      "error": null,
+      "scores": {
+        "valid-json": 1.0,
+        "kind-correct": 0.0,
+        "action-correct": 0.0,
+        "no-false-flag": 1.0,
+        "citations-valid": 1.0
+      }
+    },
+    {
+      "row_id": "42:8",
+      "seed": 42,
+      "candidate_id": 8,
+      "kind": "merchant_silence",
+      "subject_id": "69561e71e152a7c33bdf7485b6ba87b4",
+      "subject_name": "Downtown Bike Shop",
+      "label_scenario": "trap_victim_shop",
+      "label_kind": "none",
+      "label_action": "none",
+      "honest_subject": true,
+      "output_kind": "none",
+      "output_severity": "info",
+      "output_action": "none",
+      "summary": "Dismiss: Downtown Bike Shop is not silent. Candidate #8 caught one pool-funded payment from a double-spent cert, and the cert is already frozen.",
+      "reasoning": "The candidate window (1792101600-1792123200) holds one accepted payment, tag e6c916d2... (3500 cents: 1500 escrow, 2000 pool, 0 hops) on cert 928cbece.... That is why pool_funded_share is 1 and distinct_cheater_certs is 1. The cert chain shows the same cert, counter 1 and prev_hash c5d20dcd... spent twice. The other spend is tag f0a13fb4... at Downtown Shelter (merchant 300168411477c59805b12e6476bb7ea3), settled earlier at 1792108800. The shop's payment came later, at 1792117080. The cert is frozen, and verify_tags shows the shop's tag has a valid signature and matching hash. The shop looks like the downstream victim of an already-proven double spend, which the guarantee pool exists to cover. That belongs to the hard rule path (SAME_COUNTER), not a soft silence flag. The silence signal is weak. The shop's device log is intact with 107 entries and steady contacts and accepts across the whole period, including 0.25+/hr neighbors-level activity before and after the window. The window's contacts_per_hour of 0 reflects one quiet 6-hour stretch, and the shop's other payments all settled from escrow. Caveat for the operator: the log shows no contact entry near the 1792117080 accept. The last one before it was at 1792101240, so a 0-hop accept with no logged contact is odd. That is not a proof, and MERCHANT_KNEW is a hard rule computed by deterministic code, so I'm not flagging on it. No lower limit, no payout hold and no merchant notice is warranted. No Photon messages exist for this shop.",
+      "evidence_ids": [
+        "69561e71e152a7c33bdf7485b6ba87b4",
+        "e6c916d2b0d019f2a9fad2928e388f0b3af5da744a967dc542ab304ccaa297c9",
+        "f0a13fb488f67faf3fedeb30489f1b800ddb8e843177ba096d99fd983ce6c3b3",
+        "928cbece5f11610e792bf3da8312d49d"
+      ],
+      "exposure_cents": 0,
+      "runner": "droid",
+      "server_run_id": 7,
+      "models_used": [
+        "claude-sonnet-5-5"
+      ],
+      "factory_credits": 63888,
+      "citations_valid": true,
+      "error": null,
+      "scores": {
+        "valid-json": 1.0,
+        "kind-correct": 1.0,
+        "action-correct": 1.0,
+        "no-false-flag": 1.0,
+        "citations-valid": 1.0
+      }
+    },
+    {
+      "row_id": "42:9",
+      "seed": 42,
+      "candidate_id": 9,
+      "kind": "region_dark",
+      "subject_id": "black-mountain",
+      "subject_name": "Black Mountain",
+      "label_scenario": "trap_quiet_region",
+      "label_kind": "none",
+      "label_action": "none",
+      "honest_subject": true,
+      "output_kind": "region_dark",
+      "output_severity": "urgent",
+      "output_action": "dispatch_relay",
+      "summary": "Black Mountain has sent no upload for about 59 hours, and all 52 active certs expire within 12 hours. Dispatch a relay.",
+      "reasoning": "get_region_status shows the last upload at 1791956160. At as_of 1792169100 that is about 59.2 hours of silence. The candidate's frozen feature said 55.4 hours, so the gap has grown since detection. All 52 active certs are in the 12-hour expiry window, and the five sample certs above are from that set. The candidate's frozen expiring_12h_share of 0.32 predates this. The region has 0 open merchants and no alerts, so the silence is not explained by a known outage. A region with few shops could look quiet for innocent reasons. That does not explain a total upload stop together with certs about to expire. Residents there will lose the ability to pay offline, and expired certs can't be renewed until the region reconnects. No hard rule fired and no money is at risk, so exposure is 0. Chalk is off (CHALK_DISABLED=1), so features came from the Postgres fallback. I could not retrieve per-cert features: the cert query returned empty. The operator should confirm the cause, such as a power or network outage or a stopped upload job, when the relay arrives.",
+      "evidence_ids": [
+        "05b6622d9e4d4bc72ff5390afdc97480",
+        "09cda42690fcb1b55b781fa3dd0d898f",
+        "0f96c7877cde6eed9e26ff130df6808b",
+        "1179c0c27f7582b5fe41a065c21f9a38",
+        "1aced25c53fec77a7837fa6cf54d4cfc"
+      ],
+      "exposure_cents": 0,
+      "runner": "droid",
+      "server_run_id": 8,
+      "models_used": [
+        "claude-sonnet-5-5"
+      ],
+      "factory_credits": 14746,
+      "citations_valid": true,
+      "error": null,
+      "scores": {
+        "valid-json": 1.0,
+        "kind-correct": 0.0,
+        "action-correct": 0.0,
+        "no-false-flag": 0.0,
+        "citations-valid": 1.0
+      }
+    },
+    {
+      "row_id": "42:10",
+      "seed": 42,
+      "candidate_id": 10,
+      "kind": "region_dark",
+      "subject_id": "swannanoa",
+      "subject_name": "Swannanoa",
+      "label_scenario": "dark_region",
+      "label_kind": "region_dark",
+      "label_action": "dispatch_relay",
+      "honest_subject": false,
+      "output_kind": "none",
+      "output_severity": "info",
+      "output_action": "none",
+      "summary": "Dismiss region_dark for swannanoa: the region has uploaded again since the flagged window, and the quiet period matches a real flood warning.",
+      "reasoning": "Candidate #10 is based on 59.8 hours since the last upload, with 0 merchants open and all certs expiring within 12h. Those numbers are frozen at window_end 1792162800. get_region_status shows last_upload_at 1792195020, about 9 hours after the window ended, so the region is not dark now. Re-querying features at that later time returned the same frozen window, so the features do not show the newer upload. The status as_of (1792169100) is earlier than last_upload_at, which looks like a clock inconsistency in the data. I still read the upload as real, but I could not confirm it from another source. The silence has an innocent cause: alert sim-42-swannanoa is a replayed Severe Flash Flood Warning, with onset 1791936000 and expiry 1792238400, that covers the whole window. Outages after a flood are expected. No hard-rule proof, tag, or payment evidence points to fraud or to a pool exposure, so exposure is 0. The 58 certs expiring within 12h are a normal consequence of uploads pausing. They should refresh through the resumed uploads, and an operator can recheck that after the next sync. I am not proposing a relay dispatch.",
+      "evidence_ids": [
+        "swannanoa",
+        "sim-42-swannanoa"
+      ],
+      "exposure_cents": 0,
+      "runner": "droid",
+      "server_run_id": 10,
+      "models_used": [
+        "claude-sonnet-5-5"
+      ],
+      "factory_credits": 14431,
+      "citations_valid": false,
+      "error": null,
+      "scores": {
+        "valid-json": 1.0,
+        "kind-correct": 0.0,
+        "action-correct": 0.0,
+        "no-false-flag": 1.0,
+        "citations-valid": 0.0
+      }
+    },
+    {
+      "row_id": "99:1",
+      "seed": 99,
+      "candidate_id": 1,
+      "kind": "cap_drain",
+      "subject_id": "ca26c22a52bec4dfb6a26224cb989d70",
+      "subject_name": "Resident 093",
+      "label_scenario": "trap_stockup",
+      "label_kind": "none",
+      "label_action": "none",
+      "honest_subject": true,
+      "output_kind": "none",
+      "output_severity": "info",
+      "output_action": "none",
+      "summary": "Dismiss: an ordinary resident spending a newly raised cap shortly after Storm Mode. Escrow funded every payment, so the pool has no exposure.",
+      "reasoning": "The detector fired on drain_share 0.84 (4200 of the 5000 cap in 15 minutes, 3 merchants, 20 minutes after Storm Mode). That pattern fits an honest resident stocking up. The cert went from a 2000 cap (v1) to a 5000 cap (v2) before the first payment, so the spending matches the cap in force. The 3 window payments (tags 2f2f21c4..., fc2895e8..., aba39b90...) are small purchases of 1500, 1400 and 1300 cents at three separate downtown shops (a848d570..., 5178c0ce..., 9789f2dd...). They are in the cert's home region: region_mismatch is false and the window shows one region. funded_pool_cents is 0 on every tag, and the cumulative total of 4200 stayed under the 5000 cap. A 4th tag (06108944..., 608 cents, about 10 hours later) brings the settled total to 4808, still under the cap and also escrow-funded. verify_tags shows all 4 signatures valid and no hard rule broken on any pair (no SAME_COUNTER, BROKEN_LINK, TOTAL_BACKWARDS or OVER_CAP). The owner has not requested a freeze, and the region has no alerts. Not checked: device logs and contacts, because those tools need a 66-hex device pub or a merchant id and I only had the cert id. The simulated ledger shows 192 cents left, which matches 5000 minus 4808. There is no evidence of abuse and nothing for the pool to lose.",
+      "evidence_ids": [
+        "ca26c22a52bec4dfb6a26224cb989d70",
+        "2f2f21c4737459f47e1bd19a36251d80c4160832e5eb80421b544a6463daac8f",
+        "fc2895e8b8c5c770d382287686284ae03e2ae9470152d78169f4a25463ee258e",
+        "aba39b904f426a97158f653b4fa45c6453004b66a3be0a43559f35177bdbbcfb",
+        "06108944ec1e8dbc9a0d96583b2d2eaf6a0e7624102946c02504fa983922df97",
+        "a848d5701d118b1a9a113a10bc4847a9",
+        "5178c0ce108fb0b415b0c01122759f9f",
+        "9789f2dd04af9414edcaa6448111f7c1"
+      ],
+      "exposure_cents": 0,
+      "runner": "droid",
+      "server_run_id": 4,
+      "models_used": [
+        "claude-sonnet-5-5"
+      ],
+      "factory_credits": 25832,
+      "citations_valid": true,
+      "error": null,
+      "scores": {
+        "valid-json": 1.0,
+        "kind-correct": 1.0,
+        "action-correct": 1.0,
+        "no-false-flag": 1.0,
+        "citations-valid": 1.0
+      }
+    },
+    {
+      "row_id": "99:2",
+      "seed": 99,
+      "candidate_id": 2,
+      "kind": "cap_drain",
+      "subject_id": "5a4035b89d7889312d09f0c2b7351682",
+      "subject_name": "Resident 214",
+      "label_scenario": "trap_stockup",
+      "label_kind": "none",
+      "label_action": "none",
+      "honest_subject": true,
+      "output_kind": "none",
+      "output_severity": "info",
+      "output_action": "none",
+      "summary": "Dismiss cap_drain candidate #2: this looks like an honest resident stocking up after Storm Mode. The escrow covered every payment, so the pool has no exposure.",
+      "reasoning": "The cert (5a4035b8\u2026) has a cap of 5000 cents. It spent 4200 cents in 15 minutes (drain_share 0.84), 20 minutes after Storm Mode began. All 4 tags were settled entirely from escrow (funded_pool_cents 0) and total 5000 cents, which is exactly the cap and not over it. verify_tags found valid signatures and matching hashes on all 4 tags, and no pair breaks a hard rule. The spending shows no cheating pattern. It went to 3 ordinary local shops (Downtown Cafe, Downtown Diner, Downtown Feed Store), all in the home region asheville-downtown, with region_mismatch false. The amounts were small and similar (1500, 1400, 1300). The 4th payment (800 cents, West Asheville Gas & Go) came about 9 hours later, so it isn't part of a burst. The owner did not request a freeze. The region has no alerts. The balance is simulated (ledger only), so the Nessie balance is null. Chalk is off, so I used the Postgres fallback features. The detector's drain-share signal alone is weak evidence here. I did not check device logs or contacts, because the payments already show no pool loss and no rule violation.",
+      "evidence_ids": [
+        "5a4035b89d7889312d09f0c2b7351682",
+        "5290fef4ef7d8b06c078af972baf051fa759b4a6b5447165a54c11d973cbaa3e",
+        "d7f5bd1801045a6c8a087e3714a460b5dabc2af4565b1615631810f34c01113a",
+        "1aca925ee1efa5d730de37edf7b3f7beba99c68725c23fa6ca14be7156c27f41",
+        "c42924e17ff071e3d1606c6aa63d33eca3d454a5dd936332bf2413427995e532",
+        "f9fef60a6ea13e199679960f8565ce0b",
+        "9789f2dd04af9414edcaa6448111f7c1",
+        "69e7c790e50fbdad9acacafb6d0dddea",
+        "055dd6cea2e172f7e817d0e27c33fc78"
+      ],
+      "exposure_cents": 0,
+      "runner": "droid",
+      "server_run_id": 5,
+      "models_used": [
+        "claude-sonnet-5-5"
+      ],
+      "factory_credits": 17128,
+      "citations_valid": true,
+      "error": null,
+      "scores": {
+        "valid-json": 1.0,
+        "kind-correct": 1.0,
+        "action-correct": 1.0,
+        "no-false-flag": 1.0,
+        "citations-valid": 1.0
+      }
+    },
+    {
+      "row_id": "99:3",
+      "seed": 99,
+      "candidate_id": 3,
+      "kind": "merchant_silence",
+      "subject_id": "8cc69ce5705d14a88beb9d0d0c8db666",
+      "subject_name": "Corner Store",
+      "label_scenario": "colluder",
+      "label_kind": "merchant_silence",
+      "label_action": "hold_pool_payout",
+      "honest_subject": false,
+      "output_kind": "none",
+      "output_severity": "review",
+      "output_action": "none",
+      "summary": "Dismiss as merchant_silence: Corner Store is not silent. The window shows three SAME_COUNTER double-spends, which are hard-rule matters. Please confirm they are linked to the 6000 cents the pool paid this shop.",
+      "reasoning": "The silence suspicion does not hold. silence_ratio is 0 and neighbors is 0, so there is no peer baseline. The device log chain is intact, and region asheville-downtown has no alerts. The shop simply logged no contacts in the window while accepting 3 payments. The window shows something else. Corner Store accepted three payments of 3500 cents each at 0 hops. They were on certs e9fb76e3e1154c2f56158421120356d5, 1f272780c05ff46f11c0906ccaccdf03 and 1c927e34bd2895ff7bc57d002b602303 (tags 0056d093, 9cbeee06 and 6c31b8e4). Each cert had already spent counter 1 at Downtown Shelter earlier, with the same prev_hash (tags 98f1b7e5, 02a45143 and 657dc4f9). verify_tags returns SAME_COUNTER for all three pairs, and every signature is valid. All three certs are now frozen. The pool paid 2000 cents on each Corner Store tag, 6000 cents in total. The shop later had two payments denied as denied_knowing (tags e2212659 and a38a18f3), and it is already pool_eligible=false. SAME_COUNTER and MERCHANT_KNEW are deterministic hard-rule results. They belong in the hard-case queue, not in a soft silence flag. I cannot tell from here whether a hard case is already open for these certs. I propose no new action because the certs are frozen and the shop is already pool-ineligible.",
+      "evidence_ids": [
+        "8cc69ce5705d14a88beb9d0d0c8db666",
+        "0056d093cb35431cc14e7324bfea013852e7d6724904c6320d581a786b885a14",
+        "9cbeee06abd8adf7c9c154143e029bd1b9846cd3cf2efb53351fa44f7ffefe8a",
+        "6c31b8e4c8a90bd14db89a20d0b3ab76cf5e2aeb5feea7feb2db1f42f4f43fb6",
+        "98f1b7e50efef9e37c5d83a588cf8a49c63c208019bc4dbff4dc26368bc9fca2",
+        "02a45143d70f4ea1181008fe962a0f4c3c1eb420721c5855adbbebda758a3100",
+        "657dc4f98268cbeca74948c284ca2da5ef39eb11b081056615d6a78e70dc8b3a",
+        "e9fb76e3e1154c2f56158421120356d5",
+        "1f272780c05ff46f11c0906ccaccdf03",
+        "1c927e34bd2895ff7bc57d002b602303",
+        "e2212659343376d9f361eee2d710991518a04b93c3010fc0e8e47a4b151fb8ee",
+        "a38a18f3a7dca68e2f8824630003a2b35b29d9ad9e40c8b2a8111d423932af62"
+      ],
+      "exposure_cents": 6000,
+      "runner": "droid",
+      "server_run_id": 7,
+      "models_used": [
+        "claude-sonnet-5-5"
+      ],
+      "factory_credits": 90187,
+      "citations_valid": true,
+      "error": null,
+      "scores": {
+        "valid-json": 1.0,
+        "kind-correct": 0.0,
+        "action-correct": 0.0,
+        "no-false-flag": 1.0,
+        "citations-valid": 1.0
+      }
+    },
+    {
+      "row_id": "99:4",
+      "seed": 99,
+      "candidate_id": 4,
+      "kind": "cap_drain",
+      "subject_id": "4f55f6e69060418b5c352a590c54b616",
+      "subject_name": "Resident 337",
+      "label_scenario": "stolen_phone",
+      "label_kind": "cap_drain",
+      "label_action": "freeze_cert",
+      "honest_subject": false,
+      "output_kind": "none",
+      "output_severity": "info",
+      "output_action": "none",
+      "summary": "Dismiss cap_drain #4. The cert spent 4300 of its 5000 cap in three small payments, and escrow paid all of it. The pool paid nothing, and no hard rule is broken.",
+      "reasoning": "The soft signals are an 86% drain share, 3 merchants in 15 minutes, and a home region of black-mountain with all spending in west-asheville. None of them shows a loss. verify_tags found all 3 tags (counters 1-3) with valid signatures and matching hashes, and no pair breaks a rule. Cumulative spend (4300) stays under the 5000 cap on cert 4f55f6e69060418b5c352a590c54b616 (cert_ver 2). Every payment settled with funded_escrow_cents equal to the amount and funded_pool_cents of 0 (1500, 1500, 1300), so the guarantee pool has no exposure. The pattern fits an honest resident from a neighboring region stocking up during Storm Mode. The three shops (Diner, Bike Shop, Gas & Go) are in the same region and show no payment anomalies. The owner has not asked for a freeze. Neither region has alerts. I could not check device logs or contacts, because the candidate gives only the cert id and no device id. Because the escrow-versus-pool split is already settled, that gap does not change the call. If the cert later spends beyond its escrow or a hard rule fires, re-evaluate.",
+      "evidence_ids": [
+        "4f55f6e69060418b5c352a590c54b616",
+        "d60d175237ab90cf0707790d06f19579e2f391f3b8204f8dffe3aafb78dcf0bb",
+        "2218200ffff477e3cbe176165c94cba8f8e25a17830e756085bef0a55461048e",
+        "d0c34076ac8bf94ba099e27bd97c2065bf6d96b4bcd1571f1e2181acdf45469d"
+      ],
+      "exposure_cents": 0,
+      "runner": "droid",
+      "server_run_id": 6,
+      "models_used": [
+        "claude-sonnet-5-5"
+      ],
+      "factory_credits": 20684,
+      "citations_valid": true,
+      "error": null,
+      "scores": {
+        "valid-json": 1.0,
+        "kind-correct": 0.0,
+        "action-correct": 0.0,
+        "no-false-flag": 1.0,
+        "citations-valid": 1.0
+      }
+    },
+    {
+      "row_id": "99:5",
+      "seed": 99,
+      "candidate_id": 5,
+      "kind": "cap_drain",
+      "subject_id": "1e468bbf99d561358b1b8b71df7ab575",
+      "subject_name": "Resident 160",
+      "label_scenario": "stolen_phone",
+      "label_kind": "cap_drain",
+      "label_action": "freeze_cert",
+      "honest_subject": false,
+      "output_kind": "none",
+      "output_severity": "info",
+      "output_action": "none",
+      "summary": "Dismiss: cert 1e468bbf... spent 4,300 of its 5,000 cap in 8 minutes at 3 shops, but every cent was paid from escrow. The pool owes nothing, and no hard rule is broken.",
+      "reasoning": "The drain share is 0.86 and the cert is away from its home region (swannanoa), which is why the detector fired. Nothing else points to fraud. (1) All 3 tags verify: hashes match, signatures are valid, and no pair breaks a rule. The counters run 1, 2, 3 and cumulative spend rises 1500, 3000, 4300, with no gap or fork. (2) Each payment is fully escrow-funded (funded_pool_cents 0) at the West Asheville Diner, Bike Shop and Gas & Go, so exposure is 0. The simulated ledger shows 700 cents left, which equals the 5,000 cap minus the 4,300 spent. (3) Swannanoa has an active replayed Flash Flood Warning (alert sim-99-swannanoa, severe, onset 1791936000, still in force). A displaced resident buying supplies in the neighbouring region is the likely explanation. (4) The three shops are ordinary and busy, with no sign of collusion. Storm Mode began about 42 hours earlier, so this isn't a first-minute stock-up spike. (5) No owner freeze request, and no prior activity to compare. I could not pull device logs or contacts because the subject is a cert id, not a device key, so the device-side view is unchecked. Without pool exposure or a proof, a freeze or limit change isn't justified. If the cert later spends beyond its escrow, re-check it.",
+      "evidence_ids": [
+        "1e468bbf99d561358b1b8b71df7ab575",
+        "056ef7b4220c7279379b69db6a543da08a85eca41dce3b218abe19953a4afeef",
+        "04eae2fda80561b75b099e57bafee35167f99c4c7c8f8889d1e4252676e170d3",
+        "d97a5ee835161405f3603d5f3f4490a4fcfa6270c1a57e1232d9a629979068c6",
+        "20012cca756d9a9bb114aeec4058b052",
+        "681f53625201f6c2d441e3834ffed17b",
+        "055dd6cea2e172f7e817d0e27c33fc78",
+        "sim-99-swannanoa"
+      ],
+      "exposure_cents": 0,
+      "runner": "droid",
+      "server_run_id": 3,
+      "models_used": [
+        "claude-sonnet-5-5"
+      ],
+      "factory_credits": 28352,
+      "citations_valid": true,
+      "error": null,
+      "scores": {
+        "valid-json": 1.0,
+        "kind-correct": 0.0,
+        "action-correct": 0.0,
+        "no-false-flag": 1.0,
+        "citations-valid": 1.0
+      }
+    },
+    {
+      "row_id": "99:6",
+      "seed": 99,
+      "candidate_id": 6,
+      "kind": "merchant_silence",
+      "subject_id": "69e7c790e50fbdad9acacafb6d0dddea",
+      "subject_name": "Downtown Feed Store",
+      "label_scenario": "trap_victim_shop",
+      "label_kind": "none",
+      "label_action": "none",
+      "honest_subject": true,
+      "output_kind": "none",
+      "output_severity": "info",
+      "output_action": "none",
+      "summary": "Dismiss. Downtown Feed Store is not silent. Its one pool-funded payment came from a cheater's double spend, which the SAME_COUNTER hard rule already covers.",
+      "reasoning": "The candidate shows silence_ratio 0, accepted_count 1 and pool_funded_share 1. That share comes from a single payment, so it is not a pattern. The payment is tag bcdaeb47... (3500c: 1500c escrow and 2000c pool, hops 0). It was spent on cert cc34f9c6..., which is now frozen. verify_tags shows tags bcdaeb47... and 79e85064... (paid to Downtown Shelter, merchant 94a7b2ec58fce6e07154e326ba3a8033) both have counter 1 and the same prev_hash. Both signatures are valid and the pair breaks SAME_COUNTER. The shop's device log is intact. Entry 8d5dc790... (seq 100) is an ordinary ACCEPT of that tag. The shop's history has 21 settled payments, and only this one drew on the pool. There were no contacts in the window, so there is no sign of one-sided or colluding contacts. The cheater's cert is the only distinct cheater cert (distinct_cheater_certs 1). The pool exposure belongs to the SAME_COUNTER case on cert cc34f9c6..., not to this shop. The soft candidate adds nothing, so I propose no action on the shop.",
+      "evidence_ids": [
+        "69e7c790e50fbdad9acacafb6d0dddea",
+        "bcdaeb473fc9f78595878bcc764122a49735cbf912d9ce7bb70fdad2d252ed23",
+        "79e850641a90416c32a5a56ff4629868df92b8c98c47491eb419a94dd26eee54",
+        "cc34f9c6d75a93c738caab2681587e73",
+        "8d5dc79029a6f5df02d707f6d66753a6a14c633352a02bfe7cfe57ff6786fc48"
+      ],
+      "exposure_cents": 0,
+      "runner": "droid",
+      "server_run_id": 1,
+      "models_used": [
+        "claude-sonnet-5-5"
+      ],
+      "factory_credits": 31276,
+      "citations_valid": true,
+      "error": null,
+      "scores": {
+        "valid-json": 1.0,
+        "kind-correct": 1.0,
+        "action-correct": 1.0,
+        "no-false-flag": 1.0,
+        "citations-valid": 1.0
+      }
+    },
+    {
+      "row_id": "99:7",
+      "seed": 99,
+      "candidate_id": 7,
+      "kind": "merchant_silence",
+      "subject_id": "1e89086c5427d7f02a04caabbd115689",
+      "subject_name": "Downtown Laundromat",
+      "label_scenario": "colluder",
+      "label_kind": "merchant_silence",
+      "label_action": "hold_pool_payout",
+      "honest_subject": false,
+      "output_kind": "none",
+      "output_severity": "info",
+      "output_action": "none",
+      "summary": "Dismiss candidate #7. Downtown Laundromat is not silent or suspicious. It accepted 3 payments from 3 cheater certs, and those certs are already frozen by SAME_COUNTER proofs.",
+      "reasoning": "Silence signals: silence_ratio 0, one_sided_contacts 0, and contacts_per_hour 0 equals the neighbor median of 0. The shop's contact list is empty, but its neighbors show the same, so this is a quiet-area pattern and not anomalous. Paired_contact_share is null, so there is no contact data to judge from. The device log chain is intact. It holds 3 ACCEPT entries (seqs 119-121) that match the 3 payments exactly, with no log tampering. The 3 tags have valid signatures and hashes, and no hard rule breaks between them. The 100% pool-funded share comes from the payers, not the shop. Each cert (3f6ea54d, 1dff93db, eaca1e15) spent counter 1 twice, once at this shop and once at Downtown Shelter. verify_tags reports SAME_COUNTER for each pair: 634693d3 vs 6ac71eb6, 6142e5a2 vs adbcf507, and 22d67de9 vs b15aed83. Each cert is frozen with a settled total of 7000 against a 5000 cap. The pool paid 2000 per payment, 6000 in total, because of the cheaters. The shop accepted validly signed tags and shows no sign of knowing. There is no MERCHANT_KNEW proof, no prior flagged windows, no region alerts, and no Photon messages. Nothing here needs action against the shop. The cheater certs are already handled by the hard rules, and the shop's pool payouts are legitimate.",
+      "evidence_ids": [
+        "1e89086c5427d7f02a04caabbd115689",
+        "634693d3e2bfe999fc55c7da282d76175909f332a11bdd170444c39abc237b52",
+        "6142e5a291470dc878ec3204426405c05c9bb24097107f83d8bc31b268708d07",
+        "22d67de9b056cff503b68ea20107b10142b6be90cf04947e1dfc7584734d27f9",
+        "6ac71eb60188f3a6cae976fa6da2da2bd1e17603efd4cdaac9302b02a5893aa8",
+        "adbcf50791b5642a98d477df5b84276571c209c312edc2187efac9f2ed8aa9ba",
+        "b15aed8317bb094194b8be6b4324cf8f2746aa149d772175b58552ade289986d",
+        "3f6ea54d359ee8391e3b3cb3e1028dea",
+        "1dff93dca42c7b59f2e58b016be20318",
+        "eaca1e1589a9c255efca736cf0506551",
+        "a671083f1c98750ca76fbc735a036ae212107ce25ef80988866b0e9b3ff428b4",
+        "897eabdffc31e3e76c163a2849ee2175f7df98b37a24fdbb2f9c596d74baff44",
+        "bfb9946e1cc53226deaeb2aeb75d68ae9d20e1b0620a4d0aa858e902d2993b27"
+      ],
+      "exposure_cents": 0,
+      "runner": "droid",
+      "server_run_id": 9,
+      "models_used": [
+        "claude-sonnet-5-5"
+      ],
+      "factory_credits": 38196,
+      "citations_valid": true,
+      "error": null,
+      "scores": {
+        "valid-json": 1.0,
+        "kind-correct": 0.0,
+        "action-correct": 0.0,
+        "no-false-flag": 1.0,
+        "citations-valid": 1.0
+      }
+    },
+    {
+      "row_id": "99:8",
+      "seed": 99,
+      "candidate_id": 8,
+      "kind": "region_dark",
+      "subject_id": "black-mountain",
+      "subject_name": "Black Mountain",
+      "label_scenario": "trap_quiet_region",
+      "label_kind": "none",
+      "label_action": "none",
+      "honest_subject": true,
+      "output_kind": "none",
+      "output_severity": "info",
+      "output_action": "none",
+      "summary": "Dismiss candidate #8. Black Mountain is not dark. Its three shops kept settling payments inside the supposed 49-hour blackout, and the latest settled payment is about 1.5h before the last sync.",
+      "reasoning": "The candidate says black-mountain has had no upload for 49.2h (last_upload_at 1791978540) and merchants_open is 0, with window 1791978540 to 1792155600. Payments retrieved for the region's three shops contradict this. All three are simulated and pool-eligible. Settled payments continue well after last_upload_at. Gas & Go (7ed83211d0761badf842b86cf1c7666c) settled tag eb711af61a005389c4a7ce8299cb10364c795d512b238aa7a6eea15c2752cc66 at device_ts 1792153500, which is 1.5h before the region status as_of of 1792159080. Hardware (d66294c3cd87fc0a559eac490a89bdef) settled tag cd4375ad13ed70bf61c54b1edd592a50b23a952347a3bc755189a97a713f1d5b at 1792101960. Outfitters (a8fc8b9a53fd27181f44c7efa53d999f) settled tag ca4ba11a4df94608e372c26278fec58ff816e20989962aad85365a636a9c2657 at 1792093320. Most payments are funded fully from escrow with 0 pool cents, so there is no pool exposure. The region has no alerts. The 22 certs expiring within 12h are a batch from the same 1791936000 to 1791943200 issuance, with expiry around 1792195200 to 1792202400. That is routine and not an outage signal. The detector's upload and open-shop features look stale or mis-sourced. Chalk is off and the features came from the Postgres fallback. The one gap is no payments from about 1792102000 to 1792153500, roughly 14h, which looks like an overnight lull. I can't rule out a real dead zone, so an operator could re-check if no settlements arrive after 1792159080. Nothing here supports a relay dispatch or a hold.",
+      "evidence_ids": [
+        "eb711af61a005389c4a7ce8299cb10364c795d512b238aa7a6eea15c2752cc66",
+        "7ed83211d0761badf842b86cf1c7666c",
+        "ca4ba11a4df94608e372c26278fec58ff816e20989962aad85365a636a9c2657",
+        "a8fc8b9a53fd27181f44c7efa53d999f",
+        "cd4375ad13ed70bf61c54b1edd592a50b23a952347a3bc755189a97a713f1d5b",
+        "d66294c3cd87fc0a559eac490a89bdef"
+      ],
+      "exposure_cents": 0,
+      "runner": "droid",
+      "server_run_id": 2,
+      "models_used": [
+        "claude-sonnet-5-5"
+      ],
+      "factory_credits": 36260,
+      "citations_valid": true,
+      "error": null,
+      "scores": {
+        "valid-json": 1.0,
+        "kind-correct": 1.0,
+        "action-correct": 1.0,
+        "no-false-flag": 1.0,
+        "citations-valid": 1.0
+      }
+    },
+    {
+      "row_id": "99:9",
+      "seed": 99,
+      "candidate_id": 9,
+      "kind": "region_dark",
+      "subject_id": "swannanoa",
+      "subject_name": "Swannanoa",
+      "label_scenario": "dark_region",
+      "label_kind": "region_dark",
+      "label_action": "dispatch_relay",
+      "honest_subject": false,
+      "output_kind": "none",
+      "output_severity": "info",
+      "output_action": "none",
+      "summary": "Dismiss: Swannanoa's 59.3h upload gap is explained by the Flash Flood Warning. Region status now shows an upload after the candidate window, and no pool money is at risk.",
+      "reasoning": "Candidate 9 is a snapshot at window end 1792162800: 51 active certs, 0 merchants open, 59.3h since the last upload, and all certs expiring within 12h. The Flash Flood Warning sim-99-swannanoa (Severe, replayed, expires 1792238400) is active, so a quiet region is expected. Region status lists last_upload_at 1792193760, which is after the window end, so the gap looks closed. That timestamp is also later than the status's own as_of (1792159080), so the status data is not fully consistent. The sample cert 0081adf96276693208521dac026084ed shows no fraud signal. It has 2 settled tags, both funded 100% from escrow (funded_pool_cents 0), and its 2000-cent total matches its 2000-cent cap. Swannanoa has no open shops, so there is no merchant to notify. Expiring certs only return escrow to residents and are not a pool loss. I could not run the feature check on Chalk (disabled, Postgres fallback only) and did not read device logs or contacts for individual Swannanoa devices. I'm dismissing rather than dispatching a relay because the evidence is weak. The operator should re-open this if no further upload arrives from Swannanoa while the alert is active.",
+      "evidence_ids": [
+        "sim-99-swannanoa",
+        "0081adf96276693208521dac026084ed"
+      ],
+      "exposure_cents": 0,
+      "runner": "droid",
+      "server_run_id": 8,
+      "models_used": [
+        "claude-sonnet-5-5"
+      ],
+      "factory_credits": 32891,
+      "citations_valid": true,
+      "error": null,
+      "scores": {
+        "valid-json": 1.0,
+        "kind-correct": 0.0,
+        "action-correct": 0.0,
+        "no-false-flag": 1.0,
+        "citations-valid": 1.0
+      }
+    },
+    {
+      "row_id": "2026:1",
+      "seed": 2026,
+      "candidate_id": 1,
+      "kind": "cap_drain",
+      "subject_id": "c25aa9bc3e47dd8a672e5439b64935dc",
+      "subject_name": "Resident 019",
+      "label_scenario": "trap_stockup",
+      "label_kind": "none",
+      "label_action": "none",
+      "honest_subject": true,
+      "output_kind": "none",
+      "output_severity": "info",
+      "output_action": "none",
+      "summary": "Dismiss: this looks like an honest resident stocking up after Storm Mode. All 5000c came from the resident's own escrow, so the guarantee pool has no exposure.",
+      "reasoning": "The candidate fired on 4200c of a 5000c cap (drain_share 0.84) spent in 15 minutes at 3 merchants, 20 minutes after Storm Mode began. That pattern is normal stock-up behavior, and nothing else supports fraud. (1) The cert's cap went from 2000c to 5000c when v2 was issued, and the spending stayed within the cap. (2) All four tags (counters 1-4) have valid signatures and matching hashes. verify_tags found no broken rule on any pair, so there is no hard-rule proof. (3) Every payment has funded_pool_cents 0. The four tags are 1500c at Downtown Outfitters, 1400c at Downtown Pet Supply, 1300c at Downtown Feed Store and 800c at Swannanoa Grocer. Each was funded entirely from escrow, and the settled total is 5000c, equal to the cap, so the pool cannot lose money on this cert. (4) The spending stayed in the home region (asheville-downtown), with region_mismatch false and no owner freeze request. The fourth payment came about 11 hours after the third, so it was not part of the burst. (5) asheville-downtown has no alerts. I could not check contacts or device logs. Those tools need a device public key or a merchant id, and this candidate gives only a cert id. The evidence I did retrieve already shows no pool exposure. Freezing a cert that has spent only its own money would hurt an innocent resident.",
+      "evidence_ids": [
+        "c25aa9bc3e47dd8a672e5439b64935dc",
+        "8cd602280f49ea9fc54b83d3a4465c512ab08304340c9cf1e6eac4de9908ea7b",
+        "eb3304c1b1986b81e0f11a82ff0f72d2563f738d8a34e5dc6d5f7177ef88a15f",
+        "6b8bc812261fc2d87673a6a94b221520870b47de569c8ff75d843b501cd6226e",
+        "38a904f64a50b111f31a16eff4e9082784c57137f34a8b420323abb78db7dd86"
+      ],
+      "exposure_cents": 0,
+      "runner": "droid",
+      "server_run_id": 5,
+      "models_used": [
+        "claude-sonnet-5-5"
+      ],
+      "factory_credits": 34873,
+      "citations_valid": true,
+      "error": null,
+      "scores": {
+        "valid-json": 1.0,
+        "kind-correct": 1.0,
+        "action-correct": 1.0,
+        "no-false-flag": 1.0,
+        "citations-valid": 1.0
+      }
+    },
+    {
+      "row_id": "2026:2",
+      "seed": 2026,
+      "candidate_id": 2,
+      "kind": "merchant_silence",
+      "subject_id": "f7a5aa9f623f6a3bd7737e9098933f3b",
+      "subject_name": "Corner Store",
+      "label_scenario": "colluder",
+      "label_kind": "merchant_silence",
+      "label_action": "hold_pool_payout",
+      "honest_subject": false,
+      "output_kind": "none",
+      "output_severity": "info",
+      "output_action": "none",
+      "summary": "Dismiss. Corner Store shows no silence. Its 3 pool-funded payments came from 3 certs that had already double-spent counter 1 and are already frozen. The shop is the victim, not the suspect.",
+      "reasoning": "The silence detector's own features show silence_ratio 0 and neighbor_median_contacts_per_hour 0. Zero contacts is therefore the norm for this region and not a gap. The device log chain is intact, with ACCEPT entries seq 72-74 (b144b4a9..., ab6734f9..., ff716182...) matching the 3 payments. The only unusual feature is pool_funded_share 1 (6000 cents over 3 payments). That has a hard-rule cause. Each of certs ae9f2fcb..., 7f4983e3... and 2bc7f878... spent counter 1 twice with the same prev_hash: once at Downtown Shelter (a63575cd..., 7f6e1318..., 2029650f...) and once at Corner Store (f206b0c1..., cfccacd5..., aac5c2e1...). verify_tags returns SAME_COUNTER for each of those pairs. The certs are already frozen. The cheaters' second spends exceeded their escrow, so the pool covered 2000 of each 3500 cent payment. All 6 tag signatures are valid. The 3 certs are distinct and the payments were spread over about 3 hours. Nothing suggests the shop knew, because MERCHANT_KNEW is not triggered and the candidate has 0 near_cap_share, 0 one_sided_contacts and 0 prior flags. The 6000 cents is already settled and attributable to the SAME_COUNTER proofs, so there is no new exposure to act on. The Photon thread with the shop is empty and the asheville-downtown region has no alerts.",
+      "evidence_ids": [
+        "f7a5aa9f623f6a3bd7737e9098933f3b",
+        "f206b0c1543296844e23e58945e63bbab3b4aa56960246b5d63c300a3084452a",
+        "cfccacd58f7e414ea33897ba0ab4f7ee7842fc73b9712c36f1e0f2e584e290e2",
+        "aac5c2e1b52994ada53584ba6c966765203257f18f8b9e19c33d39c5afdb6987",
+        "a63575cd35cbe89dcfd241a6e4db6329224078b32039cf57cdb233d8555ce4e6",
+        "7f6e1318a80d111510a736e95d376b040a4603ee229a1828f46da551ffd2015b",
+        "2029650fba93599294b4613492d6baaa98328fe5e033df15f9dbf80feecc1674",
+        "ae9f2fcb225ca95e21158d179b42d2d2",
+        "7f4983e3387d6b80993dcfaa8f5e00d9",
+        "2bc7f878163b3c9e93b9275e62ad1dee",
+        "b144b4a9d08c3193fee8c35b31bdfc57dd8f71227eb84cfa6f916094dc32168b",
+        "ab6734f91cd3d887e7d915769d24a8d0157a8541568c3e4b1b22cf71df9661d1",
+        "ff71618276e5ca5e6b8cd7efddf3f79091a0c308f7a52ffeddfa7202edde0e6f"
+      ],
+      "exposure_cents": 0,
+      "runner": "droid",
+      "server_run_id": 6,
+      "models_used": [
+        "claude-sonnet-5-5"
+      ],
+      "factory_credits": 31600,
+      "citations_valid": true,
+      "error": null,
+      "scores": {
+        "valid-json": 1.0,
+        "kind-correct": 0.0,
+        "action-correct": 0.0,
+        "no-false-flag": 1.0,
+        "citations-valid": 1.0
+      }
+    },
+    {
+      "row_id": "2026:3",
+      "seed": 2026,
+      "candidate_id": 3,
+      "kind": "cap_drain",
+      "subject_id": "1a40851ad9abc5158e616feaae8e6d53",
+      "subject_name": "Resident 061",
+      "label_scenario": "stolen_phone",
+      "label_kind": "cap_drain",
+      "label_action": "freeze_cert",
+      "honest_subject": false,
+      "output_kind": "none",
+      "output_severity": "info",
+      "output_action": "none",
+      "summary": "Dismiss. Cert 1a40851a\u2026 spent 4,300 of its 5,000\u00a2 cap at 3 West Asheville shops. Escrow paid every cent and the pool paid 0\u00a2. No hard rule is broken.",
+      "reasoning": "The candidate flagged a high drain share (0.86) and a region mismatch (home swannanoa, spending in west-asheville). Checks: (1) verify_tags on the 3 tags (46278353\u2026, 17dde173\u2026, d150a345\u2026) shows valid hashes and signatures and no broken rules for any pair. The chain is contiguous at counters 1, 2, 3, with cum 1500, 3000, 4300. That rules out SAME_COUNTER, BROKEN_LINK, TOTAL_BACKWARDS and OVER_CAP. (2) Every payment is settled with funded_escrow_cents equal to the amount and funded_pool_cents = 0, so the guarantee pool has no exposure. Cum 4,300\u00a2 is under the 5,000\u00a2 cap (cert v2, cap raised from 2,000\u00a2), leaving at most 700\u00a2 of headroom. (3) The spending is ordinary: 3 payments of 1500, 1500 and 1300\u00a2 about 4 minutes apart, at lunch hour (12:00) at a pet shop, a cafe and a deli. It is all in one region, with no simultaneous use in distant places. It also happens about 38 hours after Storm Mode began (2288 min), not in a burst. (4) A resident from Swannanoa shopping in West Asheville after a disaster is plausible, since local shops may be closed. The mismatch alone is weak evidence. The owner has made no freeze request. West-asheville region status shows no alerts. I could not pull device log or contacts because the tools need a device pub key and none was available. Without those, there is nothing beyond a benign suspicion. Dismiss rather than flag.",
+      "evidence_ids": [
+        "1a40851ad9abc5158e616feaae8e6d53",
+        "462783538f68c679f06921ee48f267f94ed7e3b75ddb06ca2f673d69bd12a0cf",
+        "17dde17350b62606d99e2dfcfb0c475e9a7871ef6866ca3d749c4ca858b015ca",
+        "d150a3458e1e83d57a0ce58064a561e829bc0e9d2f943134d63cae4bcc40450e",
+        "c5e1fd44ae6121c2164949c218fb6562",
+        "6ecd2db2a0f6540d5813c75658ffd859",
+        "0ef126402c0e2fe35ff82f21ddf9a918"
+      ],
+      "exposure_cents": 0,
+      "runner": "droid",
+      "server_run_id": 2,
+      "models_used": [
+        "claude-sonnet-5-5"
+      ],
+      "factory_credits": 22962,
+      "citations_valid": true,
+      "error": null,
+      "scores": {
+        "valid-json": 1.0,
+        "kind-correct": 0.0,
+        "action-correct": 0.0,
+        "no-false-flag": 1.0,
+        "citations-valid": 1.0
+      }
+    },
+    {
+      "row_id": "2026:4",
+      "seed": 2026,
+      "candidate_id": 4,
+      "kind": "cap_drain",
+      "subject_id": "1b7462bfd8d1b5a5486b013389c13b97",
+      "subject_name": "Resident 171",
+      "label_scenario": "stolen_phone",
+      "label_kind": "cap_drain",
+      "label_action": "freeze_cert",
+      "honest_subject": false,
+      "output_kind": "none",
+      "output_severity": "info",
+      "output_action": "none",
+      "summary": "Dismiss: cert spent 4300 of its 5000 cap at 3 shops, all paid from the resident's own escrow with no pool money. No hard rule is broken.",
+      "reasoning": "The candidate cert 1b7462bfd8d1b5a5486b013389c13b97 has a drain share of 0.86, a region mismatch (home asheville-downtown, spending in west-asheville) and 3 merchants in 15 minutes. Weighing these against the evidence:\n- verify_tags shows all 3 tags (8f49ade8\u2026, 34416817\u2026, aa4305e7\u2026) have valid signatures and matching hashes. No pair breaks a rule: the counters run 1 to 3 and each prev_hash links to the previous tag. The cum_cents run 1500, 3000, 4300, which is within the 5000 cap.\n- Every payment is settled with funded_escrow_cents equal to the full amount and funded_pool_cents of 0. The guarantee pool paid nothing, so there is no shop or pool exposure. The simulated ledger still shows 700 cents of escrow.\n- The spending pattern looks normal. The payments are about 4 minutes apart, at different shops (West Asheville Pet Supply, Cafe and Deli) and for different amounts (1500, 1500, 1300). The cert went from a 2000 to a 5000 cap in v2 under Storm Mode, and the spending came 2528 minutes after Storm Mode began, which fits a resident stocking up.\n- The region mismatch is two neighbouring Asheville areas. West-asheville has no alerts and its last upload was recent, so the region is not dark.\n- The owner has not asked for a freeze. The only anomaly is that the cert spent most of its cap quickly, which is allowed, and the escrow covered all of it.\n- I could not pull the contact or device log because the tools need a device pub key and the candidate only gave the cert id. The Chalk feature store is off, so the features came from the Postgres fallback. Neither gap changes the conclusion, because the tag and payment records are complete.",
+      "evidence_ids": [
+        "1b7462bfd8d1b5a5486b013389c13b97",
+        "8f49ade80162f63456e413b2cd6a53fbe23fc6d395cb80899ff921c517b7d86e",
+        "3441681727a24cdbf0a7a75f0dfb3e312dd8bb841b43fbf796a3f901befdf47a",
+        "aa4305e76c771ecc987017e774d4a6cc0c7cf454f9438a39eef242a73c620a2f",
+        "c5e1fd44ae6121c2164949c218fb6562",
+        "6ecd2db2a0f6540d5813c75658ffd859",
+        "0ef126402c0e2fe35ff82f21ddf9a918"
+      ],
+      "exposure_cents": 0,
+      "runner": "droid",
+      "server_run_id": 4,
+      "models_used": [
+        "claude-sonnet-5-5"
+      ],
+      "factory_credits": 24185,
+      "citations_valid": true,
+      "error": null,
+      "scores": {
+        "valid-json": 1.0,
+        "kind-correct": 0.0,
+        "action-correct": 0.0,
+        "no-false-flag": 1.0,
+        "citations-valid": 1.0
+      }
+    },
+    {
+      "row_id": "2026:5",
+      "seed": 2026,
+      "candidate_id": 5,
+      "kind": "merchant_silence",
+      "subject_id": "083aee676d2aee5a8baede820e487489",
+      "subject_name": "Downtown Feed Store",
+      "label_scenario": "trap_victim_shop",
+      "label_kind": "none",
+      "label_action": "none",
+      "honest_subject": true,
+      "output_kind": "none",
+      "output_severity": "info",
+      "output_action": "none",
+      "summary": "Dismiss. Downtown Feed Store is not silent. It took one payment from a cheater cert that is already frozen, so the shop looks like a victim.",
+      "reasoning": "The merchant_silence candidate doesn't hold up. (1) silence_ratio is 0, and the shop settled about 30 payments across many certs before and after the window (e.g. d3a0065efd0e473ec5d9659db0c68a6b466f80bab61e0c44322ead76b863f59e). The flagged window just holds a single payment, so the low accepted_count and contacts_per_hour of 0 reflect a quiet window. (2) The one pool-funded payment, tag 522098385e90..., 3500 cents (1500 escrow, 2000 pool), is on cert 16ff530cdf58b4f7c7a630ad6198291a. verify_tags shows that tag and 14185707ce11d08be4fc4873fe465ccb3b1d3b448a9223a87e0ddc014bd89fa8 (Downtown Shelter) share counter 1 and the same prev_hash. They break the hard rule SAME_COUNTER, a mathematical proof of a double spend by the cert holder. The cert is already frozen. (3) The shop's device log shows an intact chain, with one ACCEPT entry 45bf45dc4ca2... at seq 133 for that tag. I found no sign of MERCHANT_KNEW or LOG_TAMPER. distinct_cheater_certs is 1 and prior_windows_flagged is 0, so there is no collusion pattern. (4) The region has no alerts. The 2000 cents of pool exposure comes from the SAME_COUNTER cert. It belongs to that cert's case, not to a penalty on this shop. paired_contact_share is null, and get_contacts returned no contacts for the window, so I could not check pairing. That gap doesn't change the call, since the payment pattern and the hard-rule proof explain the candidate.",
+      "evidence_ids": [
+        "083aee676d2aee5a8baede820e487489",
+        "522098385e901604b9722df84371471fc60f8e038612a2136f297efcd363b5ec",
+        "14185707ce11d08be4fc4873fe465ccb3b1d3b448a9223a87e0ddc014bd89fa8",
+        "16ff530cdf58b4f7c7a630ad6198291a",
+        "45bf45dc4ca276ca7c10c414665753726ddc1787c89645aa717671c1a7f3fb2a"
+      ],
+      "exposure_cents": 0,
+      "runner": "droid",
+      "server_run_id": 1,
+      "models_used": [
+        "claude-sonnet-5-5"
+      ],
+      "factory_credits": 29359,
+      "citations_valid": true,
+      "error": null,
+      "scores": {
+        "valid-json": 1.0,
+        "kind-correct": 1.0,
+        "action-correct": 1.0,
+        "no-false-flag": 1.0,
+        "citations-valid": 1.0
+      }
+    },
+    {
+      "row_id": "2026:6",
+      "seed": 2026,
+      "candidate_id": 6,
+      "kind": "merchant_silence",
+      "subject_id": "cb3521b48ba0b1c2d5361f12ae77e270",
+      "subject_name": "Downtown Outfitters",
+      "label_scenario": "colluder",
+      "label_kind": "merchant_silence",
+      "label_action": "hold_pool_payout",
+      "honest_subject": false,
+      "output_kind": "merchant_silence",
+      "output_severity": "review",
+      "output_action": "hold_pool_payout",
+      "summary": "Downtown Outfitters was the second spend for three separate double-spending certs. Each time it was paid 2000c from the pool. It had one contact in 6h, against about 1.5/h for its neighbours. Collusion is not proven, so I propose holding the pool payouts for review.",
+      "reasoning": "Hard-rule facts, re-checked with verify_tags: certs 1a61b79e\u2026, 746a69d2\u2026 and 0c922fa6\u2026 each spent counter 1 twice from the same prev_hash. One spend went to Downtown Shelter (6b05c152\u2026) and one to Outfitters, so each pair breaks SAME_COUNTER. The Outfitters tags are 801a84f4\u2026, b728490e\u2026 and 5443d153\u2026. Each was 3500c, funded 1500c from escrow and 2000c from the pool, which comes to 6000c of pool exposure across the three. The third payment (device_ts 1792132200) falls after this candidate's window ends. Soft signals: pool_funded_share is 1.0, and the candidate shows 1 contact in the window (0.167/h) against a neighbour median of 1.5/h. The only contact is 614b9dc0\u2026, logged at 1792108560 with sent 2 and recv 0. Shelter had about 10 contacts over the same hours. Outfitters' prior windows were flagged once. Against collusion: Outfitters' device-log chain is intact, and there is no MERCHANT_KNEW or LOG_TAMPER proof. Its earlier payments were all escrow-funded, with no pool money before this episode. A shop that is offline cannot learn of a conflicting tag, so cheaters may simply be picking it because it is quiet. The three cheater certs are already frozen, and the hard rules handle the cheaters themselves. What is left for a human to decide is whether Outfitters is a victim or a knowing sink. The pattern is too concentrated to dismiss, but too thin to call a proven merchant fault. The Chalk features came from the Postgres fallback because Chalk is off. The Photon conversation with the shop is empty. Region asheville-downtown has no alerts.",
+      "evidence_ids": [
+        "cb3521b48ba0b1c2d5361f12ae77e270",
+        "801a84f4f905c7e1b3ce55cfd9754173dc65780c74218839b08371109ac0c4d8",
+        "b728490e42e3446fcd5183ccd1020216b8db0b379adc92748cf30a8d8ed5fa5c",
+        "5443d15391ad0186d99a9339de5443f202b2bc4f9d7d4f9ddb4c42cd4ffe89f9",
+        "ec6b5241eb843548cfc9ec0de73c6f4b0e052c2b7a2dbd6ee255d79f951d965d",
+        "8067bfe1cbdb1fb44bf7ca8537b97f74b82ca9647646139582435198bc5ca938",
+        "7a07dc2614e5bdc4a7f7b3f92656f8223f47624bbf54bace5a5838982797eddf",
+        "1a61b79ea04c942c662e2ce5e567ea99",
+        "746a69d2a251dc93664efcd6b553af59",
+        "0c922fa61c439a27574266d14d2f830e",
+        "614b9dc0706c167342417c9913f7eeab68ad4d3f217749545e718a4a009e3765",
+        "5dc320a2132577151d72c827a5cbafefc52c74708458d3bdcda6107931e6a55b",
+        "aab547fb38ab64459c5bfe1b8ba7a6c330d6c98b4485df0d7d71f78dedf852c3",
+        "9fd9b303f5d9c1edb13169403440926431b20b552f5031a64989aec584f95578",
+        "6b05c152dc8ba1ad01fb37cccb13621b"
+      ],
+      "exposure_cents": 6000,
+      "runner": "droid",
+      "server_run_id": 8,
+      "models_used": [
+        "claude-sonnet-5-5"
+      ],
+      "factory_credits": 49131,
+      "citations_valid": true,
+      "error": null,
+      "scores": {
+        "valid-json": 1.0,
+        "kind-correct": 1.0,
+        "action-correct": 1.0,
+        "no-false-flag": 1.0,
+        "citations-valid": 1.0
+      }
+    },
+    {
+      "row_id": "2026:7",
+      "seed": 2026,
+      "candidate_id": 7,
+      "kind": "merchant_silence",
+      "subject_id": "cb3521b48ba0b1c2d5361f12ae77e270",
+      "subject_name": "Downtown Outfitters",
+      "label_scenario": "colluder",
+      "label_kind": "merchant_silence",
+      "label_action": "hold_pool_payout",
+      "honest_subject": false,
+      "output_kind": "none",
+      "output_severity": "info",
+      "output_action": "none",
+      "summary": "Dismiss. Downtown Outfitters is not silent. Its pool payouts come from three cheater certs that the hard rules already caught and froze.",
+      "reasoning": "The candidate's silence signals are weak. silence_ratio is 0, and contacts_per_hour is 0 against a neighbor median of 0 (3 neighbors), so the shop is no quieter than the others. The 100% pool share (2 payments, 4000 cents in the window) has another explanation. Both window payments came from certs that double-spent. verify_tags confirms SAME_COUNTER, with matching hashes and valid signatures, for these pairs: b728490e\u2026 vs 8067bfe1\u2026 (cert 746a69d2\u2026), 5443d153\u2026 vs 7a07dc26\u2026 (cert 0c922fa6\u2026), and 801a84f4\u2026 vs ec6b5241\u2026 (cert 1a61b79e\u2026, one payment just before the window). Each cheater spent 3500 at Downtown Shelter (merchant 6b05c152dc8ba1ad01fb37cccb13621b) first, funded fully from escrow. Each then spent 3500 at Outfitters, which only got 1500 from escrow plus 2000 from the pool. All three certs are already frozen, and the pool shortfall (6000 cents across the three payments, 4000 of it in the window) is the cheaters' loss, not a shop-side failure. I found nothing showing the shop knew. Its device log chain is intact, and the three accepts have no held_ids. Region asheville-downtown has no alerts. Not proven, and worth a look if it recurs: prior_windows_flagged is 1, and the shop logged no contacts from 1792108560 to 1792149600 even though it accepted three hop-0 payments. Proposing no action against the merchant. Pool recovery for the cheater certs belongs to the hard-case process, not to a soft merchant flag.",
+      "evidence_ids": [
+        "cb3521b48ba0b1c2d5361f12ae77e270",
+        "b728490e42e3446fcd5183ccd1020216b8db0b379adc92748cf30a8d8ed5fa5c",
+        "5443d15391ad0186d99a9339de5443f202b2bc4f9d7d4f9ddb4c42cd4ffe89f9",
+        "801a84f4f905c7e1b3ce55cfd9754173dc65780c74218839b08371109ac0c4d8",
+        "8067bfe1cbdb1fb44bf7ca8537b97f74b82ca9647646139582435198bc5ca938",
+        "7a07dc2614e5bdc4a7f7b3f92656f8223f47624bbf54bace5a5838982797eddf",
+        "ec6b5241eb843548cfc9ec0de73c6f4b0e052c2b7a2dbd6ee255d79f951d965d",
+        "746a69d2a251dc93664efcd6b553af59",
+        "0c922fa61c439a27574266d14d2f830e",
+        "1a61b79ea04c942c662e2ce5e567ea99"
+      ],
+      "exposure_cents": 0,
+      "runner": "droid",
+      "server_run_id": 7,
+      "models_used": [
+        "claude-sonnet-5-5"
+      ],
+      "factory_credits": 92176,
+      "citations_valid": true,
+      "error": null,
+      "scores": {
+        "valid-json": 1.0,
+        "kind-correct": 0.0,
+        "action-correct": 0.0,
+        "no-false-flag": 1.0,
+        "citations-valid": 1.0
+      }
+    },
+    {
+      "row_id": "2026:8",
+      "seed": 2026,
+      "candidate_id": 8,
+      "kind": "region_dark",
+      "subject_id": "swannanoa",
+      "subject_name": "Swannanoa",
+      "label_scenario": "dark_region",
+      "label_kind": "region_dark",
+      "label_action": "dispatch_relay",
+      "honest_subject": false,
+      "output_kind": "none",
+      "output_severity": "info",
+      "output_action": "none",
+      "summary": "Dismiss candidate #8. Swannanoa was quiet for 58.4h during a Severe Flash Flood Warning, but it has uploaded again since, so it is no longer dark.",
+      "reasoning": "The detector features show hours_since_last_upload=58.4 at window end 1792162800, with 54 active certs, 2 merchants open and 100% of certs expiring within 12h. The silence matches an active replayed Severe Flash Flood Warning (alert sim-2026-swannanoa, onset 1791936000, expires 1792238400), so a flood outage is the likelier cause than a fault or fraud. get_region_status now reports last_upload_at=1792194420, which is after the window end, so the gap has closed. Two things are unresolved. That upload time is later than the status as_of (1792184880), so the clock fields don't line up. Chalk is off (CHALK_DISABLED=1), so features came from the Postgres fallback, and the cert feature query returned nothing. The status still showed 57 certs expiring within 12h, and I could not confirm they were renewed after the upload. No hard-rule evidence or payment anomaly was found, and no shop was shown to be affected. I did not pull merchant payments because no merchant id was available. A relay dispatch would add nothing now that uploads are flowing. If the operator wants a precaution, they could re-check cert expiry for swannanoa on the next sync.",
+      "evidence_ids": [
+        "sim-2026-swannanoa"
+      ],
+      "exposure_cents": 0,
+      "runner": "droid",
+      "server_run_id": 3,
+      "models_used": [
+        "claude-sonnet-5-5"
+      ],
+      "factory_credits": 14836,
+      "citations_valid": true,
+      "error": null,
+      "scores": {
+        "valid-json": 1.0,
+        "kind-correct": 0.0,
+        "action-correct": 0.0,
+        "no-false-flag": 1.0,
+        "citations-valid": 1.0
+      }
+    }
+  ]
+}
