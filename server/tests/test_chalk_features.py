@@ -18,12 +18,17 @@ class FakeError:
         self.message = message
 
 
-class FakeResult:
-    def __init__(self, values: dict, errors: list | None = None) -> None:
-        self.values, self.errors = values, errors or []
+class FakeFeature:
+    def __init__(self, field: str, value) -> None:
+        self.field, self.value = field, value
 
-    def get_value(self, fqn: str):
-        return self.values.get(fqn)
+
+class FakeResult:
+    """Shaped like chalkpy's OnlineQueryResponseImpl: `data` (field, value) and `errors`."""
+
+    def __init__(self, values: dict, errors: list | None = None) -> None:
+        self.data = [FakeFeature(k, v) for k, v in values.items()]
+        self.errors = errors or []
 
 
 class FakeClient:

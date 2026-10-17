@@ -1368,6 +1368,7 @@ StormDesk calls Chalk's online query API through `ChalkClient().query(input={Mer
 Fallback if Chalk is down: the tool reads the same features from Postgres views and marks the result `source: "postgres_fallback"`.
 
 **[v4.6] As built.** `server/stormcash/chalk_features.py` holds the `ChalkClient` (string FQNs, so the server doesn't import `chalk/`; credentials from `CHALK_CLIENT_*` or the machine's `chalk login`; 10 s timeout). Tool args: `entity: merchant|cert|region, id, features[]?, as_of?`; `cert` maps to the `certificate` namespace, and no `features` means all of the entity's features. The answer is `{source: "chalk", entity, id, as_of, features, latency_ms}` (+ `errors`, `unknown_features`), and each query logs one line with the feature names and latency. If Chalk fails or `CHALK_DISABLED=1`, the tool returns the Postgres fallback as before (the detectors' frozen features for the subject's latest candidate, not views) with `source: "postgres_fallback"` and `chalk_error`.
+- Deployed with `chalk apply` on Oct 16 and checked on the seeded town through the tool itself: Downtown Market's 16 merchant features in ~2 s on a cold client (token exchange, Neon waking up), then 125–350 ms per query for merchant, cert and region features.
 
 ### 15.3 Evaluations
 

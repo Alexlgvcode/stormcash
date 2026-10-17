@@ -91,12 +91,14 @@ def query(settings, entity: str, id: str, features: list[str] | None = None, as_
     ms = round((time.perf_counter() - start) * 1000)
 
     errors = [getattr(e, "message", None) or str(e) for e in result.errors or []]
-    values = {n: result.get_value(f"{ns}.{n}") for n in names}
+    # The server doesn't import chalk/features.py, so values come back as plain JSON values.
+    data = {d.field: d.value for d in result.data}
+    values = {n: data.get(f"{ns}.{n}") for n in names}
     log.info("chalk query %s %s: %d features in %d ms [%s]%s", ns, key, len(names), ms, ", ".join(names),
              f" errors: {'; '.join(errors)}" if errors else "")
     if errors and all(v is None for v in values.values()):
         raise ChalkUnavailable("; ".join(errors))
-    out = {"source": "chalk", "entity": entity, "id": key, "as_of": result.get_value(f"{ns}.as_of"),
+    out = {"source": "chalk", "entity": entity, "id": key, "as_of": data.get(f"{ns}.as_of"),
            "features": values, "latency_ms": ms}
     if errors:
         out["errors"] = errors
