@@ -113,6 +113,18 @@ Every function scorer gives 0 to an output that isn't a Flag. `summary-quality` 
 uv run python evals/run_eval.py stormdesk --label "prompt v2" --label-note "written after reading v1's errors on this dataset: not a blind holdout"
 ```
 
+## Held-out seeds (chosen Oct 17, before any held-out row was built or run)
+
+**Seeds 1, 2 and 3**, the same fixed T0 and 72 h as the main dataset. They were chosen before their towns were built and before any prompt-v2 result was seen. No dataset, simulator output, or StormDesk prompt (v1 or v2) has ever used them, so prompt v2 was written without seeing their rows. Their rows are a separate dataset (`dataset/stormdesk_triage_heldout.jsonl`), and their results are a separate section ("held-out seeds"), never mixed into the main comparison. If the credit cap can't cover all three, the run uses seeds in the order 1, 2, 3, decided before it starts.
+
+Seed 1 has 11 rows, seed 2 has 9, seed 3 has 10 (30 rows, 16 honest; seed 2's colluder Downtown Pharmacy raised no candidate). Rules-only on all 30: Chalk run `ff6d77b3-81da-49e5-aa83-8336506d7f83`.
+
+**Credit plan (written before run A).** The total cap is 3.0M credits, on one gateway, so the audit spans both runs. The only prompt-v2 cost measured so far is 1,443,505 credits for 32 rows (≈45.1k a row).
+- **Run A:** all 43 main rows on prompt v2, ≈1.94M expected. It fills the StormDesk column only if it completes.
+- **Run B:** held-out rows, decided after A from A's own numbers. With A's average row cost `a` and `R` = 3.0M minus everything spent, B uses the longest of seeds (1), (1, 2), (1, 2, 3) whose rows × `a` × 1.25 ≤ `R`. If even seed 1 doesn't fit, there's no run B.
+
+  At ≈45k a row and ≈1.06M left, that's seed 1 (11 rows). Rules-only runs on exactly B's rows first (free), so the held-out section compares the same rows.
+
 ## Results file (for the Evals tab, #38)
 
 ```jsonc

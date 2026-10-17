@@ -10,7 +10,9 @@ shop with its neighbours and towns from two seeds would overlap. The labels
 come from the simulator's ground truth (labels.json, §16.4a), matched to each
 candidate by subject.
 
-Writes chalk/evals/dataset/stormdesk_triage.jsonl (the rows) and meta.json
+Writes chalk/evals/dataset/stormdesk_triage.jsonl (the rows) and meta.json;
+`--dataset heldout` builds the held-out seeds (README) into
+stormdesk_triage_heldout.jsonl and meta_heldout.json instead
 (seeds, counts, and the labelled subjects the detectors never raised, which no
 runner can see). Run it with the server's Python: it imports the server and the
 simulator.
@@ -39,6 +41,11 @@ DATASET = EVALS / "dataset"
 KEY_FILE = STATE / "server_key.pem"
 
 SEEDS = (42, 7, 13, 99, 2026)
+HELDOUT_SEEDS = (1, 2, 3)  # chosen Oct 17 before any of their rows existed; never used to write a prompt
+DATASETS = {  # name -> (Chalk dataset name, seeds, rows file, meta file)
+    "main": ("stormdesk-triage", SEEDS, "stormdesk_triage.jsonl", "meta.json"),
+    "heldout": ("stormdesk-triage-heldout", HELDOUT_SEEDS, "stormdesk_triage_heldout.jsonl", "meta_heldout.json"),
+}
 START = 1791936000  # T0 for every seed (2026-10-14 00:00 UTC): fixed, so the dataset is reproducible
 HOURS = 72
 ADMIN_URL = "postgresql://postgres:postgres@localhost:5433/postgres"
@@ -169,10 +176,13 @@ def git_sha() -> str | None:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("--seeds", type=int, nargs="+", default=list(SEEDS))
+    ap.add_argument("--dataset", choices=DATASETS, default="main")
+    ap.add_argument("--seeds", type=int, nargs="+", help="default: the dataset's seeds")
     ap.add_argument("--admin-url", default=ADMIN_URL, help="a local Postgres to create the eval databases on")
     ap.add_argument("--rebuild", action="store_true", help="drop and re-seed the eval databases")
     args = ap.parse_args()
+    dataset_name, default_seeds, rows_file, meta_file = DATASETS[args.dataset]
+    args.seeds = args.seeds or list(default_seeds)
     check_local(args.admin_url)
     new_key = not KEY_FILE.exists()  # towns signed by a lost key can't be reused
     key_pem = server_key_pem()
@@ -194,14 +204,14 @@ def main() -> None:
                       "hours": labels["hours"], "candidates": len(seed_rows), "labelled_subjects": len(labels["subjects"])})
 
     DATASET.mkdir(exist_ok=True)
-    with (DATASET / "stormdesk_triage.jsonl").open("w") as f:
+    with (DATASET / rows_file).open("w") as f:
         for row in rows:
             f.write(json.dumps({k: row[k] for k in COLUMNS}) + "\n")
     scenarios: dict[str, int] = {}
     for row in rows:
         scenarios[row["label_scenario"]] = scenarios.get(row["label_scenario"], 0) + 1
     meta = {
-        "name": "stormdesk-triage",
+        "name": dataset_name,
         "note": "One row per detector candidate from simulated towns (spec §15.3). Every subject is simulated.",
         "rows": len(rows),
         "honest_rows": sum(r["honest_subject"] for r in rows),
@@ -210,9 +220,9 @@ def main() -> None:
         "detector_misses": misses,
         "built_from_git_sha": git_sha(),
     }
-    (DATASET / "meta.json").write_text(json.dumps(meta, indent=2) + "\n")
+    (DATASET / meta_file).write_text(json.dumps(meta, indent=2) + "\n")
     print(json.dumps({k: meta[k] for k in ("rows", "honest_rows", "scenarios")}, indent=2))
-    print(f"{len(misses)} labelled subjects never became candidates (see meta.json detector_misses)")
+    print(f"{len(misses)} labelled subjects never became candidates (see {meta_file} detector_misses)")
 
 
 if __name__ == "__main__":

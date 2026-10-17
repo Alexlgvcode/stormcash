@@ -176,6 +176,8 @@ def up(args) -> None:
         # Droid keeps a session per run under ~/.factory/sessions/<server cwd, "/" as "-">/; the gateway
         # audits them (one model only, no fallback, a hard credit cap) and takes the exact folder from the
         # first row's session.
+        if args.prompt_version is not None:
+            gateway_cmd += ["--require-prompt-version", str(args.prompt_version)]
         gateway_cmd += ["--require-model", args.model, "--max-credits", str(args.max_credits),
                         "--sessions-dir", str(SESSIONS_ROOT / re.sub(r"[^A-Za-z0-9._-]", "-", str(EVALS)))]
     pids["gateway"] = spawn("gateway", gateway_cmd, {**base_env, "EVAL_GATEWAY_TOKEN": token})
@@ -197,6 +199,9 @@ def up(args) -> None:
     STACK.write_text(json.dumps(state, indent=2))
     if code["server_dirty"] or not code["module_in_checkout"]:
         raise SystemExit(f"the servers don't run this checkout's committed server/ code: {code}; run stack.py down")
+    if args.prompt_version is not None and code["prompt_version"] != args.prompt_version:
+        raise SystemExit(f"the servers run prompt_version {code['prompt_version']}, not {args.prompt_version}; "
+                         "run stack.py down")
     auth = {"Authorization": f"Bearer {token}"}
     wait_http(f"{state['gateway_local']}/runs/{'0' * 32}", auth)
     if not args.no_tunnel:
@@ -271,6 +276,9 @@ def main() -> None:
     p_up.add_argument("--seeds", type=int, nargs="+", default=list(SEEDS))
     p_up.add_argument("--admin-url", default=ADMIN_URL)
     p_up.add_argument("--factory-env", type=Path, default=DEFAULT_FACTORY_ENV)
+    p_up.add_argument("--prompt-version", type=int, default=None,
+                      help="droid: refuse to start unless the servers' code has this PROMPT_VERSION, and stop the run "
+                           "if any row reports another")
     p_up.add_argument("--max-credits", type=float, default=None,
                       help="droid: the gateway refuses new rows once the eval's Droid sessions used this many credits")
     p_up.add_argument("--no-tunnel", action="store_true")

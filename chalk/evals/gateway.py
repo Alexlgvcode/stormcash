@@ -132,11 +132,13 @@ class Refused(Exception):
 class Jobs:
     def __init__(self, servers: dict[int, str], model: str | None, *, require_model: str | None = None,
                  max_credits: float | None = None, sessions_dir: str | None = None,
-                 sessions_root: str = SESSIONS_ROOT, row_estimate: float = 0.0) -> None:
+                 sessions_root: str = SESSIONS_ROOT, row_estimate: float = 0.0,
+                 require_prompt_version: int | None = None) -> None:
         self.servers, self.model = servers, model
         self.require_model, self.max_credits, self.sessions_dir = require_model, max_credits, sessions_dir
         self.sessions_root = sessions_root
         self.row_estimate = row_estimate
+        self.require_prompt_version = require_prompt_version
         self.started = time.time()
         self.tripped: str | None = None
         self.jobs: dict[str, dict] = {}
@@ -146,6 +148,7 @@ class Jobs:
         with self.lock:
             done = [j for j in self.jobs.values() if j["status"] != "running"]
             return {"tripped": self.tripped, "require_model": self.require_model, "max_credits": self.max_credits,
+                    "require_prompt_version": self.require_prompt_version,
                     "jobs_done": len(done), "jobs_running": len(self.jobs) - len(done),
                     "audit": audit(self.sessions_dir, self.started)}
 
@@ -162,6 +165,9 @@ class Jobs:
             reason = f"a session used {session['models_used']}, not {self.require_model}"
         elif result is not None and result.get("model") not in (None, self.require_model):
             reason = f"the server says the run used {result.get('model')}, not {self.require_model}"
+        elif result is not None and self.require_prompt_version is not None and \
+                result.get("prompt_version") != self.require_prompt_version:
+            reason = f"a row ran prompt_version {result.get('prompt_version')}, not {self.require_prompt_version}"
         totals = audit(self.sessions_dir, self.started)
         if reason is None and any(m != self.require_model for m in totals["models_seen"]):
             reason = f"the eval sessions used {totals['models_seen']}, not only {self.require_model}"
@@ -297,6 +303,8 @@ def main() -> None:
     ap.add_argument("--require-model", default=None, help="trip the breaker if any Droid session uses another model")
     ap.add_argument("--max-credits", type=float, default=None,
                     help="a hard cap: admit a row only while spent + running + this row (at the average row cost) fits")
+    ap.add_argument("--require-prompt-version", type=int, default=None,
+                    help="trip the breaker if any Droid row reports another StormDesk prompt_version")
     ap.add_argument("--row-estimate", type=float, default=65000.0,
                     help="credits per row assumed until rows are done (a triage took 16k-65k on claude-sonnet-5-5)")
     ap.add_argument("--sessions-dir", default=None,
@@ -306,7 +314,8 @@ def main() -> None:
     if len(token) < 24:
         raise SystemExit("set EVAL_GATEWAY_TOKEN (24+ characters)")
     jobs = Jobs(parse_servers(args.server), args.model, require_model=args.require_model,
-                max_credits=args.max_credits, sessions_dir=args.sessions_dir, row_estimate=args.row_estimate)
+                max_credits=args.max_credits, sessions_dir=args.sessions_dir, row_estimate=args.row_estimate,
+                require_prompt_version=args.require_prompt_version)
     httpd = ThreadingHTTPServer(("127.0.0.1", args.port), make_handler(jobs, token))
     print(f"gateway: listening on 127.0.0.1:{args.port} for seeds {sorted(jobs.servers)}", flush=True)
     httpd.serve_forever()

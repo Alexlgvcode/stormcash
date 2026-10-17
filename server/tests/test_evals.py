@@ -24,13 +24,18 @@ def test_the_saved_runs_fill_both_columns_from_one_dataset(app_client):
     fakes = [r for r in out["other_runs"] if r["runner"] == "fake"]
     assert fakes and all("pipeline check" in r["reason"] for r in fakes)
     assert all("metrics" not in r and "rows" not in r for r in out["other_runs"])  # no numbers from them
+    # Held-out runs never reach the main section; they have their own, on their own rows.
+    held = out["heldout"]["columns"]["rules_only"]
+    assert held["eval"] == "stormdesk-triage-heldout" and held["dataset"]["rows"] == len(held["rows"])
+    assert set(held["dataset"]["seeds"]).isdisjoint(rules["dataset"]["seeds"])
+    assert rules["eval"] == droid["eval"] == "stormdesk-triage"
 
 
 def test_no_results_at_all(app_client, tmp_path, monkeypatch):
     monkeypatch.setattr(evals, "DEFAULT_DIR", tmp_path / "missing")
     out = app_client.get("/v1/evals").json()
-    assert out == {"columns": {"rules_only": None, "stormdesk": None}, "other_runs": [], "errors": [],
-                   "runs_found": 0}
+    empty = {"columns": {"rules_only": None, "stormdesk": None}, "other_runs": []}
+    assert out == {**empty, "heldout": empty, "errors": [], "runs_found": 0}
 
 
 def test_a_stormdesk_claim_is_checked_and_the_newest_run_wins(app_client, tmp_path, monkeypatch):
@@ -70,3 +75,27 @@ def test_a_stormdesk_claim_is_checked_and_the_newest_run_wins(app_client, tmp_pa
     save("g-droid.json", **droid, timestamp=base["timestamp"] + 120)
     out = app_client.get("/v1/evals").json()  # read on every request: no restart
     assert out["columns"]["stormdesk"]["file"] == "g-droid.json"
+
+
+def test_heldout_rules_column_pairs_with_the_stormdesk_rows(app_client, tmp_path, monkeypatch):
+    monkeypatch.setattr(evals, "DEFAULT_DIR", tmp_path)
+    base = json.loads(RULES_ONLY.read_text())
+    rows = base["dataset"]["rows"]
+
+    def save(name: str, sha: str, ts: int, **changes) -> None:
+        (tmp_path / name).write_text(json.dumps({**base, "eval": "stormdesk-triage-heldout", "timestamp": ts,
+                                                 "dataset": {**base["dataset"], "sha256": sha}, **changes}))
+
+    droid = {"runner": "droid", "table_column": "stormdesk", "is_agent_result": True, "runners_seen": {"droid": rows},
+             "metrics": {**base["metrics"], "fallback_from_droid": 0}, "complete": True,
+             "model": "claude-sonnet-5-5", "models_seen": ["claude-sonnet-5-5"]}
+    save("a-rules-seeds-1-2.json", "s12", 10)
+    save("b-rules-seeds-1-2-3.json", "s123", 20)
+    save("c-droid-seeds-1-2.json", "s12", 30, **droid)
+    out = app_client.get("/v1/evals").json()
+    assert out["columns"] == {"rules_only": None, "stormdesk": None}  # nothing held-out in the main section
+    held = out["heldout"]["columns"]
+    assert held["stormdesk"]["file"] == "c-droid-seeds-1-2.json"
+    assert held["rules_only"]["file"] == "a-rules-seeds-1-2.json"  # the same rows, not the newest rules run
+    reasons = {r["file"]: r["reason"] for r in out["heldout"]["other_runs"]}
+    assert reasons == {"b-rules-seeds-1-2-3.json": "a rules-only run on other rows than the StormDesk column"}

@@ -14,6 +14,12 @@ Either column also needs as many result rows as the dataset has.
 
 Anything else (fake or mixed runners) is listed as a pipeline check, with its
 run id and time but none of its numbers.
+
+Held-out runs (eval "stormdesk-triage-heldout": seeds chosen before the run
+and never used to write a prompt) are a section of their own under
+`heldout`, never mixed into the main columns. In each section the rules-only
+column is the newest rules-only run on the StormDesk column's dataset revision
+(the same rows), or the newest one when there is no StormDesk run.
 """
 
 from __future__ import annotations
@@ -27,6 +33,7 @@ router = APIRouter()
 
 DEFAULT_DIR = Path(__file__).resolve().parents[3] / "chalk" / "evals" / "results"
 EVAL_NAME = "stormdesk-triage"
+HELDOUT_EVAL_NAME = "stormdesk-triage-heldout"
 
 
 def results_dir(settings) -> Path:
@@ -66,7 +73,8 @@ def load_runs(directory: Path) -> tuple[list[dict], list[dict]]:
         except (OSError, ValueError) as exc:
             errors.append({"file": path.name, "error": f"{type(exc).__name__}: {exc}"})
             continue
-        if not isinstance(run, dict) or run.get("schema_version") != 1 or run.get("eval") != EVAL_NAME:
+        if not isinstance(run, dict) or run.get("schema_version") != 1 or \
+                run.get("eval") not in (EVAL_NAME, HELDOUT_EVAL_NAME):
             errors.append({"file": path.name, "error": "not a stormdesk-triage results file (schema_version 1)"})
             continue
         runs.append({**run, "file": path.name})
@@ -82,19 +90,36 @@ def summary(run: dict, reason: str | None) -> dict:
             "dataset_rows": (run.get("dataset") or {}).get("rows"), "reason": reason}
 
 
-@router.get("/v1/evals")
-def evals(request: Request) -> dict:
+def section(runs: list[dict]) -> dict:
     """The newest run per column (full file), and every other run as a summary."""
-    directory = results_dir(request.app.state.deps.settings)
-    runs, errors = load_runs(directory)
     columns: dict[str, dict | None] = {"rules_only": None, "stormdesk": None}
-    others = []
+    rules_runs, others = [], []
     for run in runs:  # oldest first, so the newest run per column wins
         col, reason = column(run)
         if col is None:
             others.append(summary(run, reason))
-            continue
-        if columns[col] is not None:
-            others.append(summary(columns[col], "an older run for this column"))
-        columns[col] = run
-    return {"columns": columns, "other_runs": others[::-1], "errors": errors, "runs_found": len(runs)}
+        elif col == "rules_only":
+            rules_runs.append(run)
+        else:
+            if columns["stormdesk"] is not None:
+                others.append(summary(columns["stormdesk"], "an older run for this column"))
+            columns["stormdesk"] = run
+    desk = columns["stormdesk"]
+    same_rows = [r for r in rules_runs if desk is not None
+                 and (r.get("dataset") or {}).get("sha256") == (desk.get("dataset") or {}).get("sha256")]
+    columns["rules_only"] = (same_rows or rules_runs or [None])[-1]
+    others += [summary(r, "an older run for this column" if desk is None or r in same_rows
+                       else "a rules-only run on other rows than the StormDesk column")
+               for r in rules_runs if r is not columns["rules_only"]]
+    others.sort(key=lambda o: o.get("timestamp") or 0)
+    return {"columns": columns, "other_runs": others[::-1]}
+
+
+@router.get("/v1/evals")
+def evals(request: Request) -> dict:
+    """The main section (columns, other runs) and the held-out section."""
+    directory = results_dir(request.app.state.deps.settings)
+    runs, errors = load_runs(directory)
+    main = section([r for r in runs if r.get("eval") == EVAL_NAME])
+    heldout = section([r for r in runs if r.get("eval") == HELDOUT_EVAL_NAME])
+    return {**main, "heldout": heldout, "errors": errors, "runs_found": len(runs)}
