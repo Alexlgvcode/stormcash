@@ -6,6 +6,7 @@
 > **v4.2 (Oct 16):** Nessie integration rewritten after the hour-1 VERIFY (§11.4): money moves as withdrawal + deposit pairs, balances are computed from Nessie transactions, Nessie amounts are whole dollars, base URL is HTTPS. Marked **[v4.2]**.
 > **v4.3 (Oct 16):** WS2 server core (#13): every Nessie money movement is a `nessie_moves` row executed after commit and replayed until both halves exist; signed API writes spelled out; fallback switches `NESSIE_DISABLED` and `API_SIG_REQUIRED` (§6.3, §11.1, §11.4, §12, §22.4). Marked **[v4.3]**.
 > **v4.4 (Oct 16):** seed-town against the hosted DB takes ~45 s instead of ~46 min: each upload is one pipelined transaction (uploads one at a time) instead of one transaction per item, with the same results (§11.2, §16.5). Marked **[v4.4]**.
+> **v4.5 (Oct 17):** Photon shapes verified (§6.3, §17): Spectrum webhooks with HMAC signatures inbound, a small Node bridge for outbound. Marked **[v4.5]**.
 > **Builds on:** "StormCash: The 10/10 Build" v3 (Oct 16, Alexandre Lugovoi, on Brian Maina's Oct 11 draft). Everything new since v3 is marked **[v4]**.
 
 ---
@@ -263,7 +264,11 @@ NESSIE_BASE_URL=https://api.nessieisreal.com     # [v4.2] verified; HTTP is refu
 SERVER_SIGNING_KEY_PEM=...                        # P-256 private key, generated once
 FACTORY_API_KEY=...
 CHALK_CLIENT_ID=... / CHALK_CLIENT_SECRET=... / CHALK_ENVIRONMENT=...
-PHOTON_API_KEY=... (names per Photon docs)
+PHOTON_API_KEY=... (unused; see the Photon lines below)
+SPECTRUM_WEBHOOK_SECRET=...                       # [v4.5] Photon webhook signing secret (inbound HMAC)
+PHOTON_BRIDGE_TOKEN=...                           # [v4.5] shared secret between the server and photon/bridge
+PHOTON_BRIDGE_URL=http://127.0.0.1:8787           # [v4.5]
+PHOTON_DISABLED=0                                 # [v4.5] fallback: 1 = record messages, send nothing
 PUBLIC_BASE_URL=https://<cloudflared>.trycloudflare.com
 NWS_USER_AGENT=StormCash HackHarvard demo (team email)
 DEMO_MODE=1
@@ -1451,6 +1456,11 @@ Adoption, foot traffic (`p_link`), relay density (`p_uplink`). Moving a slider r
 ## 17. Photon messaging agent [v4]
 
 **VERIFY Photon 2.0's SDK/webhook shapes from the official guidelines and docs** (linked from hhuh.io) and the Friday workshop. Do not guess field names. Wrap it in `photon/client.py` with two functions: `send(channel, handle, text)` and a FastAPI route for inbound messages.
+
+**[v4.5] Verified Oct 17 against photon.codes/docs (Stable, Spectrum).**
+- **Inbound:** Spectrum Cloud POSTs each message to `POST /v1/photon/inbound` as JSON `{event: "messages", space, message}`; `message.content` is tagged by `type` (`text` has `text`), `message.sender.id` is the platform user id, `message.id` is the dedup key (at-least-once delivery). Headers `X-Spectrum-Timestamp` and `X-Spectrum-Signature: v0=<hex>`, an HMAC-SHA256 with the webhook secret over `v0:{timestamp}:{raw body}`; reject if more than 300 s off.
+- **Outbound:** sending exists only in the TypeScript SDK (`spectrum-ts`; Telegram: `telegram(app).user(id)` → `space.create(user)` → `space.send(text)`). So `server/stormcash/photon/bridge/` is a ~90-line Node process the Python `client.send` calls over localhost with a bearer token. Env for the bridge: `PROJECT_ID`, `PROJECT_SECRET`, `TELEGRAM_BOT_TOKEN`, `PHOTON_BRIDGE_TOKEN`.
+- `merchant_contacts.handle` for Telegram is the numeric Telegram user id (stringified).
 
 ### 17.1 Channels
 
