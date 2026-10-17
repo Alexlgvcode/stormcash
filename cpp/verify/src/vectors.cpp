@@ -469,6 +469,7 @@ VectorReport run_vectors(const Json& root) {
 std::string format_report(const VectorReport& report) {
   std::ostringstream out;
   out << "spec vectors: " << (report.path.empty() ? "(input)" : report.path) << " (format " << report.format << ")\n";
+  out << "  crypto backend: " << crypto_backend() << "\n";
   for (const auto& line : report.preamble) out << "  " << line << "\n";
   out << "\n";
   out << std::left << std::setw(18) << "section" << std::right << std::setw(9) << "vectors" << std::setw(7) << "pass"

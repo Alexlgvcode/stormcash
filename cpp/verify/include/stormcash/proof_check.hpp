@@ -41,10 +41,19 @@ struct ProofVerdict {
   std::string verdict;             // one-sentence summary
 };
 
+// How the caller pins the server key, in the verdict's words. The defaults are
+// the CLI's; the WebAssembly build on the proof page says where its key came
+// from instead.
+struct KeyWording {
+  std::string pinned = "pinned with --server-pub";
+  std::string how_to_pin = "pass --server-pub to pin StormCash's key";
+};
+
 // `pinned_server_pub` is StormCash's server key as the caller knows it. Without
 // it the key printed in the file is used, and the verdict says so.
 // Throws EncodingError for a file that isn't a /v1/proof document.
-ProofVerdict check_proof(const Json& doc, const std::optional<Bytes>& pinned_server_pub);
+ProofVerdict check_proof(const Json& doc, const std::optional<Bytes>& pinned_server_pub,
+                         const KeyWording& wording = {});
 
 std::string format_proof(const ProofVerdict& verdict);
 

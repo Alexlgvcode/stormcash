@@ -147,6 +147,51 @@ export async function ruleHolds(rule: string, a: Fields, b: Fields): Promise<Che
   return { label: `Unknown rule ${rule}`, ok: false };
 }
 
+// Everything the Verify button checks (Cases tab and proof page) ---------------------------
+
+export interface VerifyInput {
+  rule: string;
+  cert: SignedObject;
+  tagA: SignedObject;
+  tagB: SignedObject;
+  serverPubB64: string;
+  accept?: SignedObject; // MERCHANT_KNEW: the merchant's own ACCEPT entry
+}
+
+/** Every check runs here, in this browser, with WebCrypto. */
+export async function runChecks(input: VerifyInput): Promise<Check[]> {
+  const { rule, cert, tagA, tagB, accept } = input;
+  const serverPub = bytesToHex(b64uToBytes(input.serverPubB64));
+  const holderPub = String(cert.fields.holder_pub); // certified by the server signature checked first
+  const checks: Check[] = [
+    ...(await checkSigned(cert, serverPub, `the StormCash server key ${serverPub.slice(0, 8)}…`)),
+    ...(await checkSigned(tagA, holderPub, "the wallet key in the certificate")),
+    ...(await checkSigned(tagB, holderPub, "the wallet key in the certificate")),
+    {
+      label: "Both payments spend this certificate",
+      ok: tagA.fields.cert_id === cert.fields.cert_id && tagB.fields.cert_id === cert.fields.cert_id,
+    },
+  ];
+  if (rule === "MERCHANT_KNEW") {
+    // The two payments must themselves break R1–R3; report the first rule that holds.
+    const results = await Promise.all(
+      ["SAME_COUNTER", "BROKEN_LINK", "TOTAL_BACKWARDS"].map((r) => ruleHolds(r, tagA.fields as Fields, tagB.fields as Fields)),
+    );
+    checks.push(results.find((c) => c.ok) ?? { label: "The two payments conflict", ok: false });
+  } else {
+    checks.push(await ruleHolds(rule, tagA.fields as Fields, tagB.fields as Fields));
+  }
+  if (accept) {
+    checks.push(...(await checkSigned(accept, String(accept.fields.device_pub), "the merchant's own key")));
+    const held = (accept.fields.held_ids as string[]) ?? [];
+    checks.push({
+      label: "The merchant's log says it already held the other payment when it accepted",
+      ok: accept.fields.tag_hash === tagB.digest && held.includes(tagA.digest),
+    });
+  }
+  return checks;
+}
+
 /** Which TAG fields to paint red for a rule (§18.3: "the field that conflicts in red"). */
 export function conflictingFields(rule: string): { a: string[]; b: string[] } {
   if (rule === "SAME_COUNTER") return { a: ["counter"], b: ["counter"] };

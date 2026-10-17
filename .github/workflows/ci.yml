@@ -50,13 +50,21 @@ jobs:
         run: npm ci && npm test --if-present
 
   cpp:
+    # Every test and the shared vectors with each crypto backend (cpp/README.md):
+    # OpenSSL 3, and the portable one (p256-m) that the WebAssembly build uses.
+    name: cpp (${{ matrix.crypto }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        crypto: [openssl, portable]
     steps:
       - uses: actions/checkout@v4
       - name: Install OpenSSL 3 headers
+        if: matrix.crypto == 'openssl'
         run: sudo apt-get update && sudo apt-get install -y libssl-dev
       - name: Configure (Debug, ASan + UBSan, warnings as errors)
-        run: cmake -S cpp -B cpp/build -DCMAKE_BUILD_TYPE=Debug -DSTORMCASH_SANITIZE=ON -DSTORMCASH_WERROR=ON
+        run: cmake -S cpp -B cpp/build -DCMAKE_BUILD_TYPE=Debug -DSTORMCASH_SANITIZE=ON -DSTORMCASH_WERROR=ON -DSTORMCASH_CRYPTO=${{ matrix.crypto }}
       - name: Build
         run: cmake --build cpp/build -j 4
       - name: Unit tests
@@ -69,10 +77,34 @@ jobs:
         run: cpp/build/verify/stormcash-verify vectors spec/vectors.json --strict
       - name: Release build (optimizer-only warnings, as errors)
         run: |
-          cmake -S cpp -B cpp/build-release -DCMAKE_BUILD_TYPE=Release -DSTORMCASH_WERROR=ON -DSTORMCASH_BUILD_TESTS=OFF
+          cmake -S cpp -B cpp/build-release -DCMAKE_BUILD_TYPE=Release -DSTORMCASH_WERROR=ON -DSTORMCASH_BUILD_TESTS=OFF -DSTORMCASH_CRYPTO=${{ matrix.crypto }}
           cmake --build cpp/build-release -j 4
           cpp/build-release/verify/stormcash-verify vectors spec/vectors.json --strict
           cpp/build-release/scale/stormcash-scale run --residents 10000 --replicates 4
+
+  wasm:
+    # The proof page's C++ check (cpp/verify/wasm/): build it with the pinned
+    # Emscripten and require it to equal the committed dashboard/src/wasm/ files,
+    # so the page runs exactly the C++ the cpp job tests. The dashboard job
+    # runs those files on the real proof fixtures (src/cppverify.test.ts).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: emsdk
+        run: echo "version=$(sed -n 's/^EMSCRIPTEN_VERSION=//p' cpp/verify/wasm/build.sh)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/emsdk
+          key: emsdk-${{ steps.emsdk.outputs.version }}-${{ runner.os }}
+      - name: Install Emscripten ${{ steps.emsdk.outputs.version }}
+        run: |
+          [ -d "$RUNNER_TEMP/emsdk" ] || git clone --depth 1 --branch "${{ steps.emsdk.outputs.version }}" https://github.com/emscripten-core/emsdk.git "$RUNNER_TEMP/emsdk"
+          "$RUNNER_TEMP/emsdk/emsdk" install "${{ steps.emsdk.outputs.version }}"
+          "$RUNNER_TEMP/emsdk/emsdk" activate "${{ steps.emsdk.outputs.version }}"
+      - name: Build, and compare with the committed files
+        run: |
+          source "$RUNNER_TEMP/emsdk/emsdk_env.sh"
+          cpp/verify/wasm/build.sh --check
 
   dashboard:
     runs-on: ubuntu-latest
