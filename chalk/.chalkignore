@@ -28,3 +28,6 @@ idea
 # Git artifacts
 .git
 .github
+
+# StormDesk evals (chalk/evals): importing them deploys Chalk functions; never part of chalk apply
+evals

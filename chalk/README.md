@@ -21,3 +21,12 @@ chalk query --in merchant.id=<merchant_id hex> --out merchant.silence_ratio_6h -
 ```
 
 StormDesk reads these through `query_features` (`server/stormcash/chalk_features.py`).
+
+## Evaluations (#33, §15.3)
+
+`evals/`: the StormDesk triage eval. A 48-row dataset of detector candidates from 5 simulated towns (local per-seed databases, never Neon), the rules-only baseline and the StormDesk task (through a token-gated gateway and a cloudflared tunnel), five scorers, the `run_local.py` fallback, and `evals/results/*.json` for the Evals tab. See [`evals/README.md`](evals/README.md). `evals` is in `.chalkignore`: importing those files deploys Chalk functions.
+
+```bash
+uv run python evals/run_eval.py rules_only
+uv run python evals/run_eval.py stormdesk   # after: server/.venv/bin/python chalk/evals/stack.py up --runner ...
+```

@@ -8,6 +8,7 @@
 > **v4.4 (Oct 16):** seed-town against the hosted DB takes ~45 s instead of ~46 min: each upload is one pipelined transaction (uploads one at a time) instead of one transaction per item, with the same results (§11.2, §16.5). Marked **[v4.4]**.
 > **v4.5 (Oct 17):** Photon shapes verified (§6.3, §17): Spectrum webhooks with HMAC signatures inbound, a small Node bridge for outbound. Marked **[v4.5]**.
 > **v4.6 (Oct 16):** Chalk verified and built (#28, §15.1, §15.2): sim-time windows are an `as_of` feature (no Postgres views needed), SQL resolvers read the Neon integration `neon_stormcash`, the NWS resolver labels live vs replayed, and `query_features` calls Chalk with fallback switch `CHALK_DISABLED` (§6.3, §14.7a, §22.4). Marked **[v4.6]**.
+> **v4.7 (Oct 17):** Chalk Evaluations built (#33, §15.3): 48-row dataset from 5 seeds in local per-seed databases, a token-gated gateway behind one tunnel for the StormDesk task, a rules-only baseline task, the `run_local.py` fallback, and results files that never show a fake-runner run as StormDesk. Marked **[v4.7]**.
 > **Builds on:** "StormCash: The 10/10 Build" v3 (Oct 16, Alexandre Lugovoi, on Brian Maina's Oct 11 draft). Everything new since v3 is marked **[v4]**.
 
 ---
@@ -1410,7 +1411,18 @@ Target ~60 rows (time budget: 60 × ~60 s / 6 parallel ≈ 10 min per run).
 
 **Never type numbers into this table by hand.** The tab renders the latest stored run (`chalk/evals/results/*.json`) with the run id and timestamp.
 
-**Done when:** one full Chalk Evaluation run completes and the Evals tab renders its results with the run id.
+**[v4.7] As built (#33, `chalk/evals/README.md`; verified against docs.chalk.ai and chalkcompute 2.13.7).**
+- **Dataset.** Seeds 42, 7, 13, 99 and 2026, 72 h from a fixed T0 (2026-10-14 00:00 UTC), give **48 rows (27 honest)**, under the ~60 target. Labels come from each seed's `labels.json` by subject. `honest_subject` means "flagging it is a false flag" (every trap); a `hard_case` subject's soft candidate takes the candidate's kind. `trap_clock_drift` never raises a candidate. `meta.json` lists the labelled subjects no detector raised; no runner sees them. Re-running gives the same rows byte for byte.
+- **One local database per seed** (`stormcash_eval_<seed>`, Docker Postgres, `schema.sql` + `migrations/`), never the hosted demo DB, because towns from two seeds share the grid and would skew `merchant_silence`'s neighbour median. The towns are signed with a throwaway eval key.
+- **Task path.** One server per seed (Nessie, Photon, background loops and the worker off; `CHALK_DISABLED=1`, since `neon_stormcash` points at the demo DB, so `query_features` answers `postgres_fallback` from the eval DB). A stdlib gateway (`gateway.py`) sits in front of them behind one cloudflared quick tunnel and a bearer token. The task `sd-stormdesk-triage(seed, candidate_id)` posts a job and polls until it's done, because a Droid run can outlast the tunnel's ~100 s response limit. The gateway calls the real `POST /v1/stormdesk/run {candidate_id}` and exposes no other route.
+- **Output** = the Flag JSON plus `_run` (the server's `runner`, `citations_valid`, `missing_citations`, `fallback_from_droid`, `run_id`). A run with no Flag returns plain text, so `valid-json` fails it.
+- **`citations-valid`** reads the server's own §14.7 check, made against the eval DB when the flag was stored, so no `GET /v1/exists` endpoint was needed. It isn't in the rules-only evaluation, because the baseline cites nothing (n/a).
+- **`no-false-flag`** passes non-honest rows (the "if honest_subject" in its pass condition), and the results file also gives its honest-only mean.
+- **Every scorer returns one score.** Chalk computes no score summary for a run whose scorers return lists (checked Oct 17).
+- **Rules-only baseline** is its own Chalk task (`sd-rules-only`): deterministic, no server. **Fallback** `run_local.py` runs every row through the local gateway, uploads rows plus `agent_output`, and scores them in Chalk with a replay task.
+- **Honesty.** The results file takes its runner from the outputs. Only an all-Droid run with no fallback fills the StormDesk column (`table_column: "stormdesk"`). A fake or mixed run is saved with `runner: "fake"` / `"mixed"` and `table_column: null`.
+- `summary-quality` (LLM judge) isn't built: the environment's Model Gateway serves no models.
+- **Proven Oct 17** in the StormCash suite, 48 rows each with no row errors: rules-only `85ec3bf0-3cf2-4cd9-bde2-0fb2b0d38326`, fake runner through the tunnel `edfbe2bc-aabe-4aa7-99e5-594e217ecf12`, `run_local.py` `e0bff8a4-53e9-4545-adec-9e45a1538519`. The real Droid run waits on Factory credits (§14.2: every Droid run fails with `model_usage_exhausted`).
 
 ---
 

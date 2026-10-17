@@ -1,0 +1,88 @@
+{
+  "name": "stormdesk-triage",
+  "note": "One row per detector candidate from simulated towns (spec \u00a715.3). Every subject is simulated.",
+  "rows": 48,
+  "honest_rows": 27,
+  "seeds": [
+    {
+      "seed": 42,
+      "database": "stormcash_eval_42",
+      "start": 1791936000,
+      "hours": 72,
+      "candidates": 10,
+      "labelled_subjects": 28
+    },
+    {
+      "seed": 7,
+      "database": "stormcash_eval_7",
+      "start": 1791936000,
+      "hours": 72,
+      "candidates": 9,
+      "labelled_subjects": 28
+    },
+    {
+      "seed": 13,
+      "database": "stormcash_eval_13",
+      "start": 1791936000,
+      "hours": 72,
+      "candidates": 9,
+      "labelled_subjects": 28
+    },
+    {
+      "seed": 99,
+      "database": "stormcash_eval_99",
+      "start": 1791936000,
+      "hours": 72,
+      "candidates": 9,
+      "labelled_subjects": 28
+    },
+    {
+      "seed": 2026,
+      "database": "stormcash_eval_2026",
+      "start": 1791936000,
+      "hours": 72,
+      "candidates": 11,
+      "labelled_subjects": 28
+    }
+  ],
+  "scenarios": {
+    "colluder": 9,
+    "dark_region": 3,
+    "stolen_phone": 9,
+    "trap_quiet_region": 4,
+    "trap_remote_shop": 2,
+    "trap_stockup": 12,
+    "trap_victim_shop": 9
+  },
+  "detector_misses": [
+    {
+      "seed": 42,
+      "subject_id": "47557a7c9f308a898d7929bdb0e1aa5d",
+      "name": "Downtown Laundromat",
+      "scenario": "colluder",
+      "expected_kind": "merchant_silence"
+    },
+    {
+      "seed": 7,
+      "subject_id": "swannanoa",
+      "name": "Swannanoa",
+      "scenario": "dark_region",
+      "expected_kind": "region_dark"
+    },
+    {
+      "seed": 13,
+      "subject_id": "1e064e10e9c469c775379eca022f352e",
+      "name": "Resident 248",
+      "scenario": "stolen_phone",
+      "expected_kind": "cap_drain"
+    },
+    {
+      "seed": 99,
+      "subject_id": "swannanoa",
+      "name": "Swannanoa",
+      "scenario": "dark_region",
+      "expected_kind": "region_dark"
+    }
+  ],
+  "built_from_git_sha": "a2c7e5476c160066612acdf0443b010c2e7a7d31"
+}
