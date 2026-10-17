@@ -6,9 +6,10 @@
 //                                  system library, so it also builds to
 //                                  WebAssembly
 //
-// crypto.cpp does every check the two share before calling in here (lengths,
-// the 0x02/0x03 prefix, 0 < r, s < n, low-S), so a backend only has to get the
-// curve and the hash right. Both run the same tests and the same vectors.
+// crypto.cpp holds what the two share: it checks lengths, the 0x02/0x03 prefix
+// and 0 < r, s < n before calling in here, and does the low-S arithmetic
+// itself, so a backend only has to get the curve and the hash right. Both run
+// the same tests and the same vectors.
 #pragma once
 
 #include "stormcash/bytes.hpp"

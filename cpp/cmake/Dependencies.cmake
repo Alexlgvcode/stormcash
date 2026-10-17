@@ -43,9 +43,9 @@ endif()
 
 if(STORMCASH_CRYPTO STREQUAL "portable")
   # p256-m (Apache-2.0): P-256 ECDSA verification for the portable backend,
-  # upstream (github.com/mpg/p256-m) at its latest commit, the code Mbed TLS
-  # ships in 3rdparty/p256-m. One C file; verify/CMakeLists.txt compiles it
-  # through verify/src/p256m_sec1.c. SOURCE_SUBDIR points at a folder with no
+  # upstream (github.com/mpg/p256-m) at its latest commit. Mbed TLS ships a
+  # lightly adapted copy in 3rdparty/p256-m. One C file; verify/CMakeLists.txt
+  # compiles it through verify/src/p256m_sec1.c. SOURCE_SUBDIR points at a folder with no
   # CMakeLists.txt: download only.
   FetchContent_Declare(p256m
     URL https://github.com/mpg/p256-m/archive/44af59e0cff5d3b1d653bc333814077ef830e1bd.tar.gz
