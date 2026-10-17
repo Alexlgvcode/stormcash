@@ -1,5 +1,17 @@
 @import "tailwindcss";
 
+/* Intro slide fade-in; used through motion-safe: so reduced motion skips it. */
+@theme {
+  --animate-intro-in: intro-in 0.6s ease-out both;
+
+  @keyframes intro-in {
+    from {
+      opacity: 0;
+      transform: translateY(0.75rem);
+    }
+  }
+}
+
 :root {
   color-scheme: dark;
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;

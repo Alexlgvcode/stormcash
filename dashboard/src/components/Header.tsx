@@ -1,4 +1,4 @@
-// Persistent header (spec §18.1): title, Demo mode, connection dot, Reset demo, clock.
+// Persistent header (spec §18.1): title, Demo mode, connection dot, Intro, Reset demo, clock.
 import { useEffect, useState } from "react";
 import { ApiError, getJSON, operatorPost, type Health } from "../api";
 import { useEventsStatus } from "../events";
@@ -50,6 +50,14 @@ export function Header() {
       </span>
       <div className="ml-auto flex items-center gap-4">
         {reset.message && <span className="text-sm text-slate-300">{reset.message}</span>}
+        <a
+          href="#intro"
+          aria-keyshortcuts="I"
+          title="Opening slide (press I)"
+          className="rounded-lg bg-slate-800 px-4 py-2 text-base font-semibold text-white hover:bg-slate-700"
+        >
+          Intro
+        </a>
         <button
           onClick={resetDemo}
           disabled={reset.busy}
