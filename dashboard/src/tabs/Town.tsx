@@ -40,7 +40,7 @@ function TownMap({ town, pulses }: { town: Town; pulses: Pulse[] }) {
     if (a.region_id) alertsByRegion.set(a.region_id, [...(alertsByRegion.get(a.region_id) ?? []), a]);
   }
   return (
-    <svg viewBox={`0 0 ${w * CELL} ${h * CELL}`} className="w-full border border-rule" role="img"
+    <svg viewBox={`0 0 ${w * CELL} ${h * CELL}`} className="w-full max-w-3xl border border-rule" role="img"
       aria-label="Map of the simulated town">
       <defs>
         <pattern id="hatch" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
@@ -54,13 +54,14 @@ function TownMap({ town, pulses }: { town: Town; pulses: Pulse[] }) {
             <rect x={r.x * CELL} y={r.y * CELL} width={r.w * CELL} height={r.h * CELL} fill={REGION_FILL[i % 2]}
               stroke={C.rule} />
             {dark && <rect x={r.x * CELL} y={r.y * CELL} width={r.w * CELL} height={r.h * CELL} fill="url(#hatch)" />}
-            <text x={r.x * CELL + 8} y={r.y * CELL + 22} fill={dark ? C.warning : C.label} fontSize="15" fontWeight="500">
+            <text x={r.x * CELL + 10} y={r.y * CELL + 28} fill={dark ? C.warning : C.label} fontSize="21" fontWeight="500">
               {r.display_name}
               {dark ? " · dark" : ""}
             </text>
             {(alertsByRegion.get(r.region_id) ?? []).map((a, j) => (
-              <text key={a.alert_id} x={r.x * CELL + 8} y={r.y * CELL + 42 + j * 18} fill={C.warning} fontSize="13">
-                ⚠ {a.event} ({a.source})
+              <text key={a.alert_id} x={r.x * CELL + 10} y={r.y * CELL + 54 + j * 48} fill={C.warning} fontSize="19">
+                <tspan>⚠ {a.event}</tspan>
+                <tspan x={r.x * CELL + 10} dy="22">({a.source})</tspan>
               </text>
             ))}
           </g>
@@ -72,7 +73,7 @@ function TownMap({ town, pulses }: { town: Town; pulses: Pulse[] }) {
         const held = m.simulated && !m.pool_eligible;
         return (
           <g key={m.merchant_id}>
-            <circle cx={cx} cy={cy} r={m.simulated ? (held ? 6 : 5) : 9}
+            <circle cx={cx} cy={cy} r={m.simulated ? (held ? 8 : 6) : 12}
               fill={m.simulated ? (held ? C.danger : C.simulated) : C.real}>
               <title>
                 {m.display_name}
@@ -81,8 +82,8 @@ function TownMap({ town, pulses }: { town: Town; pulses: Pulse[] }) {
               </title>
             </circle>
             {(!m.simulated || held) && (
-              <text x={cx + 13} y={cy + 5} fill={held ? C.danger : C.heading} fontSize="14" fontWeight="600"
-                stroke="#FFFFFF" strokeWidth="4" paintOrder="stroke">
+              <text x={cx + 15} y={cy + 7} fill={held ? C.danger : C.heading} fontSize="20" fontWeight="600"
+                stroke="#FFFFFF" strokeWidth="5" paintOrder="stroke">
                 {m.display_name}
               </text>
             )}
