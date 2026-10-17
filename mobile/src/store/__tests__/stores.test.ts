@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
-  detailsHash, genesis, publicKeyOf, signObject, tagHash, verifyDlog, checkDlogChain,
+  detailsHash, genesis, publicKeyOf, signObject, tagHash, verifyDlog, logTamper,
   type Cert, type Pay, type Tag,
 } from '../../protocol';
 import { resetDb } from '../db';
@@ -88,7 +88,7 @@ describe('device log and policy', () => {
     const e2 = appendLog({ kind: 'ACCEPT', tag_hash: 'bb'.repeat(32), cert_id: CERT_ID, held_ids: [] }, mayaPub, MAYA, 11);
     expect(e2.seq).toBe(2);
     expect(verifyDlog(e1) && verifyDlog(e2)).toBe(true);
-    expect(checkDlogChain(logEntries())).toEqual({ ok: true });
+    expect(logTamper(logEntries())).toBeNull();
     expect(countsByKind()).toEqual({ DLOG: 2 });
   });
 
