@@ -1748,7 +1748,7 @@ Title, "Demo mode", connection dot, **Reset demo** button (calls `/v1/demo/reset
 - Sliders (§16.6) + charts: share refused offline, caught at settlement, loss per cheater, time to settlement.
 - **[v4.3]** `GET /v1/town` also returns `dark_regions` (a `region_dark` candidate in the last 6 h), active alerts with their source, and the latest simulator `stats.json` for a one-line summary. Payment pulses come from `payment` SSE events; merchants without pool eligibility are drawn amber.
 
-- **[v4.23] As built (#93).** Three views: **Map** (a summary strip from the seeded town's `stats.json`, labelled simulated, then the map in light colors and a few recent relay paths), **Relay paths** and **What-if** (the sliders and the default-vs-yours table).
+- **[v4.23] As built (#93).** Three views: **Map** (a summary strip from the seeded town's `stats.json`, labelled simulated, then the map in light colors and a few recent relay paths), **Relay paths** and **What-if** (the sliders and the default-vs-yours table). The 6-hour window for dark areas and alerts is measured on the town's clock, its latest simulated payment (else the latest payment), so a real phone paying now doesn't hide the seeded town's.
 
 ### 18.5 Evals tab (Chalk add-on)
 
