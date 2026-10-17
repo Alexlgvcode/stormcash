@@ -89,6 +89,8 @@ class RunOutcome:
     usage: dict | None = None  # Droid only: tokens and Factory credits, summed over attempts
     model: str | None = None  # the model the session actually ran on (Factory can switch it, e.g. to Droid Core)
     model_requested: str | None = None
+    attempts: list[dict] | None = None  # Droid only: one {attempt, ok, error} per session (structured-output retry)
+    permission_denials: list[dict] | None = None  # Droid only: what the permission handler refused ([] when nothing)
 
 
 USAGE_FIELDS = ("input_tokens", "output_tokens", "cache_creation_tokens", "cache_read_tokens", "thinking_tokens",
@@ -257,9 +259,9 @@ class FakeRunner:
         cited = [normalize(e).lower() for e in proposal.evidence_ids]
         confirmed = [e for e in cited if e in seen]
         baseline = DEFAULT_ACTIONS[kind]
+        where = {"merchant_silence": "payments", "cap_drain": "cert chain"}.get(kind, "region")
         reasons = [f"Fake reviewer: the rules-only baseline for {kind} is {baseline}; no agent judgement was made.",
-                   f"Fake reviewer: re-read {len(confirmed)} of the {len(cited)} cited records in the "
-                   f"{'payments' if kind == 'merchant_silence' else 'cert chain' if kind == 'cap_drain' else 'region'}."]
+                   f"Fake reviewer: re-read {len(confirmed)} of the {len(cited)} cited records in the {where}."]
         if proposal.kind == kind and proposal.proposed_action == baseline:
             return Review(verdict="agree", reasons=reasons, evidence_ids=confirmed)
         if proposal.kind == "none":
@@ -297,8 +299,12 @@ def _features_line(current: dict, quoted: tuple[str, ...]) -> str:
 # Droid runner --------------------------------------------------------------------------------
 
 
-def permission_handler(request) -> Any:
-    """Allow only our own read-only MCP tools; refuse everything else (§14.2, §14.7)."""
+DENIED = "StormDesk may only use its read-only tools"
+
+
+def permission_handler(request, denials: list[dict] | None = None) -> Any:
+    """Allow only our own read-only MCP tools; refuse everything else (§14.2, §14.7). Each refused action is
+    appended to `denials` ({tool, server, reason}) so the run's transcript shows it."""
     from droid_sdk import PermissionResponse, ToolConfirmationOutcome
     from droid_sdk.permissions import McpToolAction
 
@@ -309,9 +315,14 @@ def permission_handler(request) -> Any:
         return name in tools.TOOL_NAMES
 
     allowed = bool(request.actions) and all(ours(a) for a in request.actions)
+    if not allowed and denials is not None:
+        refused = [a for a in request.actions if not ours(a)] or [None]  # None: a request naming no action
+        denials += [{"tool": getattr(a, "tool_name", None) or getattr(getattr(a, "tool_use", None), "name", None)
+                     or (type(a).__name__ if a is not None else None),
+                     "server": getattr(a, "server_name", None), "reason": DENIED} for a in refused]
     return PermissionResponse(
         selected_option=ToolConfirmationOutcome.PROCEED_ONCE if allowed else ToolConfirmationOutcome.CANCEL,
-        comment=None if allowed else "StormDesk may only use its read-only tools",
+        comment=None if allowed else DENIED,
     )
 
 
@@ -356,10 +367,12 @@ class DroidRunner:
         from droid_sdk import InteractionHandlers, Session, ToolCall, ToolResult
 
         config = session_config(self.deps, job.system_prompt)
-        handlers = InteractionHandlers(on_permission=permission_handler)
+        denials: list[dict] = []
+        handlers = InteractionHandlers(on_permission=lambda request: permission_handler(request, denials))
         error, session_id, usage = None, None, None
         requested = self.model or "auto"
         model = None
+        attempts: list[dict] = []
         for attempt in (1, 2):  # a structured-output failure is a value: retry once (§14.2)
             async with Session(model=self.model, config=config, interactions=handlers, api_key=self.api_key) as s:
                 stream = s.stream(prompt, output=job.output_model, timeout=RUN_TIMEOUT_S)
@@ -373,22 +386,27 @@ class DroidRunner:
             session_id = result.session_id
             usage = add_usage(usage, result.usage)
             log.info("StormDesk %s attempt %s on %s (asked for %s): %s", job.kind, attempt, model, requested, usage)
-            used = {"usage": usage, "model": model, "model_requested": requested}
+            used = {"usage": usage, "model": model, "model_requested": requested, "attempts": attempts,
+                    "permission_denials": denials}
             if result.success and result.structured_output is not None:
                 try:
-                    return RunOutcome(self.name, job.output_model.model_validate(_thaw(result.structured_output)),
-                                      session_id, **used)
+                    output = job.output_model.model_validate(_thaw(result.structured_output))
+                    attempts.append({"attempt": attempt, "ok": True, "error": None})
+                    return RunOutcome(self.name, output, session_id, **used)
                 except ValidationError as exc:
                     error = f"output did not match {job.output_model.__name__}: {exc.error_count()} errors"
             elif result.subtype == "error_during_execution":
                 # The agent couldn't run (e.g. "model_usage_exhausted"): retrying won't help.
                 message = getattr(result.error, "message", None) or result.text or "no output"
-                return RunOutcome(self.name, None, session_id, f"error_during_execution: {message}", unavailable=True,
-                                  **used)
+                error = f"error_during_execution: {message}"
+                attempts.append({"attempt": attempt, "ok": False, "error": error})
+                return RunOutcome(self.name, None, session_id, error, unavailable=True, **used)
             else:
                 error = f"{result.subtype}: {result.structured_output_error or 'no output'}"
+            attempts.append({"attempt": attempt, "ok": False, "error": error})
             log.warning("StormDesk attempt %s failed: %s", attempt, error)
-        return RunOutcome(self.name, None, session_id, error, usage=usage, model=model, model_requested=requested)
+        return RunOutcome(self.name, None, session_id, error, usage=usage, model=model, model_requested=requested,
+                          attempts=attempts, permission_denials=denials)
 
 
 def session_model(session) -> str | None:

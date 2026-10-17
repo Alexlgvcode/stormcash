@@ -123,8 +123,8 @@ def after_review(proposal: dict, status: str, review: dict | None) -> tuple[str,
     return "open", True
 
 
-def _store(deps, job: Job, run_id: int, outcome: RunOutcome, steps: Steps, fallback: str | None = None,
-           fallback_usage: dict | None = None, duration_s: float | None = None) -> dict:
+def _store(deps, job: Job, run_id: int, outcome: RunOutcome, steps: Steps, fallback: RunOutcome | None = None,
+           duration_s: float | None = None) -> dict:
     output = outcome.output
     with deps.pool.connection() as conn:
         missing: list[str] = []
@@ -135,10 +135,16 @@ def _store(deps, job: Job, run_id: int, outcome: RunOutcome, steps: Steps, fallb
         status = "succeeded" if output is not None and valid else "invalid" if output is not None else "failed"
         version = REVIEW_PROMPT_VERSION if job.kind == "review" else PROMPT_VERSION
         transcript = {"runner": outcome.runner, "steps": steps.transcript, "missing_citations": missing,
-                      "error": outcome.error, "fallback_from_droid": fallback, "model": outcome.model,
-                      "model_requested": outcome.model_requested, "usage": outcome.usage,
-                      "fallback_usage": fallback_usage, "duration_s": duration_s,
+                      "error": outcome.error, "fallback_from_droid": fallback.error if fallback else None,
+                      "model": outcome.model, "model_requested": outcome.model_requested, "usage": outcome.usage,
+                      "fallback_usage": fallback.usage if fallback else None, "duration_s": duration_s,
                       "prompt_version": version if outcome.runner == "droid" else None}
+        # Droid only (absent = not recorded): each structured-output attempt, and what the permission handler refused.
+        for key, value in (("attempts", outcome.attempts), ("permission_denials", outcome.permission_denials),
+                           ("fallback_attempts", fallback.attempts if fallback else None),
+                           ("fallback_permission_denials", fallback.permission_denials if fallback else None)):
+            if value is not None:
+                transcript[key] = value
         if job.kind == "review":
             transcript["reviewed"] = {"flag_id": job.flag_id, "run_id": job.reviewed_run_id, "proposal": job.proposal}
         run = one(
@@ -149,7 +155,8 @@ def _store(deps, job: Job, run_id: int, outcome: RunOutcome, steps: Steps, fallb
              outcome.session_id, outcome.error, run_id),
         )
         result = {"run_id": run_id, "runner": outcome.runner, "status": status, "citations_valid": valid,
-                  "missing_citations": missing, "error": outcome.error, "fallback_from_droid": fallback,
+                  "missing_citations": missing, "error": outcome.error,
+                  "fallback_from_droid": transcript["fallback_from_droid"],
                   "model": outcome.model, "model_requested": outcome.model_requested, "usage": outcome.usage,
                   "prompt_version": transcript["prompt_version"], "duration_s": duration_s,
                   "session_id": outcome.session_id, "job": job.kind,
@@ -260,7 +267,7 @@ class StormDesk:
             })
 
         steps = Steps(on_step=on_step)
-        fallback, fallback_usage = None, None
+        fallback = None
         started = time.monotonic()
         async with self.slots:
             try:
@@ -271,15 +278,14 @@ class StormDesk:
             if outcome.unavailable and runner.name == "droid":
                 # Droid couldn't run at all (no credits, CLI gone): answer with the labelled fake runner
                 # now, skip Droid for a while, and record why.
-                fallback, fallback_usage = outcome.error, outcome.usage
+                fallback = outcome
                 self.droid_down_until = time.monotonic() + DROID_COOLDOWN_S
-                self.droid_down_reason = fallback
+                self.droid_down_reason = outcome.error
                 runner = FakeRunner(self.deps)
                 steps = Steps(on_step=on_step)
                 outcome = await runner.run(job, prompt, steps)
         duration = round(time.monotonic() - started, 1)
-        result = await asyncio.to_thread(_store, self.deps, job, run_id, outcome, steps, fallback, fallback_usage,
-                                         duration)
+        result = await asyncio.to_thread(_store, self.deps, job, run_id, outcome, steps, fallback, duration)
         self.deps.events.publish("stormdesk_step", {"run_id": run_id, "job": job.kind, "subject": subject,
                                                     "runner": runner.name, "done": True, "status": result["status"]})
         if result.get("flag"):

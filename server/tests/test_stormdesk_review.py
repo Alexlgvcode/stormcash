@@ -236,7 +236,7 @@ def test_a_droid_review_records_model_prompt_credits_and_duration(deps, double_s
     # Its own system prompt; the same read-only tools, built-ins off.
     config = opened[0]["config"]
     assert config.system_prompt.startswith("You are the StormDesk reviewer") and "Execute" in config.disabled_tools
-    assert opened[0]["interactions"].on_permission is runner.permission_handler
+    assert opened[0]["interactions"].on_permission is not None
     with deps.pool.connection() as conn:
         row = one(conn, "SELECT * FROM stormdesk_runs WHERE job = 'review'")
     assert row["session_id"] == "droid-r1" and row["transcript"]["usage"]["factory_credits"] == 2100.0
@@ -298,3 +298,90 @@ def test_review_endpoint_on_a_proposal_passed_in(app_client, deps, double_spend)
                            headers=OPERATOR).status_code == 400
     assert app_client.post("/v1/stormdesk/review", json={"flag_id": 1, "proposal": stored},
                            headers=OPERATOR).status_code == 400
+
+
+# What a run records for the Droid console: attempts and permission denials ---------------------
+
+
+def test_a_droid_run_records_its_attempts_and_what_the_permission_handler_refused(deps, double_spend, monkeypatch):
+    from datetime import timedelta
+
+    import droid_sdk
+    from droid_sdk import PermissionRequest, RunFailure, RunSuccess, ToolConfirmationOutcome, ToolUseBlock
+    from droid_sdk.permissions import ExecuteAction, McpToolAction
+
+    use = ToolUseBlock(id="t1", name="Execute", input={})
+    shell = ExecuteAction(tool_use=use, command="curl x", full_command="curl x", impact_level="high")
+    other = McpToolAction(tool_use=use, tool_name="mcp__evil__wire", impact_level="high", server_name="evil",
+                          actual_tool_name="wire")
+    ours = McpToolAction(tool_use=use, tool_name="mcp__stormdesk__get_case", impact_level="low",
+                         server_name="stormdesk", actual_tool_name="get_case")
+    answer = Review(verdict="agree", reasons=["r"], evidence_ids=[]).model_dump()
+    results = [RunFailure(subtype="error_structured_output", text="", messages=(), usage=None,
+                          duration=timedelta(0), turn_count=1, session_id="droid-1"),
+               RunSuccess(text="", messages=(), usage=None, duration=timedelta(0), turn_count=1,
+                          session_id="droid-2", structured_output=answer)]
+    answers = []
+
+    class Session:
+        def __init__(self, **kw):
+            self.on_permission = kw["interactions"].on_permission
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+        def stream(self, prompt, output, timeout):
+            session = self
+
+            class Stream:
+                result = results.pop(0)
+
+                def __aiter__(self):
+                    return self
+
+                async def __anext__(self):
+                    if not answers:  # the agent tries a shell command and another server's tool once
+                        for request in ([shell], [ours, other], [ours]):
+                            answers.append(session.on_permission(PermissionRequest(actions=request, options=[])))
+                    raise StopAsyncIteration
+
+            return Stream()
+
+    monkeypatch.setattr(droid_sdk, "Session", Session)
+    desk = StormDesk(deps)
+    flag_id = triage(desk, double_spend)["flag"]["flag_id"]
+    out = asyncio.run(desk.review(flag_id=flag_id, runner=runner.DroidRunner(deps)))
+    assert out["status"] == "succeeded"
+    assert [a.selected_option for a in answers] == [ToolConfirmationOutcome.CANCEL, ToolConfirmationOutcome.CANCEL,
+                                                    ToolConfirmationOutcome.PROCEED_ONCE]
+    with deps.pool.connection() as conn:
+        transcript = scalar(conn, "SELECT transcript FROM stormdesk_runs WHERE job = 'review'")
+        triage_transcript = scalar(conn, "SELECT transcript FROM stormdesk_runs WHERE job = 'triage'")
+    assert transcript["attempts"] == [{"attempt": 1, "ok": False, "error": "error_structured_output: no output"},
+                                      {"attempt": 2, "ok": True, "error": None}]
+    assert transcript["permission_denials"] == [
+        {"tool": "Execute", "server": None, "reason": "StormDesk may only use its read-only tools"},
+        {"tool": "mcp__evil__wire", "server": "evil", "reason": "StormDesk may only use its read-only tools"}]
+    # The fake runner has no attempts or permission handler: the keys are absent ("not recorded"), never zero.
+    assert "attempts" not in triage_transcript and "permission_denials" not in triage_transcript
+
+
+def test_a_clean_droid_run_records_one_attempt_and_no_denials(deps, double_spend, monkeypatch):
+    from datetime import timedelta
+
+    from droid_sdk import RunSuccess
+
+    desk = StormDesk(deps)
+    flag_id = triage(desk, double_spend)["flag"]["flag_id"]
+    patch_droid(monkeypatch, [RunSuccess(text="", messages=(), usage=None, duration=timedelta(0), turn_count=1,
+                                         session_id="droid-1",
+                                         structured_output=Review(verdict="agree", reasons=[], evidence_ids=[])
+                                         .model_dump())])
+    asyncio.run(desk.review(flag_id=flag_id, runner=runner.DroidRunner(deps)))
+    with deps.pool.connection() as conn:
+        transcript = scalar(conn, "SELECT transcript FROM stormdesk_runs WHERE job = 'review'")
+    assert transcript["attempts"] == [{"attempt": 1, "ok": True, "error": None}]
+    assert transcript["permission_denials"] == []

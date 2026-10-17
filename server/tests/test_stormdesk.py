@@ -201,6 +201,7 @@ def test_droid_out_of_credits_is_unavailable_not_retried(deps, double_spend, mon
         Job("triage", candidate_id=double_spend["candidate_id"]), "prompt", Steps()))
     assert outcome.unavailable and outcome.output is None and outcome.session_id == "droid-1"
     assert outcome.error == "error_during_execution: Agent turn ended: model_usage_exhausted"
+    assert outcome.attempts == [{"attempt": 1, "ok": False, "error": outcome.error}]
     assert len(opened) == 1  # no point retrying a run that couldn't start
 
 
