@@ -36,7 +36,7 @@ export function QrSyncScreen() {
     syncManager.newSession(
       (m) => outbox.current.push(m),
       (r: SessionResult | null, err?: string) =>
-        setResult(r ? `Synced with ${r.peerLabel ?? r.peerPub.slice(2, 10)}: got ${r.received}, sent ${r.sent}` : `Failed: ${err}`),
+        setResult(r ? `Synced with ${r.peerLabel ?? r.peerPub.slice(0, 8)}: got ${r.received}, sent ${r.sent}` : `Failed: ${err}`),
       QR_TIMEOUT_MS,
     );
 
