@@ -1,6 +1,6 @@
 # StormCash on Devpost
 
-Paste each section into the matching Devpost field. One thing is still marked **FILL BEFORE SUBMIT**: the demo video link. Don't type any number that isn't already here: every figure below comes from a real run or from the code (eval numbers from Chalk runs, listed with their ids in the README).
+Paste each section into the matching Devpost field. One thing is still marked **FILL BEFORE SUBMIT**: the demo video link. Brian and Alex: read "How we worked as a team" and "What we learned" and adjust anything that doesn't sound like you before pasting. Don't type any number that isn't already here: every figure below comes from a real run or from the code (eval numbers from Chalk runs, listed with their ids in the README).
 
 Submission deadline: **Sunday Oct 18, 8:00 AM** (aim for 7:30). Track: **Digital Trust**. Sponsor challenges: **Best Use of Nessie (Capital One)**, **Factory Droid SDK**, **Chalk**, **Photon**.
 
@@ -44,6 +44,13 @@ We wanted to know how much of a payment can be checked with no network at all, a
 - **C++ verifier:** `stormcash-verify`, a third independent implementation of the protocol's checks (OpenSSL), which reproduces every shared test vector and checks a cheating proof offline from the command line.
 - **Dashboard:** React, Vite and TypeScript, with Accounts, Cases, Town and Evals tabs and a public "Verify it yourself" proof page that checks the signatures in the judge's own browser.
 
+### How we worked as a team
+
+- **A clean split.** Brian owned everything on the phones: the Expo app, Face ID and QR, the offline checks, Multipeer sync and relay, Secure Enclave keys, and the Photon messaging agent. Alex owned everything behind them: the server, settlement and Nessie, the fraud rules, the simulator, the dashboard, StormDesk on Droid, the Chalk evaluations and the C++ verifier.
+- **A contract between our halves.** Before either side built on the protocol, we wrote a spec and generated shared test vectors. Brian's TypeScript and Alex's Python had to reproduce them byte for byte, so the phones and the server agreed on every signature without either of us reading the other's code.
+- **One workflow for everything.** We tracked the work as 50+ GitHub issues, one per piece, grouped by workstream and by schedule block. Every change went in through a pull request (61 merged by Saturday evening), and CI had to pass on all four parts (server, mobile, dashboard and C++) before anything merged. The spec stayed the source of truth: when code changed the design, the spec changed in the same pull request.
+- **Checking each other's assumptions.** Hour-one checks against the real APIs (Nessie, Droid, Chalk) changed our design early. Nessie's balances don't move, so we redesigned settlement around withdrawal and deposit pairs before writing it.
+
 ## Challenges we ran into
 
 - **Nessie didn't work the way we expected.** In hour one we found that account balances in the current Nessie API are fixed when an account is created, transfers have no payee, and amounts are whole dollars. We redesigned settlement so every money movement is a matched withdrawal and deposit, and the dashboard computes live balances from Nessie's own transaction records.
@@ -66,6 +73,10 @@ We wanted to know how much of a payment can be checked with no network at all, a
 - How far offline verification can go, and exactly where it has to stop.
 - Why gossip protocols and epidemic routing suit disaster networks better than consensus.
 - How to evaluate an agent honestly: deliberate traps, a rules-only baseline, and numbers that only ever come from a real run.
+- How to split a system between two people so neither blocks the other: agree on a written contract and machine-checked test vectors first, then build in parallel.
+- Mobile: native iOS peer-to-peer (Multipeer Connectivity), Secure Enclave keys and React Native native modules, all without a paid Apple developer account.
+- Backend: designing settlement around a bank API's real behavior, double-entry ledgers and reconciliation, and pipelining a hosted database (46 minutes down to 40 seconds).
+- Agents: an agent's first prompt can be badly miscalibrated, and only a real evaluation shows it. A second agent reviewing the first caught cases the first missed.
 
 ## What's next for StormCash
 
