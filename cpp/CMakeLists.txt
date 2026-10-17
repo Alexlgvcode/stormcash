@@ -29,6 +29,15 @@ if(EMSCRIPTEN)
   # (verify/wasm/), nothing else.
   set(STORMCASH_CRYPTO "portable" CACHE STRING "Crypto backend: openssl or portable" FORCE)
   set(STORMCASH_BUILD_TESTS OFF CACHE BOOL "Build the unit tests (fetches GoogleTest)" FORCE)
+  # Every object must agree on how exceptions work (verify/wasm/CMakeLists.txt).
+  # The file prefix maps keep this checkout's paths out of the output, so the
+  # build is the same on any machine (CI compares it with the committed file).
+  # -Oz: the page downloads this on a phone. Not -flto: with Emscripten
+  # 6.0.10, LTO makes thrown exceptions escape their catch blocks.
+  add_compile_options(-fwasm-exceptions -Oz
+    -ffile-prefix-map=${CMAKE_SOURCE_DIR}=cpp
+    -ffile-prefix-map=${CMAKE_BINARY_DIR}=build)
+  add_link_options(-Oz)
 endif()
 if(NOT STORMCASH_CRYPTO MATCHES "^(openssl|portable)$")
   message(FATAL_ERROR "STORMCASH_CRYPTO must be openssl or portable, not '${STORMCASH_CRYPTO}'")

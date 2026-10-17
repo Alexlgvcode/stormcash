@@ -82,6 +82,30 @@ jobs:
           cpp/build-release/verify/stormcash-verify vectors spec/vectors.json --strict
           cpp/build-release/scale/stormcash-scale run --residents 10000 --replicates 4
 
+  wasm:
+    # The proof page's C++ check (cpp/verify/wasm/): build it with the pinned
+    # Emscripten and require it to equal the committed dashboard/src/wasm/ files,
+    # so the page runs exactly the C++ the cpp job tests. The dashboard job
+    # runs those files on the real proof fixtures (src/cppverify.test.ts).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: emsdk
+        run: echo "version=$(sed -n 's/^EMSCRIPTEN_VERSION=//p' cpp/verify/wasm/build.sh)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/emsdk
+          key: emsdk-${{ steps.emsdk.outputs.version }}-${{ runner.os }}
+      - name: Install Emscripten ${{ steps.emsdk.outputs.version }}
+        run: |
+          [ -d "$RUNNER_TEMP/emsdk" ] || git clone --depth 1 --branch "${{ steps.emsdk.outputs.version }}" https://github.com/emscripten-core/emsdk.git "$RUNNER_TEMP/emsdk"
+          "$RUNNER_TEMP/emsdk/emsdk" install "${{ steps.emsdk.outputs.version }}"
+          "$RUNNER_TEMP/emsdk/emsdk" activate "${{ steps.emsdk.outputs.version }}"
+      - name: Build, and compare with the committed files
+        run: |
+          source "$RUNNER_TEMP/emsdk/emsdk_env.sh"
+          cpp/verify/wasm/build.sh --check
+
   dashboard:
     runs-on: ubuntu-latest
     steps:

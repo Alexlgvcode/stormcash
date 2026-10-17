@@ -1,0 +1,4 @@
+# Built by cpp/verify/wasm/build.sh; CI checks they match the C++ sources.
+# Byte for byte: no line-ending conversion, no text diffs.
+stormcash_verify.mjs binary linguist-generated
+stormcash_verify.wasm binary linguist-generated

@@ -78,7 +78,7 @@ Bytes parse_public_key_arg(const std::string& text) {
   return pub;
 }
 
-ProofVerdict check_proof(const Json& doc, const std::optional<Bytes>& pinned_server_pub) {
+ProofVerdict check_proof(const Json& doc, const std::optional<Bytes>& pinned_server_pub, const KeyWording& wording) {
   if (!doc.is_object()) throw EncodingError("a /v1/proof document is a JSON object");
   for (const auto& key : kProofKeys) {
     if (!doc.contains(key)) throw EncodingError("not a /v1/proof document: missing '" + key + "'");
@@ -99,9 +99,9 @@ ProofVerdict check_proof(const Json& doc, const std::optional<Bytes>& pinned_ser
   // Which server key the certificate is checked against.
   Bytes file_server_pub = b64u_decode(doc.at("server_pub").get<std::string>());
   Bytes server_pub = pinned_server_pub.value_or(file_server_pub);
-  std::string key_source = pinned_server_pub ? "pinned with --server-pub" : "taken from this file, not pinned";
+  std::string key_source = pinned_server_pub ? wording.pinned : "taken from this file, not pinned";
   if (!pinned_server_pub) {
-    c.note("the server key comes from the file being checked; pass --server-pub to pin StormCash's key");
+    c.note("the server key comes from the file being checked; " + wording.how_to_pin);
   } else if (file_server_pub != *pinned_server_pub) {
     c.note("the file names a different server key (" + to_hex(file_server_pub) + "); the pinned key is used");
   }
