@@ -1,4 +1,4 @@
-"""StormDesk API (spec §12.1, WS5): run a job, read flags and stored runs."""
+"""StormDesk API (spec §12.1, WS5): run a job or a review, read flags and stored runs."""
 
 from __future__ import annotations
 
@@ -60,6 +60,24 @@ async def stormdesk_run(body: RunIn, request: Request, x_sc_operator: str | None
     job = Job("triage", candidate_id=body.candidate_id) if body.candidate_id is not None \
         else Job("investigate", case_id=body.case_id)
     return await request.app.state.stormdesk.run(job)
+
+
+class ReviewIn(BaseModel):
+    flag_id: int | None = None
+    candidate_id: int | None = None
+    proposal: dict | None = None  # a Flag to review instead of the stored one (needs candidate_id)
+
+
+@router.post("/v1/stormdesk/review")
+async def stormdesk_review(body: ReviewIn, request: Request, x_sc_operator: str | None = Header(None)) -> dict:
+    """Run the reviewer now (§14.7b) on a stored flag, or on a proposal passed in with its candidate
+    (stored as a run, `flags` untouched). The reviewer never acts; `after_review` says where the flag goes."""
+    require_operator(x_sc_operator)
+    if (body.flag_id is None) == (body.candidate_id is None):
+        raise HTTPException(400, "give exactly one of flag_id or candidate_id")
+    if body.proposal is not None and body.candidate_id is None:
+        raise HTTPException(400, "a proposal needs its candidate_id")
+    return await request.app.state.stormdesk.review(body.flag_id, body.candidate_id, body.proposal)
 
 
 def _flag_row(row: dict) -> dict:

@@ -7,7 +7,8 @@
   It calls the same tools and applies the rules-only baseline (flag every
   candidate with its default action, §13). Its output always says "fake
   runner" and its session id starts with "fake-", so it is never presented as
-  an agent's judgement (§0 rule 3).
+  an agent's judgement (§0 rule 3). As the reviewer (§14.7b) it compares the
+  proposal with that baseline and says "Fake reviewer".
 
 STORMDESK_RUNNER=droid|fake|auto picks one; auto uses Droid only when the SDK,
 the `droid` CLI and FACTORY_API_KEY are all present (`droid` also works with a
@@ -30,8 +31,9 @@ from typing import Any, Literal
 from pydantic import BaseModel, ValidationError
 
 from . import tools
-from .prompt import STORMDESK_PROMPT
-from .schemas import AppealReply, CaseFile, Flag
+from .citations import normalize
+from .prompt import REVIEW_PROMPT, STORMDESK_PROMPT
+from .schemas import AppealReply, CaseFile, Flag, Review
 
 log = logging.getLogger(__name__)
 
@@ -58,15 +60,23 @@ FEATURE_CHECK = {
 
 @dataclass
 class Job:
-    kind: Literal["investigate", "triage", "respond"]
+    kind: Literal["investigate", "triage", "respond", "review"]
     case_id: int | None = None
     candidate_id: int | None = None
     merchant_id: str | None = None
     message: str | None = None
+    # review (§14.7b): StormDesk's Flag output under review, and where it came from.
+    proposal: dict | None = None
+    flag_id: int | None = None  # the stored flag the review is for (None: a proposal passed in, e.g. by an eval)
+    reviewed_run_id: int | None = None
 
     @property
     def output_model(self) -> type[BaseModel]:
-        return {"investigate": CaseFile, "triage": Flag, "respond": AppealReply}[self.kind]
+        return {"investigate": CaseFile, "triage": Flag, "respond": AppealReply, "review": Review}[self.kind]
+
+    @property
+    def system_prompt(self) -> str:
+        return REVIEW_PROMPT if self.kind == "review" else STORMDESK_PROMPT
 
 
 @dataclass
@@ -143,6 +153,8 @@ class FakeRunner:
             return RunOutcome(self.name, await self._investigate(job, steps), session)
         if job.kind == "triage":
             return RunOutcome(self.name, await self._triage(job, steps), session)
+        if job.kind == "review":
+            return RunOutcome(self.name, await self._review(job, steps), session)
         return RunOutcome(self.name, AppealReply(
             reply="Fake runner: your message was received; a person will review it.",
             claim_consistent_with_logs=False, evidence_ids=[], escalate=True), session)
@@ -228,6 +240,49 @@ class FakeRunner:
                     summary=summary, reasoning="\n".join(reasoning),
                     proposed_action=DEFAULT_ACTIONS[kind], action_params={}, merchant_notice=None)
 
+    async def _review(self, job: Job, steps: Steps) -> Review:
+        """Re-read the candidate and its records, then compare the proposal with the rules-only baseline.
+        No judgement: agree when they match, otherwise say a person should look."""
+        proposal = Flag.model_validate(job.proposal)
+        cand = await self._tool(steps, "get_candidate", candidate_id=job.candidate_id)
+        kind, subject = cand["kind"], cand["subject_id"]
+        if kind == "merchant_silence":
+            read = await self._tool(steps, "get_merchant_payments", merchant_id=subject,
+                                    since=cand["window_start"], until=cand["window_end"])
+        elif kind == "cap_drain":
+            read = await self._tool(steps, "get_cert_chain", cert_id=subject)
+        else:
+            read = await self._tool(steps, "get_region_status", region_id=subject)
+        seen = _ids_in(read)
+        cited = [normalize(e).lower() for e in proposal.evidence_ids]
+        confirmed = [e for e in cited if e in seen]
+        baseline = DEFAULT_ACTIONS[kind]
+        reasons = [f"Fake reviewer: the rules-only baseline for {kind} is {baseline}; no agent judgement was made.",
+                   f"Fake reviewer: re-read {len(confirmed)} of the {len(cited)} cited records in the "
+                   f"{'payments' if kind == 'merchant_silence' else 'cert chain' if kind == 'cap_drain' else 'region'}."]
+        if proposal.kind == kind and proposal.proposed_action == baseline:
+            return Review(verdict="agree", reasons=reasons, evidence_ids=confirmed)
+        if proposal.kind == "none":
+            reasons.append("Fake reviewer: the proposal dismisses a candidate the baseline flags; a person decides.")
+            return Review(verdict="disagree", reasons=reasons, evidence_ids=confirmed, suggested_kind=kind,
+                          suggested_severity="review", suggested_action=baseline)
+        reasons.append("Fake reviewer: the proposal differs from the baseline; a person decides.")
+        return Review(verdict="insufficient_evidence", reasons=reasons, evidence_ids=confirmed)
+
+
+def _ids_in(value: Any) -> set[str]:
+    """Every hex id a tool returned (tag hashes, payment and cert ids, alert ids), lowercased."""
+    found: set[str] = set()
+    if isinstance(value, dict):
+        for v in value.values():
+            found |= _ids_in(v)
+    elif isinstance(value, list):
+        for v in value:
+            found |= _ids_in(v)
+    elif isinstance(value, str):
+        found.add(value.lower())
+    return found
+
 
 def _features_line(current: dict, quoted: tuple[str, ...]) -> str:
     """Say where the features came from; the fake runner reports them but doesn't weigh them."""
@@ -279,12 +334,13 @@ def droid_tool(deps, spec: tools.ToolSpec):
     return tool(spec.name, spec.description)(handler)
 
 
-def session_config(deps):
+def session_config(deps, system_prompt: str = STORMDESK_PROMPT):
+    """The same tools, built-ins off and skills off for every job; only the system prompt differs (the reviewer's)."""
     from droid_sdk import SessionConfig
     from droid_sdk.mcp import create_sdk_mcp_server
 
     server = create_sdk_mcp_server(name=MCP_SERVER_NAME, tools=[droid_tool(deps, t) for t in tools.TOOLS])
-    return SessionConfig(system_prompt=STORMDESK_PROMPT, mcp_servers=[server], disabled_tools=BUILTIN_TOOLS,
+    return SessionConfig(system_prompt=system_prompt, mcp_servers=[server], disabled_tools=BUILTIN_TOOLS,
                          disable_builtin_skills=True)
 
 
@@ -299,7 +355,7 @@ class DroidRunner:
     async def run(self, job: Job, prompt: str, steps: Steps) -> RunOutcome:
         from droid_sdk import InteractionHandlers, Session, ToolCall, ToolResult
 
-        config = session_config(self.deps)
+        config = session_config(self.deps, job.system_prompt)
         handlers = InteractionHandlers(on_permission=permission_handler)
         error, session_id, usage = None, None, None
         requested = self.model or "auto"

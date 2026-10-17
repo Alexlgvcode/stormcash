@@ -17,7 +17,7 @@ After Hurricane Helene (2024), card readers in western North Carolina couldn't c
 3. **Spend tags travel phone to phone.** Every payment is a signed, chained spend tag. Phones gossip tags over Bluetooth and peer Wi-Fi (Apple Multipeer); customers carry them from shop to shop. A rolled-back wallet trying to spend the same money again is **refused offline** by the next shop that holds the tag, and the two conflicting signatures are **self-proving evidence** anyone can check.
 4. **Store and forward.** Payments, tags and signed device logs hop phone to phone until any phone gets a signal and uploads them. The server pays shops through Nessie, freezes cheaters, and sends receipts, the freeze list and renewed certificates back the same way.
 5. **"Merchant knew."** Every phone keeps a signed, hash-chained log of what it accepted and whom it met. A shop that accepted a double spend while holding the conflicting tag is caught by its own signature.
-6. **StormDesk.** A back-office agent built on Factory's Droid SDK investigates hard cases and triages suspicious patterns from deterministic detectors. It proposes; a person approves. Shops get notices and can appeal by text through Photon.
+6. **StormDesk.** A back-office agent built on Factory's Droid SDK investigates hard cases and triages suspicious patterns from deterministic detectors. A second Droid session reviews each proposal and tries to refute it. A person approves. Shops get notices and can appeal by text through Photon.
 
 **Math flags. The agent investigates. A person decides.**
 
@@ -43,7 +43,7 @@ flowchart LR
 - iPhones only exchange data while the app is open.
 - Phones share pseudonymous certificate ids, amounts and running totals, never names. Payments relayed for settlement name the shop they paid; production would encrypt relayed bundles to the server's key.
 - The 40-shop town around our 3 phones is **simulated** and labelled "simulated" everywhere; its money never touches Nessie. Weather alerts we replay are labelled "replayed".
-- **StormDesk costs Factory credits.** On the seeded town a hard-case investigation took 12,000 to 17,000 credits and a shop triage 43,000 to 70,000 (`claude-sonnet-5-5`). Each run stores its model, tokens and credits, shown next to the Droid badge. We run Droid on the cases an operator opens (`STORMDESK_RUNNER=droid STORMDESK_AUTO=0`). Everything else, and any run Droid can't make (no credits, no CLI), goes through a deterministic stand-in that applies the rules-only baseline. It is labelled "Fake runner · rules only" on every screen and in every stored record, and is never presented as an agent's judgement.
+- **StormDesk costs Factory credits.** On the seeded town a hard-case investigation took 12,000 to 17,000 credits and a shop triage 43,000 to 70,000 (`claude-sonnet-5-5`). Each run stores its model, tokens and credits, shown next to the Droid badge. We run Droid on the cases an operator opens (`STORMDESK_RUNNER=droid STORMDESK_AUTO=0`). Everything else, and any run Droid can't make (no credits, no CLI), goes through a deterministic stand-in that applies the rules-only baseline. It is labelled "Fake runner · rules only" on every screen and in every stored record, and is never presented as an agent's judgement. The reviewer Droid adds a second session to every triage: 16,828 and 56,198 credits on its first two live reviews.
 - **Droid disagrees with our planted label.** On seed 42 it dismissed the Corner Store, which the simulator plants as a colluder, twice:
   - The first time the shop had taken a single pool-funded payment, already covered by a hard case. So we changed the scenario: the colluder now takes pool money from several cheaters while silent (#82).
   - On the new town, Droid read the four cheaters' re-spends as the shop being their victim. It flagged the pattern for the operator to watch but proposed no action.
@@ -111,6 +111,7 @@ curl -X POST localhost:8000/v1/demo/reset -H 'X-SC-Operator: alex'
 | `API_SIG_REQUIRED=0` | accept unsigned phone writes |
 | `STORMDESK_RUNNER=fake` | StormDesk uses the labelled rules-only stand-in |
 | `STORMDESK_AUTO=0` | don't run StormDesk automatically |
+| `STORMDESK_REVIEW=0` | no reviewer Droid after each triage |
 | `PHOTON_DISABLED=1` | record messages on the dashboard, send nothing |
 
 Queued Nessie payouts replay on their own every 10 s.
@@ -138,20 +139,24 @@ cd mobile && npm test
 StormDesk is the back office of the running product, in [`server/stormcash/stormdesk/`](server/stormcash/stormdesk/):
 
 - **`worker.py`**: picks up every new hard case and every new detector candidate, with at most 4 Droid sessions at once. Nothing has to ask for it: when a phone uploads and a rule or a detector fires, the job is queued.
-- **Three jobs** (`runner.py`, `prompt.py`):
+- **Four jobs** (`runner.py`, `prompt.py`):
   - **Investigate** a hard case. It re-verifies both signatures and the rule with the deterministic verifier, works out who was paid from escrow and from the pool, and writes a case file.
   - **Triage** a candidate (a shop went quiet, a certificate drained fast, a region went dark). It decides whether it's real, cites the evidence, and proposes an action, or dismisses it with a reason.
+  - **Review** every triage before a person sees it. A second Droid session with its own prompt tries to refute the proposal. It re-runs the tools itself and checks that every cited record exists and supports the claim. It gets StormDesk's structured output, never its transcript.
   - **Respond** to a shop's appeal arriving through Photon, by comparing the claim with the shop's own signed logs.
+- **Agents check agents, a person decides** (`service.after_review`). If the reviewer agrees, the flag goes to the operator as proposed. If it disagrees, or says the evidence can't settle it, the flag is marked "Agents disagree · a person decides" and kept open, a dismissal included, with both views side by side. The reviewer can't act: Approve runs only StormDesk's proposal. A review that cites a record that doesn't exist doesn't count. The rules-only stand-in reviewer is labelled and never escalates. `STORMDESK_REVIEW=0` turns the reviewer off.
 - **Eleven read-only tools** (`tools.py`) served to Droid as an in-process MCP server: `get_case`, `get_candidate`, `get_cert_chain`, `verify_tags`, `get_device_log`, `get_contacts`, `get_merchant_payments`, `query_features`, `get_region_status`, `get_nessie_balances`, `get_messages`. They run in a read-only database transaction. **There is no write tool.**
-- **Structured outputs** (`schemas.py`): `Flag`, `CaseFile` and `AppealReply` are Pydantic models passed as `output=` to `Session.stream`. A failed structured output is retried once and otherwise stored as invalid.
+- **Structured outputs** (`schemas.py`): `Flag`, `CaseFile`, `Review` and `AppealReply` are Pydantic models passed as `output=` to `Session.stream`. A failed structured output is retried once and otherwise stored as invalid.
 - **Permission handler** (`runner.permission_handler`): allows only our own MCP tools and cancels everything else (shell, file edits, network). All 34 built-in tools (ids from `list_tools()` on droid 0.244.0) are also switched off in `SessionConfig`. One exception shows up in every live transcript: Droid's `ToolSearch` still runs once, to load our MCP tools' schemas.
-- **Citation check** (`citations.py`): every id the agent cites must exist in the database, or the result is stored as invalid and never shown as actionable.
+- **Citation check** (`citations.py`): every id the agent cites must exist in the database, or the result is stored as invalid and never shown as actionable. The reviewer's citations are checked the same way.
 - **Every run is stored** with its transcript, model, tokens and Factory credits (`stormdesk_runs`). Each tool call streams live to the dashboard (`stormdesk_step` events). A stored run can be replayed step by step ("Replay of run at …").
 - **A person decides.** Approve or Reject on the dashboard runs deterministic code (`approvals.py`): hold a shop's pool payouts, lower its limit, freeze a certificate, or dispatch a relay. Hard rules never go through the agent.
 
 ![Live tool calls from a real Droid run](docs/images/stormdesk-live-steps.png)
 
 _A live Droid run (`claude-sonnet-5-5`) triaging the Corner Store candidate on the seeded town: 14 read-only tool calls streamed to the dashboard, 63,437 Factory credits. With prompt v1 it dismissed the candidate; with prompt v2 the same candidate is flagged (see Honest limits)._
+
+**First live reviews** (`claude-sonnet-5-5`, seed 42). The reviewer re-checked prompt v2's Corner Store flag in 13 tool calls and agreed. All 10 ids it cited were valid; it took 56,198 credits and 44 s. On a stolen phone (Resident 174) it agreed with freezing the certificate in 8 tool calls (16,828 credits, 30 s). It also noted that the proposal's text had missed the region mismatch and the idle gap. Neither shows a disagreement. How often the reviewer disagrees, and whether that helps, needs an eval on stored proposals; until one runs we claim nothing about it.
 
 ## How we use Chalk
 

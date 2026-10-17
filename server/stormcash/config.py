@@ -44,6 +44,9 @@ class Settings:
     stormdesk_runner: str = "auto"
     stormdesk_model: str = ""  # empty: Droid picks ("auto")
     stormdesk_auto: bool = True  # run the worker on new cases and candidates
+    # The reviewer Droid after every triage (§14.7b). Off unless loaded from the environment
+    # (STORMDESK_REVIEW, default on), so bare Settings (tests) keep one run per triage.
+    stormdesk_review: bool = False
     # The Evals tab's Chalk results (§18.5); empty: chalk/evals/results in this checkout.
     evals_results_dir: str = ""
 
@@ -97,5 +100,6 @@ def load_settings(env_file: Path | None = SERVER_DIR / ".env") -> Settings:
         stormdesk_runner=(env.get("STORMDESK_RUNNER") or "auto").lower(),
         stormdesk_model=env.get("STORMDESK_MODEL", ""),
         stormdesk_auto=_flag(env.get("STORMDESK_AUTO"), True),
+        stormdesk_review=_flag(env.get("STORMDESK_REVIEW"), True),
         evals_results_dir=env.get("EVALS_RESULTS_DIR", ""),
     )

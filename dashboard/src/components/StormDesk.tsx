@@ -1,11 +1,12 @@
-// StormDesk on the dashboard (spec §18.3, §14.6, §14.8): flags with their
-// evidence, the agent's tool calls live or replayed, Approve / Reject with the
-// operator's name, and the Photon thread for merchant flags. A fake-runner
-// result is labelled as such everywhere (§0 rule 3).
+// StormDesk on the dashboard (spec §18.3, §14.6, §14.7b, §14.8): flags with their
+// evidence, the agent's tool calls live or replayed, the reviewer's second
+// opinion, Approve / Reject with the operator's name, and the Photon thread for
+// merchant flags. A fake-runner result is labelled as such everywhere (§0 rule 3).
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getJSON, operatorPost, type FlagDetail, type FlagRow, type Message, type Run, type Step, type Usage } from "../api";
 import { useEvents } from "../events";
 import { clockTime, dollars } from "../format";
+import { reviewVerdict, suggestion, type FlagReview } from "../review";
 import { OwnerFreezeNote } from "./OwnerFreeze";
 
 const KIND_TITLE: Record<string, string> = {
@@ -180,6 +181,12 @@ function Decision({ flag, onDone }: { flag: FlagRow; onDone: () => void }) {
       <div className="text-base text-slate-300">
         Proposed: <span className="font-semibold text-white">{ACTION_TITLE[flag.proposed_action] ?? flag.proposed_action}</span>
       </div>
+      {flag.agents_disagree && actionable && (
+        <p className="text-base text-amber-200">
+          StormDesk and its reviewer disagree. Read both, then decide: Approve runs StormDesk's proposal and
+          nothing else. The reviewer can't act.
+        </p>
+      )}
       {actionable ? (
         <>
           <div className="grid gap-2 sm:grid-cols-2">
@@ -243,22 +250,113 @@ function PhotonThread({ merchantId }: { merchantId: string }) {
   );
 }
 
+const VERDICT_STYLE: Record<string, string> = {
+  agree: "bg-emerald-500/15 text-emerald-300",
+  disagree: "bg-amber-500/15 text-amber-300",
+  void: "bg-rose-500/15 text-rose-300",
+};
+
+/** The reviewer Droid's second opinion (§14.7b): verdict, reasons, the records it cited, its own steps. */
+function ReviewPanel({ flag, review, run, live, onReview }: {
+  flag: FlagRow;
+  review: FlagReview | null | undefined;
+  run: Run | null;
+  live: { steps: Step[]; running: boolean };
+  onReview: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const reviewable = flag.status === "open" || flag.status === "dismissed";
+  const view = review ? reviewVerdict(review) : null;
+  const suggested = review ? suggestion(review, KIND_TITLE, ACTION_TITLE) : null;
+
+  async function ask() {
+    setBusy(true);
+    try {
+      await operatorPost("/v1/stormdesk/review", { flag_id: flag.flag_id });
+    } catch {
+      // shown by the reload: the flag keeps its last review
+    } finally {
+      setBusy(false);
+      onReview();
+    }
+  }
+
+  if (!review && !live.running && live.steps.length === 0 && !reviewable) return null;
+  return (
+    <div className="space-y-3 rounded-xl border border-slate-800 bg-slate-900 p-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <h3 className="text-lg font-semibold text-white">Second opinion</h3>
+        {view && <span className={`rounded-full px-3 py-1 text-sm font-semibold ${VERDICT_STYLE[view.tone]}`}>{view.label}</span>}
+        {review && <RunnerBadge runner={review.runner} model={review.model} modelRequested={review.model_requested} usage={review.usage} />}
+        {reviewable && (
+          <button disabled={busy || live.running} onClick={ask}
+            className="ml-auto rounded-lg bg-slate-800 px-3 py-1 text-sm text-white hover:bg-slate-700 disabled:opacity-50">
+            {busy || live.running ? "Reviewing…" : review ? "Review again" : "Ask the reviewer"}
+          </button>
+        )}
+      </div>
+      {!review && !live.running && (
+        <p className="text-slate-400">
+          Not reviewed yet. A second Droid session re-reads the records with the same read-only tools and tries to refute
+          StormDesk's proposal.
+        </p>
+      )}
+      {view?.note && <p className="text-sm text-slate-400">{view.note}</p>}
+      {review?.error && <p className="break-all font-mono text-sm text-rose-300">{review.error}</p>}
+      {review?.reasons && review.reasons.length > 0 && (
+        <ul className="list-disc space-y-1 pl-5 text-base text-slate-200">
+          {review.reasons.map((r, i) => <li key={i}>{r}</li>)}
+        </ul>
+      )}
+      {suggested && <p className="text-base text-slate-300">{suggested}</p>}
+      {review && (
+        <div>
+          <div className="mb-1 text-sm font-semibold text-slate-300">
+            Records it cited {review.citations_valid ? "(checked against the database ✓)" : "(citation check failed ✗)"}
+          </div>
+          <ul className="flex flex-wrap gap-2 font-mono text-xs">
+            {(review.evidence_ids ?? []).map((e) => (
+              <li key={e} className={`rounded px-2 py-1 ${review.missing_citations.includes(e) ? "bg-rose-500/20 text-rose-300" : "bg-slate-800 text-slate-300"}`}>
+                {e.length > 20 ? `${e.slice(0, 16)}…` : e}
+              </li>
+            ))}
+            {(review.evidence_ids ?? []).length === 0 && <li className="text-slate-500">none</li>}
+          </ul>
+        </div>
+      )}
+      {live.steps.length > 0 || live.running ? (
+        <StepList steps={live.steps} live />
+      ) : (
+        run?.transcript && (
+          <StepList steps={run.transcript.steps} replayLabel={replayTitle(run.started_at, run.runner, run.transcript.model)} />
+        )
+      )}
+    </div>
+  );
+}
+
 function FlagView({ flagId, onChanged }: { flagId: number; onChanged: () => void }) {
   const [detail, setDetail] = useState<FlagDetail | null>(null);
   const [run, setRun] = useState<Run | null>(null);
+  const [reviewRun, setReviewRun] = useState<Run | null>(null);
   const [showReasoning, setShowReasoning] = useState(false);
   const load = useCallback(() => {
     getJSON<FlagDetail>(`/v1/flags/${flagId}`).then((d) => {
       setDetail(d);
       if (d.agent?.run_id) getJSON<Run>(`/v1/stormdesk/runs/${d.agent.run_id}`).then(setRun).catch(() => setRun(null));
+      const reviewId = d.flag.review?.run_id;
+      if (reviewId) getJSON<Run>(`/v1/stormdesk/runs/${reviewId}`).then(setReviewRun).catch(() => setReviewRun(null));
+      else setReviewRun(null);
     });
   }, [flagId]);
   useEffect(load, [load]);
   const live = useLiveSteps(detail ? `candidate #${detail.flag.candidate_id}` : "");
+  const liveReview = useLiveSteps(detail ? `review of candidate #${detail.flag.candidate_id}` : "");
   useEvents(["flag", "approval"], (data) => {
     const d = data as { flag_id?: number };
     if (d.flag_id === flagId) {
       live.reset();
+      liveReview.reset();
       load();
     }
   });
@@ -271,6 +369,7 @@ function FlagView({ flagId, onChanged }: { flagId: number; onChanged: () => void
 
   async function rerun() {
     live.reset();
+    liveReview.reset();
     await operatorPost("/v1/stormdesk/run", { candidate_id: flag.candidate_id }).catch(() => undefined);
     load();
     onChanged();
@@ -283,6 +382,12 @@ function FlagView({ flagId, onChanged }: { flagId: number; onChanged: () => void
         <span className={`rounded-full px-3 py-1 text-sm font-semibold ${STATUS_STYLE[flag.status]}`}>{flag.status}</span>
         <span className="rounded-full bg-slate-800 px-3 py-1 text-sm text-slate-300">{flag.severity}</span>
         <RunnerBadge runner={flag.runner} model={agent?.model} modelRequested={agent?.model_requested} usage={agent?.usage} />
+        {flag.agents_disagree && (
+          <span className="rounded-full bg-amber-500/20 px-3 py-1 text-sm font-semibold text-amber-200"
+            title="A second Droid session reviewed StormDesk's proposal and didn't agree. A person decides.">
+            Agents disagree · a person decides
+          </span>
+        )}
       </div>
       <p className="text-lg text-slate-200">
         {flag.subject_name ?? flag.subject_id}: {flag.summary}
@@ -322,6 +427,11 @@ function FlagView({ flagId, onChanged }: { flagId: number; onChanged: () => void
       <button onClick={rerun} className="rounded-lg bg-slate-800 px-4 py-2 text-base text-white hover:bg-slate-700">
         Run StormDesk again
       </button>
+      <ReviewPanel flag={flag} review={flag.review} run={reviewRun} live={liveReview} onReview={() => {
+        liveReview.reset();
+        load();
+        onChanged();
+      }} />
       <Decision flag={flag} onDone={() => {
         load();
         onChanged();
@@ -348,7 +458,7 @@ export function FlagsView() {
     return <p className="p-8 text-xl text-slate-400">No StormDesk flags yet. They appear as soon as a detector fires.</p>;
   }
   return (
-    <div className="grid gap-6 p-6 lg:grid-cols-[22rem_1fr]">
+    <div className="grid gap-6 p-6 lg:grid-cols-[22rem_minmax(0,1fr)]">
       <ol className="max-h-[80vh] space-y-2 overflow-y-auto">
         {flags.map((f) => (
           <li key={f.flag_id}>
@@ -361,6 +471,9 @@ export function FlagsView() {
               </div>
               <div className="truncate text-sm text-slate-400">
                 {f.subject_name ?? f.subject_id} · {f.runner === "fake" ? "fake runner" : f.runner ?? ""}
+                {f.agents_disagree ? <span className="text-amber-300"> · agents disagree</span>
+                  : f.review?.verdict === "agree" && f.review.status === "succeeded" && f.review.runner !== "fake"
+                    ? " · reviewer agrees" : ""}
               </div>
             </button>
           </li>

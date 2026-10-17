@@ -6,6 +6,11 @@ Citations are checked before anything is saved; an output with a missing id
 is stored as `invalid` and never shown as actionable. Triage writes one
 `flags` row per candidate; an investigation writes `cases.case_file_md` only
 when its citations hold.
+
+A review (§14.7b) is a second Droid session that tries to refute a triage
+Flag with the same read-only tools. It is stored on the flag. Only a valid
+review by an agent counts, and all it can do is put the flag in front of a
+person ("agents disagree"); Approve and Reject stay with that person.
 """
 
 from __future__ import annotations
@@ -15,14 +20,18 @@ import json
 import time
 
 from psycopg.types.json import Jsonb
+from pydantic import ValidationError
 
 from ..db import one, scalar
 from ..jsonutil import jsonable
 from .citations import citations_valid
-from .prompt import PROMPT_VERSION, investigate_prompt, respond_prompt, triage_prompt
+from .prompt import (PROMPT_VERSION, REVIEW_PROMPT_VERSION, investigate_prompt, respond_prompt, review_prompt,
+                     triage_prompt)
 from .runner import FakeRunner, Job, RunOutcome, Steps, make_runner
+from .schemas import Flag
 
 DROID_COOLDOWN_S = 300  # after Droid couldn't run, use the fake runner this long before trying again
+REVIEWABLE = ("open", "dismissed")  # a valid proposal a person may see; invalid ones never reach anyone
 
 
 class StormDeskError(ValueError):
@@ -54,6 +63,9 @@ def _prepare(deps, job: Job) -> tuple[str, int]:
             if decided:
                 raise Conflict(f"candidate {job.candidate_id} was already {decided} by an operator")
             prompt = triage_prompt(job.candidate_id, kind)
+        elif job.kind == "review":
+            kind = scalar(conn, "SELECT kind FROM candidates WHERE candidate_id = %s", (job.candidate_id,))
+            prompt = review_prompt(job.candidate_id, kind, job.proposal or {})
         else:
             prompt = respond_prompt(job.merchant_id or "", job.message or "")
         run_id = scalar(
@@ -66,21 +78,69 @@ def _prepare(deps, job: Job) -> tuple[str, int]:
     return prompt, run_id
 
 
+def review_job(deps, flag_id: int | None = None, candidate_id: int | None = None,
+               proposal: dict | None = None) -> Job:
+    """The review of a stored flag (by flag or candidate id), or of a proposal passed in with its candidate
+    (an eval reviewing stored outputs: nothing is written to `flags` then)."""
+    with deps.pool.connection() as conn:
+        if proposal is None:
+            flag = one(conn, "SELECT * FROM flags WHERE flag_id = %s", (flag_id,)) if flag_id is not None else \
+                one(conn, "SELECT * FROM flags WHERE candidate_id = %s", (candidate_id,))
+            if flag is None:
+                raise NotFound(f"no flag for {'flag' if flag_id is not None else 'candidate'} "
+                               f"{flag_id if flag_id is not None else candidate_id}")
+            if flag["status"] not in REVIEWABLE:
+                raise Conflict(f"flag {flag['flag_id']} is {flag['status']}: only open or dismissed flags are reviewed")
+            run_id = (flag["agent_transcript"] or {}).get("run_id")
+            output = scalar(conn, "SELECT output FROM stormdesk_runs WHERE run_id = %s", (run_id,)) if run_id else None
+            if output is None:
+                raise Conflict(f"flag {flag['flag_id']} has no stored StormDesk output to review")
+            return Job("review", candidate_id=flag["candidate_id"], proposal=Flag.model_validate(output).model_dump(),
+                       flag_id=flag["flag_id"], reviewed_run_id=run_id)
+        if candidate_id is None or scalar(conn, "SELECT 1 FROM candidates WHERE candidate_id = %s",
+                                          (candidate_id,)) is None:
+            raise NotFound(f"no candidate {candidate_id}")
+        try:
+            flag = Flag.model_validate(proposal)
+        except ValidationError as exc:
+            raise StormDeskError(f"proposal is not a Flag: {exc.error_count()} errors") from exc
+        valid, missing = citations_valid(conn, list(flag.evidence_ids), required=flag.kind != "none")
+        if not valid:
+            raise Conflict(f"the proposal's citations don't hold (missing {missing}): it never reaches a person")
+        return Job("review", candidate_id=candidate_id, proposal=flag.model_dump())
+
+
+def after_review(proposal: dict, status: str, review: dict | None) -> tuple[str, bool]:
+    """(status, agents_disagree) for a flag once it has been reviewed (§14.7b). Deterministic. Only a valid
+    review by an agent counts (the fake reviewer's rules-only comparison doesn't); agreeing keeps the flag
+    as StormDesk proposed it, and anything else keeps it open for a person. A decided flag stays decided."""
+    if status not in REVIEWABLE:
+        return status, False
+    status = "dismissed" if proposal.get("kind") == "none" else "open"  # what StormDesk's proposal alone gives
+    if review is None or review.get("status") != "succeeded" or review.get("runner") == "fake" \
+            or review.get("verdict") == "agree":
+        return status, False
+    return "open", True
+
+
 def _store(deps, job: Job, run_id: int, outcome: RunOutcome, steps: Steps, fallback: str | None = None,
-           fallback_usage: dict | None = None) -> dict:
+           fallback_usage: dict | None = None, duration_s: float | None = None) -> dict:
     output = outcome.output
     with deps.pool.connection() as conn:
         missing: list[str] = []
         valid = False
         if output is not None:
-            needs_ids = not (job.kind == "respond" or (job.kind == "triage" and output.kind == "none"))
+            needs_ids = not (job.kind in ("respond", "review") or (job.kind == "triage" and output.kind == "none"))
             valid, missing = citations_valid(conn, list(output.evidence_ids), required=needs_ids)
         status = "succeeded" if output is not None and valid else "invalid" if output is not None else "failed"
+        version = REVIEW_PROMPT_VERSION if job.kind == "review" else PROMPT_VERSION
         transcript = {"runner": outcome.runner, "steps": steps.transcript, "missing_citations": missing,
                       "error": outcome.error, "fallback_from_droid": fallback, "model": outcome.model,
                       "model_requested": outcome.model_requested, "usage": outcome.usage,
-                      "fallback_usage": fallback_usage,
-                      "prompt_version": PROMPT_VERSION if outcome.runner == "droid" else None}
+                      "fallback_usage": fallback_usage, "duration_s": duration_s,
+                      "prompt_version": version if outcome.runner == "droid" else None}
+        if job.kind == "review":
+            transcript["reviewed"] = {"flag_id": job.flag_id, "run_id": job.reviewed_run_id, "proposal": job.proposal}
         run = one(
             conn,
             """UPDATE stormdesk_runs SET runner = %s, status = %s, output = %s, citations_valid = %s, transcript = %s,
@@ -91,10 +151,22 @@ def _store(deps, job: Job, run_id: int, outcome: RunOutcome, steps: Steps, fallb
         result = {"run_id": run_id, "runner": outcome.runner, "status": status, "citations_valid": valid,
                   "missing_citations": missing, "error": outcome.error, "fallback_from_droid": fallback,
                   "model": outcome.model, "model_requested": outcome.model_requested, "usage": outcome.usage,
-                  "prompt_version": transcript["prompt_version"],
+                  "prompt_version": transcript["prompt_version"], "duration_s": duration_s,
+                  "session_id": outcome.session_id, "job": job.kind,
                   "output": output.model_dump() if output else None}
         if job.kind == "triage":
             result["flag"] = _save_flag(conn, job, output, valid, outcome, run, transcript)
+        elif job.kind == "review":
+            review = {k: result[k] for k in ("run_id", "runner", "status", "citations_valid", "missing_citations",
+                                             "error", "fallback_from_droid", "model", "model_requested", "usage",
+                                             "prompt_version", "duration_s")}
+            review |= {"reviewed_run_id": job.reviewed_run_id, **(output.model_dump() if output else {"verdict": None})}
+            proposal = job.proposal or {}
+            status_after, disagree = after_review(proposal, "open", review)  # "open": not decided yet
+            result["after_review"] = {"status": status_after, "agents_disagree": disagree,
+                                      "kind": proposal.get("kind"), "proposed_action": proposal.get("proposed_action")}
+            if job.flag_id is not None:
+                result["flag"] = _save_review(conn, job, review)
         elif job.kind == "investigate" and output is not None and valid:
             conn.execute("UPDATE cases SET case_file_md = %s WHERE case_id = %s", (output.summary_md, job.case_id))
             result["case_file_md"] = output.summary_md
@@ -135,10 +207,21 @@ def _save_flag(conn, job: Job, output, valid: bool, outcome: RunOutcome, run: di
                   evidence_ids = %(evidence_ids)s, exposure_cents = %(exposure_cents)s, summary = %(summary)s,
                   proposed_action = %(proposed_action)s, citations_valid = %(citations_valid)s,
                   agent_session_id = %(agent_session_id)s, agent_transcript = %(agent_transcript)s,
-                  status = %(status)s, created_at = now()
+                  status = %(status)s, created_at = now(), review = NULL, agents_disagree = FALSE
            WHERE flag_id = %(flag_id)s RETURNING *""",
         {**params, "flag_id": existing},
     )
+
+
+def _save_review(conn, job: Job, review: dict) -> dict | None:
+    """Store the review on its flag. Skipped if StormDesk re-triaged the flag meanwhile (the review is of
+    an older proposal; its run is still stored)."""
+    flag = one(conn, "SELECT * FROM flags WHERE flag_id = %s FOR UPDATE", (job.flag_id,))
+    if flag is None or (flag["agent_transcript"] or {}).get("run_id") != job.reviewed_run_id:
+        return None
+    status, disagree = after_review(job.proposal or {}, flag["status"], review)
+    return one(conn, "UPDATE flags SET review = %s, agents_disagree = %s, status = %s WHERE flag_id = %s RETURNING *",
+               (Jsonb(review), disagree, status, job.flag_id))
 
 
 class StormDesk:
@@ -156,11 +239,19 @@ class StormDesk:
             return FakeRunner(self.deps)
         return runner
 
+    async def review(self, flag_id: int | None = None, candidate_id: int | None = None,
+                     proposal: dict | None = None, runner=None) -> dict:
+        """Run the reviewer on a stored flag, or on a proposal passed in with its candidate (§14.7b)."""
+        job = await asyncio.to_thread(review_job, self.deps, flag_id, candidate_id, proposal)
+        return await self.run(job, runner)
+
     async def run(self, job: Job, runner=None) -> dict:
         runner = runner or self.pick_runner()
         prompt, run_id = await asyncio.to_thread(_prepare, self.deps, job)
         subject = f"case #{job.case_id}" if job.case_id else f"candidate #{job.candidate_id}" \
             if job.candidate_id else f"merchant {job.merchant_id}"
+        if job.kind == "review":
+            subject = f"review of {subject}"  # its own live step list, next to the triage's
 
         def on_step(step: dict) -> None:
             self.deps.events.publish("stormdesk_step", {
@@ -170,6 +261,7 @@ class StormDesk:
 
         steps = Steps(on_step=on_step)
         fallback, fallback_usage = None, None
+        started = time.monotonic()
         async with self.slots:
             try:
                 outcome = await runner.run(job, prompt, steps)
@@ -185,9 +277,19 @@ class StormDesk:
                 runner = FakeRunner(self.deps)
                 steps = Steps(on_step=on_step)
                 outcome = await runner.run(job, prompt, steps)
-        result = await asyncio.to_thread(_store, self.deps, job, run_id, outcome, steps, fallback, fallback_usage)
+        duration = round(time.monotonic() - started, 1)
+        result = await asyncio.to_thread(_store, self.deps, job, run_id, outcome, steps, fallback, fallback_usage,
+                                         duration)
         self.deps.events.publish("stormdesk_step", {"run_id": run_id, "job": job.kind, "subject": subject,
                                                     "runner": runner.name, "done": True, "status": result["status"]})
         if result.get("flag"):
             self.deps.events.publish("flag", result["flag"])
+        if job.kind == "triage" and self.deps.settings.stormdesk_review and result["flag"]["status"] in REVIEWABLE:
+            # The second opinion (§14.7b), by the same kind of runner the desk would pick now.
+            try:
+                review = await self.review(flag_id=result["flag"]["flag_id"])
+            except StormDeskError as exc:  # e.g. an operator decided the flag first
+                review = {"status": "skipped", "error": str(exc)}
+            result["review"] = review
+            result["flag"] = review.get("flag") or result["flag"]
         return json.loads(json.dumps(jsonable(result)))

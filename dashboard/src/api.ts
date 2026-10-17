@@ -1,5 +1,7 @@
 // Thin client for the StormCash API (spec §12). In dev the Vite proxy serves
 // /v1; a deployed build sets VITE_API_BASE to the server's URL.
+import type { FlagReview } from "./review";
+
 export const API_BASE: string = (import.meta.env.VITE_API_BASE ?? "").replace(/\/$/, "");
 
 export class ApiError extends Error {
@@ -198,6 +200,8 @@ export interface FlagRow {
   runner: string | null;
   run_id: number | null;
   created_at: number;
+  review?: FlagReview | null; // the reviewer's second opinion (§14.7b)
+  agents_disagree?: boolean; // a valid agent review didn't agree: open for a person
 }
 
 /** What a Droid run cost (droid-sdk Usage), stored with its transcript. */
