@@ -51,7 +51,10 @@ def _call(method: str, path: str, body: dict | None = None) -> dict:
     call_timeout=MAX_WAIT_S + 60,
 )
 def stormdesk_triage(seed: int, candidate_id: int) -> str:
-    job = _call("POST", "/runs", {"seed": seed, "candidate_id": candidate_id})
+    # One StormDesk run per (evaluation run, row), even if Chalk delivers this call twice.
+    run_id = chalkcompute.get_call_context().get("x-chalk-evaluation-run-id") or "no-run"
+    job = _call("POST", "/runs", {"seed": seed, "candidate_id": candidate_id,
+                                  "request_id": f"{run_id}:{seed}:{candidate_id}"})
     deadline = time.time() + MAX_WAIT_S
     while time.time() < deadline:
         time.sleep(POLL_S)

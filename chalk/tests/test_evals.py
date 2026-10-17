@@ -522,3 +522,16 @@ def test_breaker_trips_on_another_prompt_version(tmp_path, fake_server):
     assert "a row ran prompt_version 1, not 2" in jobs.tripped
     with pytest.raises(gateway.Refused):
         jobs.start(42, 6)
+
+
+def test_a_repeated_request_reuses_its_job(fake_server):
+    server_url, seen, _ = fake_server
+    jobs = gateway.Jobs({42: server_url}, None)
+    first = jobs.start(42, 5, "run-1:42:5")
+    assert jobs.start(42, 5, "run-1:42:5") == first  # Chalk delivered the call twice: one StormDesk run
+    assert jobs.start(42, 5, "run-2:42:5") != first  # another evaluation run is another request
+    for _ in range(100):
+        if all(j["status"] != "running" for j in jobs.jobs.values()):
+            break
+        threading.Event().wait(0.02)
+    assert len(seen) == 2
