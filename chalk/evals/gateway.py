@@ -11,7 +11,8 @@ things the task can't do by calling the server directly:
 - answers nothing but these two routes, and only with the bearer token
   (EVAL_GATEWAY_TOKEN), so the tunnel exposes no other server endpoint.
 
-    POST /runs {"seed": 42, "candidate_id": 3}  -> 202 {"job_id": "..."}  (409 once the breaker trips)
+    POST /runs {"seed": 42, "candidate_id": 3, "request_id": "..."}  -> 202 {"job_id": "..."}
+        (the same request_id gets the same job; 409 once the breaker trips)
     GET  /runs/<job_id>                          -> {"status": "running" | "done" | "failed", "output": "..."}
     GET  /stats                                  -> the Droid audit: credits, models, breaker
 
@@ -187,9 +188,17 @@ class Jobs:
         per_row = ROW_MARGIN * sum(done) / len(done) if done else self.row_estimate
         return audit(self.sessions_dir, self.started)["factory_credits"] + (running + extra) * per_row
 
-    def start(self, seed: int, candidate_id: int) -> str:
+    def start(self, seed: int, candidate_id: int, request_id: str | None = None) -> str:
+        """A new job, or the existing one for `request_id`: Chalk can deliver a task call twice (e.g. when its
+        worker is replaced mid-call), and a second delivery must not pay for a second StormDesk run."""
         if seed not in self.servers:
             raise KeyError(f"no eval server for seed {seed}")
+        if request_id:
+            with self.lock:
+                existing = next((k for k, j in self.jobs.items() if j.get("request_id") == request_id), None)
+            if existing:
+                print(f"gateway: repeated request {request_id}: reusing job {existing}", flush=True)
+                return existing
         if self.tripped:
             raise Refused(f"refusing new rows: {self.tripped}")
         if self.max_credits and (projected := self.projected_credits(extra=1)) > self.max_credits:
@@ -203,7 +212,8 @@ class Jobs:
         with self.lock:
             now = time.time()
             self.jobs = {k: v for k, v in self.jobs.items() if now - v["started"] < JOB_TTL_S}
-            self.jobs[job_id] = {"status": "running", "seed": seed, "candidate_id": candidate_id, "started": now}
+            self.jobs[job_id] = {"status": "running", "seed": seed, "candidate_id": candidate_id, "started": now,
+                                 "request_id": request_id}
         threading.Thread(target=self._run, args=(job_id, seed, candidate_id), daemon=True).start()
         return job_id
 
@@ -263,7 +273,7 @@ def make_handler(jobs: Jobs, token: str):
                 return
             try:
                 body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)))
-                job_id = jobs.start(int(body["seed"]), int(body["candidate_id"]))
+                job_id = jobs.start(int(body["seed"]), int(body["candidate_id"]), body.get("request_id"))
             except Refused as exc:
                 return self._send(409, {"error": str(exc)})
             except (ValueError, KeyError, TypeError) as exc:

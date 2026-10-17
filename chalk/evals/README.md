@@ -107,6 +107,16 @@ Every function scorer gives 0 to an output that isn't a Flag. `summary-quality` 
   - a check row confirmed `prompt_version` 2 and `claude-sonnet-5-5`.
 
   v2 rows cost more than v1's (about 45k credits each), so the 1.6M admission cap refused 11 of the 43 rows. That's 1,481,125 credits including the 37,620-credit check row. All 32 answered rows were prompt v2 on `claude-sonnet-5-5`. The file is `complete: false`, `table_column: null`: a record, not a score. The StormDesk column stays v1. Both files stay. The Evals tab shows the newest complete run and lists the older one with its Chalk run id.
+- **prompt v2, run A, Oct 17: complete, the StormDesk column** (`20261017T154928Z-droid-prompt-v2.json`, Chalk run `4119a11e-018f-41ae-86fc-9cede513969f`).
+  - All 43 rows on `claude-sonnet-5-5`, every row `prompt_version` 2, no fallback, the breaker never tripped. 1,815,847 Factory credits (43 sessions).
+  - Before it ran, `stack.py up --prompt-version 2` confirmed all 8 servers (commit `d2606c4`). The gateway required prompt v2 on every row.
+  - Not a blind holdout: v2 was written after reading v1's errors on these rows.
+- **prompt v2, run B, Oct 17: held-out seeds 1 and 2** (`20261017T155907Z-droid-heldout-seeds-1-2-prompt-v2.json`, Chalk run `51b74f56-d8d8-466b-a07c-3ddf8baa8064`), next to rules-only on the same 20 rows (`dc1fd4c9-734e-408d-8c48-9c583dcb3867`).
+  - All 20 rows on `claude-sonnet-5-5` with prompt v2, complete.
+  - By the rule written before run A: A averaged 42,229 credits a row, leaving 1,184,153. Seeds 1 and 2 (20 rows) needed 1,055,725 with the 1.25 margin; seeds 1–3 (30 rows) needed 1,583,588, so seed 3 was left out.
+  - 937,859 credits in all. The answers came from 801,051; another 136,808 went to 4 rows that ran twice. Chalk delivered those four task calls a second time about 5 minutes in, most likely because the task's worker was replaced by the redeploy. The recorded outputs are the second runs.
+  - `POST /runs` now takes a `request_id` (the Chalk evaluation run id plus the row), so a repeated delivery reuses its job.
+  - The 3.0M total cap held: A and B spent 2,753,706.
 - **Discarded, Oct 17:** Chalk run `b30fd876-16e0-4002-b118-6bcfe116c0f7` (evaluation "… · prompt v2", 1,314,180 credits) was **not** prompt v2. The v1 stack's servers had survived `stack.py down` (uvicorn hung on SIGTERM after Droid runs), the new servers couldn't bind their ports, and the stale prompt-v1 servers answered every row. The `prompt_version` check caught it: no row reported version 2, so it was saved as `mixed` and never shown. Its file isn't committed. `stack.py` now refuses to start while any eval port is taken, checks every server it starts is still alive, and SIGKILLs a server that ignores SIGTERM.
 
 ```bash

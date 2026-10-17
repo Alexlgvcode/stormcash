@@ -101,7 +101,8 @@ def run_and_save(*, name: str, dataset_ref, task, scorers: dict, mode: str, data
     print(f"run {run.id} queued", flush=True)
     run = run.wait(timeout=RUN_TIMEOUT_S, raise_on_failure=False)
     print(f"run {run.id}: {run.status.name}", flush=True)
-    return save_results(evaluation, run, droid_audit=gateway_stats())
+    return save_results(evaluation, run,
+                        droid_audit=gateway_stats() if metadata.get("configured_runner") == "droid" else None)
 
 
 def gateway_stats() -> dict | None:

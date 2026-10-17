@@ -15,6 +15,7 @@
 > **v4.11 (Oct 17):** first real StormDesk Chalk Evaluation (#33, §15.3): the eval dataset is rebuilt from the v4.10 simulator (43 rows), and a Droid guard checks every row's model and credits from the Droid session files, stops the run on a model switch or at a credit cap, and never saves a mixed or partial run as StormDesk. Marked **[v4.11]**.
 > **v4.12 (Oct 17):** StormDesk prompt v2 (§14.4): how to weigh soft evidence, written after reading v1's eval errors, so not a blind holdout. Marked **[v4.12]**.
 > **v4.13 (Oct 17):** resident FREEZE by text built (§17.2): residents get a Photon handle (`resident_contacts`), a FREEZE text freezes the cert through the hard-rule freeze path and publishes a POLICY, `cert_status.owner_freeze_at` feeds cap_drain's `owner_freeze_request`, and resident threads live in `messages` (§11.1, §12.1, §12.3, §13.2). Migration `004_resident_freeze.sql`. Marked **[v4.13]**.
+> **v4.14 (Oct 17):** prompt v2 evaluated complete on the 43-row dataset, and on held-out seeds fixed before the run (#100, §15.3): the held-out section on the Evals tab, the prompt-version guard, and an idempotent eval gateway. Marked **[v4.14]**.
 > **Builds on:** "StormCash: The 10/10 Build" v3 (Oct 16, Alexandre Lugovoi, on Brian Maina's Oct 11 draft). Everything new since v3 is marked **[v4]**.
 
 ---
@@ -1470,6 +1471,12 @@ Target ~60 rows (time budget: 60 × ~60 s / 6 parallel ≈ 10 min per run).
 - **[v4.11] Prompt v2 re-run, Oct 17** (#86, written after reading v1's errors on these rows, so not a blind holdout).
   - A first attempt, `b30fd876-16e0-4002-b118-6bcfe116c0f7` (1,314,180 credits), was answered by stale prompt-v1 servers. It's discarded: the `prompt_version` check kept it out, and #88 fixed `stack.py`.
   - The real attempt, `aca3204b-db75-4908-a388-4594d4ee97a7`, ran prompt v2 on `claude-sonnet-5-5` for 32 rows. The 1.6M admission cap refused the other 11 (1,481,125 credits including a check row). It's saved as incomplete and isn't a score; the StormDesk column stays v1.
+- **[v4.14] Prompt v2, complete (#100).**
+  - Run A, `4119a11e-018f-41ae-86fc-9cede513969f`: all 43 rows, `claude-sonnet-5-5`, prompt v2 on every row, 1,815,847 credits. It fills the StormDesk column; v1 stays as an older run.
+  - Run B, `51b74f56-d8d8-466b-a07c-3ddf8baa8064`: held-out seeds 1 and 2 (20 rows), next to rules-only `dc1fd4c9-734e-408d-8c48-9c583dcb3867` on the same rows, 937,859 credits.
+  - The held-out seeds 1, 2, 3 were fixed in writing before their rows existed. Seed 3 was left out by the credit rule written before run A.
+  - Held-out results are their own `eval` (`stormdesk-triage-heldout`), served under `heldout` by `GET /v1/evals` and shown in their own panel.
+  - 4 of B's task calls were delivered twice by Chalk (136,808 extra credits), so the gateway's `POST /runs` is now idempotent on a `request_id`.
 - **Pipeline checks, Oct 17**, on the first 48-row dataset, 48 rows each with no row errors: rules-only `85ec3bf0-3cf2-4cd9-bde2-0fb2b0d38326`, fake runner through the tunnel `edfbe2bc-aabe-4aa7-99e5-594e217ecf12`, `run_local.py` `e0bff8a4-53e9-4545-adec-9e45a1538519`. These ran before Factory credits arrived.
 
 ---
