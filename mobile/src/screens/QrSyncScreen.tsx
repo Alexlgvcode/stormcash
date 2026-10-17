@@ -1,9 +1,10 @@
 // QR sync fallback (§10.7): the same session as Multipeer, taking turns showing and scanning
 // QR frame sequences. Fully offline; both sides still write a CONTACT entry.
 import { useEffect, useRef, useState } from 'react';
+import { View } from 'react-native';
 import { QrCode } from '../components/QrCode';
 import { Scanner } from '../components/Scanner';
-import { Body, Button, Card, Meter, Muted, Pill, Screen, Title } from '../components/ui';
+import { Body, Button, Meter, Muted, Pill, Screen, Title } from '../components/ui';
 import { useNav } from '../nav';
 import { syncManager } from '../sync/manager';
 import { FrameCollector, toFrames } from '../sync/qrframes';
@@ -86,9 +87,9 @@ export function QrSyncScreen() {
     return (
       <Screen>
         <Title>Let the other phone scan</Title>
-        <Card style={{ alignItems: 'center', padding: 12 }}>
+        <View style={{ opacity: 1 }}>
           <QrCode value={frames[frameIdx] ?? ''} />
-        </Card>
+        </View>
         <Meter value={frameIdx + 1} max={frames.length} />
         <Muted>Frame {frameIdx + 1} of {frames.length} · keep the other phone pointed here</Muted>
         {result ? <Body>{result}</Body> : null}

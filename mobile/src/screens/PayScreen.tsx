@@ -4,7 +4,7 @@ import { View } from 'react-native';
 import { confirmWithFaceId } from '../auth';
 import { QrCode } from '../components/QrCode';
 import { Scanner } from '../components/Scanner';
-import { Big, Body, Button, Card, ErrorNote, Field, Muted, Screen, Status, Title, wholeDollars } from '../components/ui';
+import { Big, Button, Cell, ErrorNote, Group, Muted, Screen, Status, Title, wholeDollars } from '../components/ui';
 import { deviceKey } from '../keys';
 import { useNav } from '../nav';
 import { payQr, preparePayment, signPayment } from '../payments';
@@ -62,15 +62,15 @@ export function PayScreen() {
     return (
       <Screen>
         <Title>Confirm payment</Title>
-        <Card style={{ alignItems: 'center', paddingVertical: 28 }}>
-          <Body>Pay {mc.display_name}</Body>
+        <View style={{ paddingVertical: 24, gap: 8 }}>
+          <Muted>Pay {mc.display_name}</Muted>
           <Big>{wholeDollars(rq.amount_cents)}</Big>
           <Status text="Shop verified by StormCash" tone="green" />
-        </Card>
-        <Card>
-          <Field label="Left now" value={wholeDollars(left)} />
-          <Field label="Left after" value={wholeDollars(left - rq.amount_cents)} />
-        </Card>
+        </View>
+        <Group>
+          <Cell title="Left now" value={wholeDollars(left)} />
+          <Cell title="Left after this" value={wholeDollars(left - rq.amount_cents)} />
+        </Group>
         <Button title="Pay with Face ID" big onPress={() => pay(step.request)} />
         <Button title="Cancel" kind="secondary" onPress={nav.home} />
       </Screen>
@@ -80,9 +80,9 @@ export function PayScreen() {
   return (
     <Screen>
       <Title>Show this to {step.shop}</Title>
-      <Card style={{ alignItems: 'center', padding: 12 }}>
-        <QrCode value={step.qr} />
-      </Card>
+      <View style={{ opacity: 1 }}>
+          <QrCode value={step.qr} />
+        </View>
       <View style={{ alignItems: 'center', gap: 4 }}>
         <Big>{wholeDollars(step.amount)}</Big>
         <Status text="Signed on this phone" tone="green" />

@@ -1,7 +1,7 @@
 // Merchant result (§8.2, §19.2). Green: verified and backed. Red: names the failed check and rule.
 import * as Haptics from 'expo-haptics';
-import { useEffect } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { AccessibilityInfo, Animated, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Icon } from '../components/Icon';
 import { Button, colors, font, wholeDollars } from '../components/ui';
@@ -32,17 +32,24 @@ function refusalCopy(reason: ReasonToken, rule: string | null): string {
 export function ResultScreen({ result, pay, capCents }: { result: CheckResult; pay: Pay | null; capCents: number }) {
   const nav = useNav();
   const ok = result.ok;
+  const pop = useRef(new Animated.Value(0.6)).current;
+  useEffect(() => {
+    AccessibilityInfo.isReduceMotionEnabled().then((reduce) => {
+      if (reduce) pop.setValue(1);
+      else Animated.spring(pop, { toValue: 1, friction: 5, tension: 120, useNativeDriver: true }).start();
+    }).catch(() => pop.setValue(1));
+  }, [pop]);
   useEffect(() => {
     Haptics.notificationAsync(ok ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Error)
       .catch(() => {});
   }, [ok]);
 
   return (
-    <SafeAreaView style={[styles.fill, { backgroundColor: ok ? colors.green : colors.red }]} edges={['top', 'bottom']}>
+    <SafeAreaView style={[styles.fill, { backgroundColor: ok ? colors.okBg : colors.refuseBg }]} edges={['top', 'bottom']}>
       <View style={styles.body}>
-        <View style={styles.markRing}>
+        <Animated.View style={[styles.markRing, { transform: [{ scale: pop }] }]}>
           <Icon name={ok ? 'check' : 'x'} size={76} color="#fff" strokeWidth={2.75} />
-        </View>
+        </Animated.View>
         <Text style={styles.head} accessibilityRole="header">{ok ? 'Verified' : 'Refused'}</Text>
         {ok ? (
           <>

@@ -17,26 +17,29 @@ export const font = {
 };
 
 export const colors = {
-  bg: '#F1F3F6', // ground
-  card: '#FFFFFF', // one tone step up
-  well: '#E6EAF0', // one tone step down: secondary buttons, keys, chips
-  ink: '#0B1B2B', // storm navy: headings, amounts, running text
-  text: '#0B1B2B',
-  muted: '#566173', // secondary notes only
-  faint: '#8A94A6',
-  line: '#D5DBE4', // form fields only
-  primary: '#1747E6', // the one accent: actions
-  primarySoft: '#E3E9FD',
-  green: '#0B8F47',
-  greenSoft: '#E1F3E8',
-  red: '#D3261B',
-  redSoft: '#FBE6E4',
-  amber: '#A74B05',
-  amberSoft: '#FDF0DE',
-  navy: '#0B1B2B',
-  navyRaised: '#15283C',
-  onNavy: '#FFFFFF',
-  onNavyMuted: '#AFC0DA',
+  bg: '#0A0F14', // storm night: the ground
+  card: '#131B24', // one tone step up
+  well: '#1C2632', // two steps up: secondary buttons, keys, chips
+  ink: '#F3F5F7', // headings, amounts, running text
+  text: '#F3F5F7',
+  muted: '#93A0AF', // secondary notes
+  faint: '#5F6B79',
+  line: '#2A3542', // form fields and radar rings only
+  primary: '#FFB547', // the one accent: storm-warning amber, actions only
+  onPrimary: '#1A1205',
+  primarySoft: '#33270F',
+  green: '#3DD68C',
+  greenSoft: '#11291D',
+  red: '#FF6B5E',
+  redSoft: '#331513',
+  amber: '#FFB547',
+  amberSoft: '#33270F',
+  okBg: '#0D7A45', // result screens
+  refuseBg: '#C4291E',
+  navy: '#0A0F14',
+  navyRaised: '#131B24',
+  onNavy: '#F3F5F7',
+  onNavyMuted: '#93A0AF',
 };
 
 export const space = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 };
@@ -114,6 +117,41 @@ export function Field({ label, value, light }: { label: string; value: ReactNode
   );
 }
 
+/** A grouped list of rows (settings-cell style): one container, rows separated by space. */
+export function Group({ children }: { children: ReactNode }) {
+  return <View style={s.group}>{children}</View>;
+}
+
+/** One row in a Group. Tappable when onPress is given (shows a chevron). */
+export function Cell({
+  title, detail, value, onPress, accessory,
+}: { title: string; detail?: string; value?: string; onPress?: () => void; accessory?: ReactNode }) {
+  const body = (
+    <>
+      <View style={{ flex: 1, gap: 2 }}>
+        <Text style={s.cellTitle}>{title}</Text>
+        {detail ? <Text style={s.cellDetail}>{detail}</Text> : null}
+      </View>
+      {value ? <Text style={s.cellValue}>{value}</Text> : null}
+      {accessory}
+      {onPress ? <Icon name="chevron-right" size={20} color={colors.faint} /> : null}
+    </>
+  );
+  if (!onPress) return <View style={s.cell}>{body}</View>;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={() => {
+        Haptics.selectionAsync().catch(() => {});
+        onPress();
+      }}
+      style={({ pressed }) => [s.cell, pressed && { backgroundColor: colors.well }]}
+    >
+      {body}
+    </Pressable>
+  );
+}
+
 // ---- Status ----
 
 type Tone = 'neutral' | 'blue' | 'green' | 'red' | 'amber';
@@ -139,11 +177,11 @@ export function Pill({ text, tone = 'neutral', dot }: { text: string; tone?: Ton
 /** A plain status line: coloured dot and text. */
 export function Status({ text, tone = 'neutral', light }: { text: string; tone?: Tone; light?: boolean }) {
   const fg = TONES[tone][1];
-  const dotColor = light && tone === 'green' ? '#4ADE80' : light && tone === 'red' ? '#FF8A80' : fg;
+  const dotColor = fg;
   return (
     <View style={s.status}>
       <View style={[s.dot, { backgroundColor: dotColor }]} />
-      <Text style={[s.statusText, { color: light ? colors.onNavy : colors.ink }]}>{text}</Text>
+      <Text style={[s.statusText, { color: colors.ink }]}>{text}</Text>
     </View>
   );
 }
@@ -177,11 +215,11 @@ export function Button({
   title, onPress, kind = 'primary', disabled, big, subtitle, busy,
 }: { title: string; onPress: () => void; kind?: ButtonKind; disabled?: boolean; big?: boolean; subtitle?: string; busy?: boolean }) {
   const palette: Record<ButtonKind, [string, string]> = {
-    primary: [colors.primary, '#fff'],
+    primary: [colors.primary, colors.onPrimary],
     secondary: [colors.well, colors.ink],
-    danger: [colors.red, '#fff'],
+    danger: [colors.refuseBg, '#fff'],
     ghost: ['transparent', colors.primary],
-    light: ['#FFFFFF1F', '#fff'],
+    light: ['#FFFFFF24', '#fff'],
   };
   const [bg, fg] = palette[kind];
   return (
@@ -217,7 +255,7 @@ export function Chip({ text, active, onPress }: { text: string; active: boolean;
       accessibilityRole="button"
       accessibilityState={{ selected: active }}
     >
-      <Text style={[s.chipText, active && { color: '#fff' }]}>{text}</Text>
+      <Text style={[s.chipText, active && s.chipTextActive]}>{text}</Text>
     </Pressable>
   );
 }
@@ -232,7 +270,7 @@ const s = StyleSheet.create({
   grow: { flexGrow: 1 },
   screen: { flexGrow: 1, paddingHorizontal: 20, paddingTop: space.md, paddingBottom: space.xl, gap: space.lg },
   card: { backgroundColor: colors.card, borderRadius: radius.lg, padding: 20, gap: space.md },
-  cardNavy: { backgroundColor: colors.navy },
+  cardNavy: { backgroundColor: colors.card },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, alignItems: 'center' },
   title: { fontFamily: font.bold, fontSize: 30, lineHeight: 34, color: colors.ink, letterSpacing: -0.8 },
   big: { fontFamily: font.heavy, fontSize: 56, lineHeight: 60, color: colors.ink, letterSpacing: -2, fontVariant: ['tabular-nums'] },
@@ -242,6 +280,11 @@ const s = StyleSheet.create({
   field: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space.md, paddingVertical: 6 },
   fieldLabel: { fontFamily: font.regular, fontSize: 16, color: colors.muted },
   fieldValue: { fontFamily: font.semibold, fontSize: 16, color: colors.ink, flexShrink: 1, textAlign: 'right', fontVariant: ['tabular-nums'] },
+  group: { backgroundColor: colors.card, borderRadius: radius.lg, overflow: 'hidden', paddingVertical: 4 },
+  cell: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 64, paddingHorizontal: 18, paddingVertical: 12 },
+  cellTitle: { fontFamily: font.semibold, fontSize: 17, color: colors.ink },
+  cellDetail: { fontFamily: font.regular, fontSize: 14, lineHeight: 19, color: colors.muted },
+  cellValue: { fontFamily: font.semibold, fontSize: 17, color: colors.ink, fontVariant: ['tabular-nums'] },
   pill: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 5, borderRadius: radius.pill, alignSelf: 'flex-start' },
   pillText: { fontFamily: font.semibold, fontSize: 13 },
   status: { flexDirection: 'row', alignItems: 'center', gap: 8 },
@@ -258,5 +301,6 @@ const s = StyleSheet.create({
   buttonSub: { fontFamily: font.regular, fontSize: 14, opacity: 0.85, marginTop: 2 },
   chip: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 18, borderRadius: radius.pill, backgroundColor: colors.well },
   chipActive: { backgroundColor: colors.primary },
+  chipTextActive: { color: colors.onPrimary },
   chipText: { fontFamily: font.semibold, fontSize: 15, color: colors.ink },
 });

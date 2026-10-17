@@ -1,9 +1,11 @@
 // Resident home (§19.2): remaining balance, cert status, Storm Mode, records carried.
-import { useState } from 'react';
+import { useEffect, useReducer, useState } from 'react';
 import * as api from '../api';
 import { Header } from '../components/Header';
-import { View } from 'react-native';
-import { Big, Body, Button, Card, colors, ErrorNote, Field, Label, Meter, Muted, Pill, Row, Screen, Status, wholeDollars } from '../components/ui';
+import { StyleSheet, Text, View } from 'react-native';
+import { Radar } from '../components/Radar';
+import { syncManager } from '../sync/manager';
+import { Button, Cell, colors, ErrorNote, font, Group, Meter, Screen, Status, wholeDollars } from '../components/ui';
 import { useOnline } from '../hooks';
 import { KEY_REF } from '../keys';
 import { useNav } from '../nav';
@@ -20,6 +22,9 @@ export function WalletScreen() {
   const online = useOnline();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [, rerender] = useReducer((x: number) => x + 1, 0);
+  useEffect(() => syncManager.subscribe(rerender), []);
+  const nearby = syncManager.status.connected.length;
   const cert = latestCert();
   const state = walletState();
   if (!cert || !state) return null;
@@ -51,54 +56,53 @@ export function WalletScreen() {
     : expired
       ? { text: 'Certificate expired', tone: 'amber' as const }
       : { text: 'Backed by Capital One', tone: 'green' as const };
+  const storm = cert.cap_cents >= STORM_CAP;
 
   return (
     <Screen>
       <Header />
 
-      <Card tone="navy" style={{ gap: 14 }}>
-        <Label color={colors.onNavyMuted}>{getDisplayName() ?? 'Wallet'}, works offline</Label>
-        <Big color={colors.onNavy}>{wholeDollars(left)}</Big>
-        <Muted color={colors.onNavyMuted}>left of {wholeDollars(cert.cap_cents)}, {wholeDollars(state.cumCents)} spent</Muted>
-        <Meter value={state.cumCents} max={cert.cap_cents} color="#8FA8FF" track={colors.navyRaised} />
-        <Row style={{ justifyContent: 'space-between' }}>
-          <Status text={status.text} tone={status.tone} light />
-          <Muted color={colors.onNavyMuted}>{expired ? 'Renews when online' : `Renews in ${hoursLeft} h`}</Muted>
-        </Row>
-      </Card>
+      <View style={styles.hero}>
+        <Radar blips={nearby} />
+        <Text style={styles.heroLabel}>{getDisplayName() ?? 'Your wallet'} can spend</Text>
+        <Text style={styles.heroFigure} adjustsFontSizeToFit numberOfLines={1}>{wholeDollars(left)}</Text>
+        <Text style={styles.heroSub}>of {wholeDollars(cert.cap_cents)}, with no internet</Text>
+        <View style={{ marginTop: 18, gap: 12 }}>
+          <Meter value={state.cumCents} max={cert.cap_cents} color={colors.primary} track={colors.well} />
+          <Status text={status.text} tone={status.tone} />
+        </View>
+      </View>
 
       <Button title="Pay a shop" subtitle="Scan the shop's code" big onPress={() => nav.go({ name: 'pay' })}
         disabled={frozen || expired || left === 0} />
 
-      <Card>
-        <Row style={{ justifyContent: 'space-between' }}>
-          <View style={{ flex: 1, gap: 4 }}>
-            <Body>Storm Mode</Body>
-            <Muted>
-              {cert.cap_cents >= STORM_CAP
-                ? `On. Capital One holds ${wholeDollars(cert.cap_cents)} in escrow for you.`
-                : `Raise your offline limit to ${wholeDollars(STORM_CAP)} before the storm.`}
-            </Muted>
-          </View>
-          <Pill text={cert.cap_cents >= STORM_CAP ? 'On' : 'Off'} tone={cert.cap_cents >= STORM_CAP ? 'blue' : 'neutral'} />
-        </Row>
-        {cert.cap_cents < STORM_CAP ? (
-          <Button
-            title={online ? 'Turn on Storm Mode' : 'Storm Mode needs internet'}
-            kind="secondary"
-            onPress={stormMode}
-            busy={busy}
-            disabled={!online}
-          />
-        ) : null}
-        {error ? <ErrorNote text={error} /> : null}
-      </Card>
-
-      <Card>
-        <Field label="Records carried" value={String(carrying)} />
-        <Field label="Certificate" value={`v${cert.cert_ver} · ${cert.cert_id.slice(0, 8)}`} last />
-        <Button title="Records and sync" kind="secondary" onPress={() => nav.go({ name: 'records' })} />
-      </Card>
+      <Group>
+        <Cell
+          title="Storm Mode"
+          detail={storm ? `On. Capital One holds ${wholeDollars(cert.cap_cents)} in escrow.` : `Raise your limit to ${wholeDollars(STORM_CAP)} before the storm.`}
+          accessory={storm ? <Text style={styles.on}>On</Text> : undefined}
+        />
+        <Cell title="Records carried" detail="Delivered phone to phone" value={String(carrying)} onPress={() => nav.go({ name: 'records' })} />
+        <Cell title="Certificate" detail={expired ? 'Renews when any phone is online' : `Renews in ${hoursLeft} h`} value={`v${cert.cert_ver}`} />
+      </Group>
+      {!storm ? (
+        <Button
+          title={online ? 'Turn on Storm Mode' : 'Storm Mode needs internet'}
+          kind="secondary"
+          onPress={stormMode}
+          busy={busy}
+          disabled={!online}
+        />
+      ) : null}
+      {error ? <ErrorNote text={error} /> : null}
     </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  hero: { paddingTop: 28, paddingBottom: 8, minHeight: 250 },
+  heroLabel: { fontFamily: font.medium, fontSize: 17, color: colors.muted },
+  heroFigure: { fontFamily: font.heavy, fontSize: 96, lineHeight: 104, color: colors.ink, letterSpacing: -4, fontVariant: ['tabular-nums'] },
+  heroSub: { fontFamily: font.medium, fontSize: 17, color: colors.muted },
+  on: { fontFamily: font.semibold, fontSize: 17, color: colors.primary },
+});

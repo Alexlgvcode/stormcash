@@ -149,6 +149,6 @@ export function DemoMenuScreen() {
 const styles = StyleSheet.create({
   input: {
     borderWidth: 1, borderColor: colors.line, borderRadius: radius.sm, padding: 12, fontSize: 13,
-    fontFamily: 'Menlo', backgroundColor: colors.card, color: colors.ink,
+    fontFamily: 'Menlo', backgroundColor: colors.well, color: colors.ink,
   },
 });

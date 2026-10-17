@@ -81,7 +81,7 @@ export default function App() {
     <SafeAreaProvider>
       <NavContext.Provider value={nav}>
         {render()}
-        <StatusBar style={route.name === 'result' || route.name === 'judge' ? 'light' : 'dark'} />
+        <StatusBar style="light" />
       </NavContext.Provider>
     </SafeAreaProvider>
   );

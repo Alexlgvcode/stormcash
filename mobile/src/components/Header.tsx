@@ -5,7 +5,7 @@ import { useOnline } from '../hooks';
 import { useNav } from '../nav';
 import { getDemoLabel } from '../settings';
 import { syncManager } from '../sync/manager';
-import { colors, font, Pill } from './ui';
+import { colors, font, Status } from './ui';
 
 const LABEL_NAMES: Record<string, string> = { MAYA: 'Maya', PHARMACY: 'Pharmacy', GAS_STATION: 'Gas Station' };
 
@@ -34,8 +34,8 @@ export function Header() {
         {label ? <Text style={styles.label}>{LABEL_NAMES[label] ?? label} · demo phone</Text> : null}
       </Pressable>
       <View style={styles.right}>
-        <Pill text={online ? 'Online' : 'Offline'} tone={online ? 'green' : 'neutral'} dot />
-        {nearby > 0 ? <Pill text={`${nearby} nearby`} tone="blue" dot /> : null}
+        <Status text={online ? 'Online' : 'Offline'} tone={online ? 'green' : 'amber'} />
+        {nearby > 0 ? <Status text={`${nearby} nearby`} tone="blue" /> : null}
       </View>
     </View>
   );
@@ -44,8 +44,8 @@ export function Header() {
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   logoRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  mark: { width: 30, height: 30, borderRadius: 9, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
-  markText: { color: '#fff', fontFamily: font.heavy, fontSize: 18 },
+  mark: { width: 30, height: 30, borderRadius: 15, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
+  markText: { color: colors.onPrimary, fontFamily: font.heavy, fontSize: 17 },
   word: { fontFamily: font.bold, fontSize: 22, color: colors.ink, letterSpacing: -0.6 },
   label: { fontFamily: font.medium, fontSize: 14, color: colors.muted, marginTop: 4, marginLeft: 38 },
   right: { alignItems: 'flex-end', gap: 6 },

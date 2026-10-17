@@ -6,7 +6,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Icon } from '../components/Icon';
 import { QrCode } from '../components/QrCode';
 import { Scanner } from '../components/Scanner';
-import { Button, Card, Chip, colors, ErrorNote, font, Label, Meter, Muted, Row, Screen, Title, radius } from '../components/ui';
+import { Button, Chip, colors, ErrorNote, font, Label, Meter, Muted, Row, Screen, Title, radius } from '../components/ui';
 import { useTick } from '../hooks';
 import { deviceKey } from '../keys';
 import { useNav } from '../nav';
@@ -59,11 +59,11 @@ export function ChargeScreen() {
     return (
       <Screen>
         <Title>Charge</Title>
-        <Card style={{ alignItems: 'center', paddingVertical: 24 }}>
-          <Label>{mc.display_name}</Label>
-          <Text style={styles.amount} adjustsFontSizeToFit numberOfLines={1}>${amount}</Text>
+        <View style={{ alignItems: 'center', paddingVertical: 12 }}>
+          <Label>{mc.display_name} charges</Label>
+          <Text style={[styles.amount, amount === 0 && { color: colors.faint }]} adjustsFontSizeToFit numberOfLines={1}>${amount}</Text>
           <Muted>Whole dollars</Muted>
-        </Card>
+        </View>
         <Row style={{ justifyContent: 'center' }}>
           {QUICK.map((d) => <Chip key={d} text={`$${d}`} active={amount === d} onPress={() => setAmount(d)} />)}
         </Row>
@@ -105,9 +105,9 @@ export function ChargeScreen() {
           <Title color={colors.primary}>${step.request.rq.amount_cents / 100}</Title>
         </Row>
         <Muted>Ask the customer to scan this code with StormCash.</Muted>
-        <Card style={{ alignItems: 'center', padding: 12, opacity: expired ? 0.3 : 1 }}>
+        <View style={{ opacity: expired ? 0.3 : 1 }}>
           <QrCode value={step.qr} />
-        </Card>
+        </View>
         <Meter value={left} max={REQ_TTL_S} color={left > 30 ? colors.primary : colors.amber} />
         <Muted>{expired ? 'This code expired. Start again.' : `Expires in ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`}</Muted>
         <Button title="Scan customer's code" big onPress={() => setStep({ s: 'scan' })} disabled={expired} />
@@ -128,7 +128,7 @@ export function ChargeScreen() {
 }
 
 const styles = StyleSheet.create({
-  amount: { fontFamily: font.heavy, fontSize: 76, lineHeight: 84, color: colors.ink, letterSpacing: -3, fontVariant: ['tabular-nums'] },
+  amount: { fontFamily: font.heavy, fontSize: 96, lineHeight: 104, color: colors.ink, letterSpacing: -3, fontVariant: ['tabular-nums'] },
   pad: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 10 },
   key: { width: '31.5%', height: 64, borderRadius: radius.pill, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' },
   keyText: { fontFamily: font.semibold, fontSize: 28, color: colors.ink, fontVariant: ['tabular-nums'] },

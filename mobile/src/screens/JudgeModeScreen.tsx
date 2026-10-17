@@ -59,7 +59,7 @@ export function JudgeModeScreen() {
 }
 
 const styles = StyleSheet.create({
-  banner: { backgroundColor: colors.red, paddingVertical: 14, borderRadius: 999 },
+  banner: { backgroundColor: colors.refuseBg, paddingVertical: 14, borderRadius: 999 },
   bannerText: { color: '#fff', fontFamily: font.bold, fontSize: 19, textAlign: 'center', letterSpacing: -0.2 },
   lead: { color: '#fff', fontFamily: font.bold, fontSize: 24, lineHeight: 30, letterSpacing: -0.5 },
   note: { borderRadius: 16, padding: 16 },

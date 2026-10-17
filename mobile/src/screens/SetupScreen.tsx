@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Logo } from '../components/Header';
+import { Radar } from '../components/Radar';
 import { useNav } from '../nav';
 import { register } from '../registration';
 import {
@@ -52,11 +53,12 @@ export function SetupScreen() {
 
   return (
     <Screen>
-      <Card tone="navy" style={{ gap: 10, paddingVertical: 28 }}>
-        <Logo light />
+      <View style={styles.heroWrap}>
+        <Radar />
+        <Logo />
         <Text style={styles.hero}>Pay local shops when the network is down.</Text>
-        <Muted color="#C7D2FE">Setup needs internet once. After that, payments work phone to phone.</Muted>
-      </Card>
+        <Muted>Setup needs internet once. After that, payments work phone to phone.</Muted>
+      </View>
 
       <Section title="This phone is">
         {PRESETS.map((p) => (
@@ -111,14 +113,15 @@ export function SetupScreen() {
 }
 
 const styles = StyleSheet.create({
-  hero: { fontFamily: font.bold, fontSize: 30, lineHeight: 34, color: '#fff', letterSpacing: -0.9 },
+  heroWrap: { paddingTop: 24, paddingBottom: 12, gap: 14, minHeight: 230 },
+  hero: { fontFamily: font.heavy, fontSize: 40, lineHeight: 42, color: colors.ink, letterSpacing: -1.6 },
   option: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 18, borderRadius: radius.lg, backgroundColor: colors.card },
   optionActive: { backgroundColor: colors.primarySoft },
   radio: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: colors.faint },
   radioOn: { borderColor: colors.primary, borderWidth: 7 },
   input: {
-    borderWidth: 1, borderColor: colors.line, borderRadius: radius.md, padding: 16, fontSize: 17,
-    fontFamily: font.medium, backgroundColor: colors.card, color: colors.ink,
+    borderRadius: radius.md, padding: 16, fontSize: 17,
+    fontFamily: font.medium, backgroundColor: colors.well, color: colors.ink,
   },
   mono: { fontFamily: 'Menlo', fontSize: 13 },
   link: { fontFamily: font.semibold, fontSize: 16, color: colors.primary, paddingVertical: 12 },
