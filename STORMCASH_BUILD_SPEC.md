@@ -24,7 +24,7 @@
 > **v4.20 (Oct 17):** the public proof page checks each proof a second time with our C++ verifier (`cpp/verify`) compiled to WebAssembly, next to WebCrypto; the two implementations share no code (§18.6). Marked **[v4.20]**.
 > **v4.21 (Oct 17):** a shop's appeal by text is one conversation (§17.2): each appeal thread (shop + flag) keeps one Droid session, resumed with `Session.resume` for every new text, with the same read-only tools, permission handler and citation check on every turn; a session that can't be resumed is replaced by a new one seeded with the thread from `messages`. `STORMDESK_APPEAL_SESSIONS` (§6.3, §12.1, §14.7c, §18.7, §22.4). No migration: each turn's run stores its session, turn and thread. Marked **[v4.21]**.
 > **v4.22 (Oct 17):** Droid proposes a new deterministic detector as a pull request (§14.7d): it writes a pure detector and its test in a throwaway worktree, under a permission handler and two macOS sandbox profiles; our server re-runs the tests and an evaluation on the simulator's labelled candidates and rejects any mismatch; then deterministic code opens a PR labelled for a person and never merges it. `STORMDESK_AUTHOR`, `POST /v1/stormdesk/author-detector`, `stormdesk_runs.job = 'author'`, `server/stormcash/detectors_proposed/` (§6.3, §11.1, §12.1, §14.1, §18.5, §18.7, §22.4). Migration `007_stormdesk_author.sql`. Marked **[v4.22]**.
-> **v4.23 (Oct 17):** dashboard redesign, part 1 (#93, §18): a white page with a left sidebar in place of the header, no intro screen (the dashboard opens on Accounts), and the Accounts tab as Balances, Reconciliation and Nessie log views in plain tables instead of cards. The other tabs keep their content inside the new shell for now. Marked **[v4.23]**.
+> **v4.23 (Oct 17):** dashboard redesign (#93, §18): one Stripe-like style for every tab and the proof page (a white page, no cards, headings over hairline rules, plain tables, small status pills, carbon blue as the only accent), a left sidebar in place of the header, and no intro screen (the dashboard opens on Accounts). Each tab splits into views: Accounts (Balances, Reconciliation, Nessie log), Cases (Proven fraud, Review queue, Owner freezes), Town (Map, Relay paths, What-if), Evals (Held-out towns, Main dataset, Runs), Droid (Runs, Guardrails, Detector proposals). Every feature is kept. Marked **[v4.23]**.
 > **Builds on:** "StormCash: The 10/10 Build" v3 (Oct 16, Alexandre Lugovoi, on Brian Maina's Oct 11 draft). Everything new since v3 is marked **[v4]**.
 
 ---
@@ -1739,12 +1739,16 @@ Title, "Demo mode", connection dot, **Reset demo** button (calls `/v1/demo/reset
 - **[v4.3] As built.** The Cases tab switches between *Hard cases* and *StormDesk flags*. A flag shows its subject, summary, exposure, reasoning, evidence ids (marked as checked), the tool calls (live from `stormdesk_step`, or a stored run replayed step by step, labelled "Replay of run at …"), Run again, Approve / Reject with the operator's name, and the Photon thread live from `message` events. Each hard case has a StormDesk section (Investigate, live steps, replay). Fake-runner output carries a "Fake runner · rules only" badge everywhere.
 - "Merchant knew" case view: the merchant's ACCEPT entry listing the conflicting tag, with its signature.
 
+- **[v4.23] As built (#93).** Three views. **Proven fraud**: the case list, then the selected case: "CASE #n", the amount and what happened to it, a status pill, Proof QR and Verify it yourself, a summary strip (rule, where it was detected, exposure, certificate), the two tags as one table with the conflicting row tinted, the merchant-knew log, a Timeline and Payment details (from the case, its certificate and the payments' relay paths, matched by tag id), StormDesk and the case file. **Review queue**: a table of flags (subject, signal, exposure, second opinion, status), then the selected flag's proposal with Approve / Reject and the operator's name, evidence and agent steps side by side, the second opinion and the Photon thread. **Owner freezes**: the FREEZE-by-text list and the resident's thread.
+
 ### 18.4 Town tab
 
 - SVG grid map: regions (shaded), merchants (dots; real ones larger and labeled; simulated ones labeled "simulated" in a legend), live payment pulses, relay uploads, region alert badges (labeled live/replayed), dark regions hatched.
 - Relay path panel: recent payments with hop paths.
 - Sliders (§16.6) + charts: share refused offline, caught at settlement, loss per cheater, time to settlement.
 - **[v4.3]** `GET /v1/town` also returns `dark_regions` (a `region_dark` candidate in the last 6 h), active alerts with their source, and the latest simulator `stats.json` for a one-line summary. Payment pulses come from `payment` SSE events; merchants without pool eligibility are drawn amber.
+
+- **[v4.23] As built (#93).** Three views: **Map** (a summary strip from the seeded town's `stats.json`, labelled simulated, then the map in light colors and a few recent relay paths), **Relay paths** and **What-if** (the sliders and the default-vs-yours table).
 
 ### 18.5 Evals tab (Chalk add-on)
 
@@ -1755,6 +1759,8 @@ Title, "Demo mode", connection dot, **Reset demo** button (calls `/v1/demo/reset
 
 - **[v4.22]** "Ask Droid to write a detector" (§14.7d) under the eval sections: the gap from the stored StormDesk runs (dark regions caught on dev and held-out rows) and the dev rows Droid is shown, the operator's name, the button (off with the reasons when the server can't run it), the live tool calls (`StepList`), then a result card: the verdict, the Droid badge with model and credits, the PR link, the rationale, our re-run's metrics table, each check ✓/✗, Droid's caveats, what the sandbox refused, the code Droid wrote and the replayable steps.
 
+- **[v4.23] As built (#93).** Three views, held-out towns first: **Held-out towns** (a strip with seeds, cases, model and Chalk run, the comparison, the scenarios, both runs, then "Ask Droid to write a detector"), **Main dataset** (the same, plus the trap cases and the planted subjects not in the dataset) and **Runs** (every saved run that isn't scored, with its reason, and Reload results).
+
 ### 18.6 Public proof page `/proof/:caseId`
 
 Mobile-friendly, no login. Shows the two tags, the rule, and a **Verify** button that runs WebCrypto ECDSA verification in the judge's browser against the holder key and the server-signed certificate. Explains in two sentences why this proves cheating.
@@ -1764,6 +1770,8 @@ Mobile-friendly, no login. Shows the two tags, the rule, and a **Verify** button
 **[v4.20] Second check: the C++ verifier, as WebAssembly.** Each press of **Verify** also runs `stormcash-verify`'s proof check (`cpp/verify`, the code behind `stormcash-verify proof`) in the browser, on the same `/v1/proof` JSON and with the same server key. It shares no code with the WebCrypto check: it decodes the transport JSON with its own strict codec, rebuilds every canonical string and digest, re-derives the rule, and uses its own P-256 (p256-m) and SHA-256 instead of the browser's. WebCrypto stays the primary result, exactly as before. The C++ verdict is shown under it, then one line: **"Verified by 2 independent implementations"** when both verify, **"Neither implementation verified this proof"** when neither does, and **"The two implementations disagree"** otherwise, never hidden. If WebAssembly can't load, or the C++ side can't read the file, the card says **"C++ check unavailable"** and the WebCrypto result stands alone. The module is built from `cpp/verify/wasm/` with Emscripten 6.0.10 and committed as `dashboard/src/wasm/` (518 KB, 163 KB gzipped), loaded only by the proof page. CI's `wasm` job rebuilds it and fails unless it equals the committed files byte for byte; `npm test` runs both checks on proofs captured from the server and on tampered copies. The C++ verifier passes all 124 vectors and Project Wycheproof's P-256 tests with both its crypto backends (OpenSSL natively, p256-m in the browser).
 
 **Done when:** the full core demo runs with only dashboard clicks + phones, and every tab survives a page reload.
+
+**[v4.23] As built (#93).** Light and phone-first: the rule and why, one full-width Verify button, then "Checked on your phone" with a row per implementation (WebCrypto first) and the agreement line, the browser's checks, the C++ verifier's answer, and the two tags as one table with the conflicting row tinted.
 
 ### 18.7 Droid tab (Factory add-on) [v4.16]
 
@@ -1779,6 +1787,8 @@ What Droid does in the running product, at the table in seconds, from stored run
 - **[v4.22] Author runs (§14.7d):** job `author`, subject "detector for <kind>", verdict "<name>: PR #N opened" / "re-run matched" / "rejected by the re-run", outcome `rerun_rejected` ("Re-run rejected") when our re-run didn't match, and a guardrail "Proposed detectors rejected by the re-run". Their tool calls (sandbox reads, Create/Edit, `run_tests`, `run_eval`) count "in the sandbox", not read-only, and never as built-ins "still seen". The harness says `author_on`.
 
 The tab (`#droid`): summary tiles, Droid's runs (fake-runner runs behind a toggle, badged), a run view with its tool calls replayed step by step (the Cases tab's `StepList`), the guardrail events with links to their runs, totals per job, and runs in progress live from `stormdesk_step`. Empty state: "No StormDesk runs yet."
+
+**[v4.23] As built (#93).** Three views under a summary strip (Droid runs, valid outputs, credits, mean time, invalid citations, write tools) and the harness line: **Runs** (live runs, the runs table and the selected run's facts and steps), **Guardrails** (each guardrail with its runs, and totals per job) and **Detector proposals** (the author runs and "Ask Droid to write a detector").
 
 ---
 

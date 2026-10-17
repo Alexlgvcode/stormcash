@@ -83,9 +83,12 @@ function timeline(c: CaseDetail["case"], cert: CaseDetail["cert"], pa?: RelayPat
       ? `${p.merchant} refused payment ${label} offline`
       : `${p.merchant} accepted payment ${label}, ${dollars(p.amount_cents)}`]);
   }
-  if (pa?.received_at) {
-    const carried = pa.path.map((h) => h.name).join(" → ");
-    out.push([pa.received_at, `Uploaded by ${pa.uploaded_by ?? "a phone"}, ${pa.hops} ${pa.hops === 1 ? "hop" : "hops"}: ${carried} → server`]);
+  // The upload that carried the accepted payment to the server (the refused one only proves the conflict).
+  const carried = [pa, pb].find((p) => p && p.status !== "refused_evidence") ?? pa;
+  if (carried?.received_at) {
+    const via = carried.path.map((h) => h.name).join(" → ");
+    out.push([carried.received_at,
+      `Uploaded by ${carried.uploaded_by ?? "a phone"}, ${carried.hops} ${carried.hops === 1 ? "hop" : "hops"}: ${via} → server`]);
   }
   out.push([c.created_at, `Case #${c.case_id} opened: ${detectedText(c).toLowerCase()}`]);
   return out.sort((x, y) => x[0] - y[0]);
@@ -120,6 +123,7 @@ function CaseView({ caseId, paths }: { caseId: number; paths: Map<string, RelayP
   const pa = c.tag_a ? paths.get(c.tag_a) : undefined;
   const pb = c.tag_b ? paths.get(c.tag_b) : undefined;
   const amount = (b ?? a)?.fields.amount_cents as number | undefined;
+  const refusedAt = [pa, pb].find((p) => p?.status === "refused_evidence");
   const rulesFired = (c.evidence.rules_fired as string[] | undefined) ?? [c.rule];
   const events = timeline(c, cert, pa, pb);
 
@@ -154,7 +158,7 @@ function CaseView({ caseId, paths }: { caseId: number; paths: Map<string, RelayP
         <Strip
           items={[
             { label: "Rule", value: rulesFired.map((r) => RULE_TEXT[r]?.title ?? r).join(" + ") },
-            { label: "Detected", value: c.detected_where === "offline" ? `Offline${pb ? `, ${pb.merchant}` : ""}` : "At settlement" },
+            { label: "Detected", value: c.detected_where === "offline" ? `Offline${refusedAt ? `, ${refusedAt.merchant}` : ""}` : "At settlement" },
             { label: "Exposure", value: <span className="tabular-nums">{dollars(c.exposure_cents)}</span> },
             ...(cert
               ? [{ label: "Certificate", value: `v${cert.fields.cert_ver} · ${dollars(Number(cert.fields.cap_cents))} cap` }]
