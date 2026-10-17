@@ -71,7 +71,7 @@ A fresh database gets the whole schema (`psql "$DATABASE_URL" -f schema.sql`); a
 uvicorn --factory stormcash.app:create_app --host 0.0.0.0 --port 8000
 ```
 
-**Dashboard.** Build it once and the server serves it at `/`, along with the public proof page at `/proof/<case_id>`. Details in [`dashboard/README.md`](dashboard/README.md):
+**Dashboard.** Build it once and the server serves it at `/`, along with the public proof page at `/proof/<case_id>`. The header's **Intro** button (or the `I` key, or the `#intro` link) opens the full-screen intro for the demo's opening beat. Details in [`dashboard/README.md`](dashboard/README.md):
 
 ```bash
 cd dashboard && npm ci && npm run build
@@ -151,12 +151,24 @@ StormDesk is the back office of the running product, in [`server/stormcash/storm
 
 ![Live tool calls from a real Droid run](docs/images/stormdesk-live-steps.png)
 
-_A live Droid run (`claude-sonnet-5-5`) triaging the Corner Store candidate on the seeded town: 14 read-only tool calls streamed to the dashboard, 63,437 Factory credits. It dismissed the candidate (see Honest limits)._
+_A live Droid run (`claude-sonnet-5-5`) triaging the Corner Store candidate on the seeded town: 14 read-only tool calls streamed to the dashboard, 63,437 Factory credits. With prompt v1 it dismissed the candidate; with prompt v2 the same candidate is flagged (see Honest limits)._
 
 ## How we use Chalk
 
 - **Features for the agent.** StormDesk's `query_features` tool asks for a shop's, certificate's or region's features: contact rates against nearby shops, pool-funded share, drain speed, upload gaps, active weather alerts. The Chalk feature set (#28) builds them from our Postgres data, Nessie balances and the National Weather Service alerts API. If Chalk is off or can't answer, the tool answers from the detectors' own frozen features and says so (`source: "postgres_fallback"`).
 - **Evaluations.** The simulator writes ground truth for every seeded town (`sim/out/<seed>/labels.json`), including deliberate traps: a remote shop, a victim shop, an honest resident stocking up, a drifting clock and a quiet region. Chalk Evaluations compares the rules-only baseline with StormDesk on those labels (#33). The Evals tab shows only numbers from a real run.
+- **Results so far** (real Chalk runs, 43 labeled candidates from seeds 42, 7, 13, 99 and 2026, StormDesk on Droid with `claude-sonnet-5-5`):
+
+  | | Rules only | StormDesk, prompt v1 |
+  |---|---|---|
+  | Chalk run | `71142eed-2864-413d-ac27-da1e3c537e50` | `a91828a0-342b-4030-b046-a926fe5ade9d` |
+  | Real cases caught | 23 / 23 | 2 / 23 |
+  | Colluding shops caught | 9 / 9 | 1 / 9 |
+  | Honest subjects wrongly flagged | 20 / 20 | 2 / 20 |
+  | Evidence citations valid | n/a | 42 / 43 |
+
+  Rules alone flag every honest subject; prompt v1 was far too lenient. **Prompt v2** (see Honest limits) has one real run so far, Chalk `aca3204b-db75-4908-a388-4594d4ee97a7`, which stopped at its credit cap after 32 of 43 rows. It is recorded as incomplete and is not a score: on the 32 rows both versions answered, v2 caught 12 of 18 real cases (v1: 2 of 18) and wrongly flagged 2 of 14 honest subjects (v1: 2 of 14). A complete v2 run is next (#100).
+- **Held-out towns.** Seeds 1, 2 and 3 were chosen and committed before any of their rows existed and were never seen while prompt v2 was written: 30 rows, 16 honest. Rules-only on them (Chalk `ff6d77b3-81da-49e5-aa83-8336506d7f83`) caught 14 of 14 real cases and flagged all 16 honest subjects. StormDesk's held-out run is next (#100).
 
 ## How we use Capital One Nessie
 
@@ -169,7 +181,11 @@ _A live Droid run (`claude-sonnet-5-5`) triaging the Corner Store candidate on t
 
 ## How we use Photon
 
-StormCash talks to shop owners over Telegram through Photon. When an operator approves a hold or a lower limit, the shop gets a notice whose numbers must all come from the flag's evidence. A shop's reply is answered by StormDesk, citing the shop's own signed logs, and anything uncertain is escalated to a person. Real shops with a registered handle also get a "Paid" notice when Nessie pays them. Details: [`server/stormcash/photon/README.md`](server/stormcash/photon/README.md).
+StormCash talks to shop owners over Telegram through Photon. When an operator approves a hold or a lower limit, the shop gets a notice whose numbers must all come from the flag's evidence. A shop's reply is answered by StormDesk, citing the shop's own signed logs, and anything uncertain is escalated to a person. Real shops with a registered handle also get a "Paid" notice when Nessie pays them.
+
+**Residents can freeze a stolen wallet by text.** A resident whose Telegram handle is registered texts `FREEZE`. The server freezes their certificates through the same deterministic code as any other freeze (never through the agent), publishes a new signed freeze list that spreads to phones by gossip, and texts back a confirmation. Texting can't unfreeze, and unknown handles change nothing. The request also feeds the stolen-phone detector (`owner_freeze_request` in `cap_drain`).
+
+Details: [`server/stormcash/photon/README.md`](server/stormcash/photon/README.md).
 
 ## Team
 
