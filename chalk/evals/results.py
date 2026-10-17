@@ -93,7 +93,8 @@ def _score(row: dict, name: str) -> float | None:
 
 def summarize(rows: list[dict], *, chalk: dict, dataset: dict, mode: str, git_sha: str | None,
               now: int, scorers: list[str] = SCORERS, droid_audit: dict | None = None,
-              label: str | None = None, label_note: str | None = None) -> dict:
+              label: str | None = None, label_note: str | None = None,
+              expect_prompt_version: int | None = None) -> dict:
     """The results file for one run. `rows` are the result dataset's rows (dicts); `scorers` are the
     evaluation's scorers (the rules-only evaluation has no citations-valid: it cites nothing)."""
     parsed = []
@@ -109,6 +110,10 @@ def summarize(rows: list[dict], *, chalk: dict, dataset: dict, mode: str, git_sh
         runner = "mixed"  # the server's own record of the model disagrees with the session files
     models = sorted({m for r in droid_runs for m in (r.get("models_used") or [])})
     model = models[0] if len(models) == 1 else (", ".join(models) or None)
+    prompt_versions = sorted({r.get("prompt_version") for r in droid_runs if r.get("prompt_version") is not None})
+    if runner == "droid" and (len(prompt_versions) > 1 or (
+            expect_prompt_version is not None and prompt_versions != [expect_prompt_version])):
+        runner = "mixed"  # every row must come from the one prompt version this result is labelled with
     audit_models = ((droid_audit or {}).get("audit") or {}).get("models_seen")
     if runner == "droid" and audit_models is not None and audit_models != models:
         runner = "mixed"  # some session (e.g. a retried attempt) used another model
@@ -238,6 +243,7 @@ def summarize(rows: list[dict], *, chalk: dict, dataset: dict, mode: str, git_sh
         "dataset": dataset,
         "runners_seen": dict(runners),
         "models_seen": models,
+        "prompt_versions_seen": prompt_versions,
         "droid_audit": droid_audit,
         "scorers": scores,
         "metrics": metrics,

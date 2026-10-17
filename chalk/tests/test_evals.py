@@ -473,3 +473,18 @@ def test_a_labelled_run_says_which_version_it_is():
                           mode="chalk_task", git_sha=None, now=0, label="prompt v2", label_note="not a blind holdout")
     assert s["runner_label"] == "StormDesk (Droid, m) · prompt v2" and s["label"] == "prompt v2"
     assert s["label_note"] == "not a blind holdout" and s["table_column"] == "stormdesk"
+
+
+def test_every_row_must_come_from_the_expected_prompt_version():
+    dismiss = flag(kind="none", proposed_action="none")
+    v2 = row("trap_victim_shop", "none", "none", True, droid_out(dismiss, prompt_version=2))
+    v1 = row("trap_stockup", "none", "none", True, droid_out(dismiss, prompt_version=1))
+
+    def run(rows, expect=None):
+        return results.summarize(rows, chalk={}, dataset={}, mode="chalk_task", git_sha=None, now=0,
+                                 expect_prompt_version=expect)
+
+    assert run([v2], expect=2)["runner"] == "droid" and run([v2], expect=2)["prompt_versions_seen"] == [2]
+    assert run([v2, v1])["runner"] == "mixed"
+    assert run([v1], expect=2)["runner"] == "mixed"
+    assert json.loads(gateway.to_output({**RUN, "runner": "droid", "prompt_version": 2}))["_run"]["prompt_version"] == 2

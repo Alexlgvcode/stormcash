@@ -111,6 +111,7 @@ def to_output(result: dict, model: str | None = None, session: dict | None = Non
         # From the server itself once it reports them (#81): the session's actual model and summed usage.
         "server_model": result.get("model") if droid else None,
         "server_usage": result.get("usage") if droid else None,
+        "prompt_version": result.get("prompt_version") if droid else None,
         "status": result.get("status"),
         "citations_valid": result.get("citations_valid"),
         "missing_citations": result.get("missing_citations") or [],

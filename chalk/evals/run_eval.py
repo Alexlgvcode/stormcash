@@ -136,7 +136,7 @@ def save_results(evaluation, run, droid_audit: dict | None = None) -> Path:
                  "seeds": [s["seed"] for s in meta["seeds"]], "scenarios": meta["scenarios"],
                  "detector_misses": meta["detector_misses"], "sha256": dataset_sha},
         mode=mode, git_sha=(run.metadata or {}).get("git_sha") or None, now=now, droid_audit=droid_audit,
-        label=label, label_note=label_note,
+        label=label, label_note=label_note, expect_prompt_version=evaluation.metadata.get("expect_prompt_version"),
     )
     RESULTS.mkdir(exist_ok=True)
     stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime(now))
@@ -169,6 +169,8 @@ def main() -> None:
     ap.add_argument("run_id", nargs="?", help="resummarize: rewrite this run's results file from its result dataset")
     ap.add_argument("--label", help='a name for this version of the agent, e.g. "prompt v2" (kept in the results)')
     ap.add_argument("--label-note", help="what a reader must know about this version, saved next to the label")
+    ap.add_argument("--expect-prompt-version", type=int,
+                    help="stormdesk: every row must report this prompt_version, or the result isn't StormDesk's")
     args = ap.parse_args()
     if args.task == "resummarize":
         run = chalkcompute.EvaluationRun.from_id(args.run_id)
@@ -191,7 +193,8 @@ def main() -> None:
         name = f"StormDesk triage: server ({'Droid' if configured == 'droid' else 'fake runner, not an agent'})"
         name += f" · {args.label}" if args.label else ""
         metadata = {"configured_runner": configured, "configured_model": stack.get("model"),
-                    "label": args.label, "label_note": args.label_note}
+                    "label": args.label, "label_note": args.label_note,
+                    "expect_prompt_version": args.expect_prompt_version}
     else:
         import task_rules_only as task_module
         task = task_module.rules_only
