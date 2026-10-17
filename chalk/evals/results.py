@@ -122,6 +122,9 @@ def summarize(rows: list[dict], *, chalk: dict, dataset: dict, mode: str, git_sh
     display = f"StormDesk (Droid{', ' + model if model else ''})" if runner == "droid" else LABELS[runner]
     if label:
         display = f"{display} · {label}"
+    answered = sum(1 for r, _ in parsed if not r.get("output_error"))
+    if not complete:
+        display = f"{display} · incomplete: {answered} of {len(parsed)} rows answered (not a score)"
 
     def caught(row, flag) -> bool:
         return flag is not None and flag["kind"] == row["label_kind"] and flag["proposed_action"] == row["label_action"]

@@ -141,7 +141,8 @@ def save_results(evaluation, run, droid_audit: dict | None = None) -> Path:
     RESULTS.mkdir(exist_ok=True)
     stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime(now))
     slug = re.sub(r"[^a-z0-9]+", "-", label.lower()).strip("-") if label else ""
-    path = RESULTS / f"{stamp}-{summary['runner']}{'-local' if mode == 'run_local' else ''}{'-' + slug if slug else ''}.json"
+    path = RESULTS / (f"{stamp}-{summary['runner']}{'-local' if mode == 'run_local' else ''}{'-' + slug if slug else ''}"
+                      f"{'' if summary['complete'] else '-incomplete'}.json")
     path.write_text(json.dumps(summary, indent=2) + "\n")
     print_summary(summary, path)
     return path
@@ -167,6 +168,8 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("task", choices=("rules_only", "stormdesk", "resummarize"))
     ap.add_argument("run_id", nargs="?", help="resummarize: rewrite this run's results file from its result dataset")
+    ap.add_argument("--audit-from", type=Path,
+                    help="resummarize: keep the Droid audit the gateway recorded at run time, from that run's file")
     ap.add_argument("--label", help='a name for this version of the agent, e.g. "prompt v2" (kept in the results)')
     ap.add_argument("--label-note", help="what a reader must know about this version, saved next to the label")
     ap.add_argument("--expect-prompt-version", type=int,
@@ -174,7 +177,8 @@ def main() -> None:
     args = ap.parse_args()
     if args.task == "resummarize":
         run = chalkcompute.EvaluationRun.from_id(args.run_id)
-        save_results(chalkcompute.Evaluation.from_id(run.evaluation_id), run)
+        audit = json.loads(args.audit_from.read_text()).get("droid_audit") if args.audit_from else None
+        save_results(chalkcompute.Evaluation.from_id(run.evaluation_id), run, droid_audit=audit)
         return
     rows, sha = load_rows()
 

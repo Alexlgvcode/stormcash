@@ -279,6 +279,7 @@ def test_an_incomplete_droid_run_is_not_a_stormdesk_column():
     refused = {**row("colluder", "merchant_silence", "hold_pool_payout", False, None), "output_error": "409"}
     s = summarize([good, refused])
     assert (s["runner"], s["complete"], s["table_column"]) == ("droid", False, None)
+    assert s["runner_label"].endswith("incomplete: 1 of 2 rows answered (not a score)")
     tripped = {"tripped": "credit cap reached", "audit": {"models_seen": ["m"]}}
     s = results.summarize([good], chalk={}, dataset={}, mode="chalk_task", git_sha=None, now=0, droid_audit=tripped)
     assert (s["complete"], s["table_column"]) == (False, None)
