@@ -97,7 +97,8 @@ APPEAL_TASK = (
     "Compare what the shop says with its own signed logs (get_device_log, get_contacts, get_merchant_payments, "
     "get_messages). Return an AppealReply: a short, plain reply to text back (times and amounts are fine; no ids "
     "or hashes in it), whether the claim matches the logs, the ids you cite, and whether a person must review it. "
-    "You can't change the decision: a person decides."
+    "Cite in evidence_ids only ids of records you retrieved with the tools (payments, log entries, contacts, the "
+    "shop's merchant id), never a flag or message number. You can't change the decision: a person decides."
 )
 
 
@@ -115,8 +116,8 @@ def appeal_open_prompt(merchant_id: str, name: str | None, flag: dict | None, hi
         "has claimed and what you have checked.",
     ]
     if flag:
-        lines.append(f"The decision being appealed: flag #{flag['flag_id']}, {flag['kind']}, proposed action "
-                     f"{flag['proposed_action']} ({flag['status']}). Its summary: {flag['summary']}")
+        lines.append(f"The decision being appealed: {flag['kind']}, proposed action {flag['proposed_action']} "
+                     f"({flag['status']}). Its summary: {flag['summary']}")
     if restarted:
         lines.append("Your earlier session for this appeal couldn't be reopened, so the whole thread so far is below.")
     if history:

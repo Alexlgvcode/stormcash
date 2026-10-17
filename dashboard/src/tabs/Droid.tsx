@@ -271,7 +271,7 @@ function JobTable({ rows, verdicts, appeals }: { rows: (Totals & { job: string }
       {appeals && (
         <p className="mb-3 text-lg text-slate-200">
           Shop appeals by text: <span className="font-semibold">{appeals}</span>
-          <span className="text-base text-slate-400"> (one Droid session per appeal, resumed for each new message)</span>
+          <span className="text-base text-slate-400"> · one Droid session per appeal, resumed for each new message</span>
         </p>
       )}
       {verdicts && (

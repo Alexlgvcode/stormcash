@@ -201,7 +201,7 @@ def test_an_appeal_is_one_droid_session_resumed_for_every_text(app_client, deps,
     first, second, third = droid.prompts["droid-s1"]
     hold = bridge.sent[0]["text"]
     assert hold in first and "The shop's new message: 'we were closed, generator died'" in first
-    assert f"flag #{notice}" in first
+    assert "merchant_silence, proposed action hold_pool_payout" in first and f"#{notice}" not in first
     # Later turns bring only the new text: the session already has the notice and its earlier replies.
     assert second.startswith("The shop wrote again: 'we only took cash after 4'") and hold not in second
     assert third.startswith("The shop wrote again: 'ok I have receipts'") and "not sent" not in third

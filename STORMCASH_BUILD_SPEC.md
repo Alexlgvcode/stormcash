@@ -22,6 +22,7 @@
 > **v4.18 (Oct 17):** a demo dry run (§21.6): `python -m stormcash.dryrun` plays the server side of the 2:30 script as three labelled test identities and prints ✓ or ✗ per beat, before every judge. StormDesk's worker skips dry-run identities and a demo reset removes them; `GET /v1/demo/dry-run` (§12.1, §14.7a). Marked **[v4.18]**.
 > **v4.19 (Oct 17):** every demo reset opens a fresh guarantee pool account under the same "StormCash Operator" customer, at `NESSIE_POOL_DOLLARS`, so the pool's Nessie records start clean and reconcile ✓; the old account stays in Nessie untouched. The current pool is the newest `nessie_pool_accounts` row, else `NESSIE_POOL_ACCOUNT_ID` (§6.3, §11.1, §11.4, §11.4a, §12.1). Migration `006_nessie_pool.sql`. Marked **[v4.19]**.
 > **v4.20 (Oct 17):** the public proof page checks each proof a second time with our C++ verifier (`cpp/verify`) compiled to WebAssembly, next to WebCrypto; the two implementations share no code (§18.6). Marked **[v4.20]**.
+> **v4.21 (Oct 17):** a shop's appeal by text is one conversation (§17.2): each appeal thread (shop + flag) keeps one Droid session, resumed with `Session.resume` for every new text, with the same read-only tools, permission handler and citation check on every turn; a session that can't be resumed is replaced by a new one seeded with the thread from `messages`. `STORMDESK_APPEAL_SESSIONS` (§6.3, §12.1, §14.7c, §18.7, §22.4). No migration: each turn's run stores its session, turn and thread. Marked **[v4.21]**.
 > **Builds on:** "StormCash: The 10/10 Build" v3 (Oct 16, Alexandre Lugovoi, on Brian Maina's Oct 11 draft). Everything new since v3 is marked **[v4]**.
 
 ---
@@ -298,6 +299,7 @@ STORMDESK_RUNNER=auto                             # [v4.3] droid | fake | auto (
 STORMDESK_MODEL=                                  # [v4.3] empty = Droid picks
 STORMDESK_AUTO=1                                  # [v4.3] worker runs StormDesk on new cases and candidates
 STORMDESK_REVIEW=1                                # [v4.15] a reviewer Droid checks every triage (§14.7b); 0 = off
+STORMDESK_APPEAL_SESSIONS=1                       # [v4.21] a shop's appeal is one Droid session, resumed per text (§14.7c); 0 = one run per message
 ```
 
 The server's public key is compiled into the mobile app (`mobile/src/config.ts: SERVER_PUB`). Generate the server key once on Friday and do not rotate it.
@@ -1103,7 +1105,7 @@ All JSON. Byte fields base64url. Prefix `/v1`. Auth for demo: none on reads; res
 | `GET /v1/town/quick` **[v4.3]** | `?adoption&p_link&p_uplink` | the §16.6 quick re-sim: `{baseline, current, seconds}` | WS4 |
 | `POST /v1/photon/inbound` | Photon webhook payload | 200 | WS7 |
 | `POST /v1/photon/resident-contact` **[v4.13]** | `{resident_id \| display_name, channel, handle}` | the resident and the saved handle. Operator header; `display_name` must match exactly one real (not simulated) resident, e.g. Maya | WS7 |
-| `GET /v1/photon/messages` **[v4.13]** | `?merchant_id=` or `?resident_id=` | `{messages}`: one shop's or resident's Photon thread, oldest first | WS7 |
+| `GET /v1/photon/messages` **[v4.13]** | `?merchant_id=` or `?resident_id=` | `{messages}`: one shop's or resident's Photon thread, oldest first. **[v4.21]** A shop's thread also has `turns`: the respond runs that answered it, each with its Droid session, turn, and whether the agent's reply was sent (§14.7c) | WS7 |
 | `GET /v1/photon/freezes` **[v4.13]** | `?cert_id&limit` | certs whose owner texted FREEZE: `[{cert_id, status, frozen_at, owner_freeze_at, resident_id, display_name, policy_ver}]`, `policy_ver` = the first POLICY listing the cert | WS7 |
 | `POST /v1/demo/reset` | | clears real-device demo data, reissues Maya's cert, keeps the simulated town. **[v4.18]** Removes the dry run's identities first (§21.6) and returns `dry_run_removed`. **[v4.19]** Opens a fresh guarantee pool account (§11.4) and returns it as `pool: {account_id, customer_id, opening_cents, replaced}` (null without a pool) | WS2 |
 |  |  | **[v4.3]** Operator header. Deletes what touches a real resident or shop (payments, tags, cases, candidates, logs, contacts, uploads, payouts, whole ledger transactions, queued moves), opens fresh Nessie accounts under the same customers (checking $500, escrow $0, shops $0; Nessie balances can't be edited), reissues each real resident a new cert (new `cert_id`, $20 locked), restores the shops' pool eligibility and publishes a POLICY without the old certs. The phone gets its new cert by registering again. Optional `{storm_cap_cents: 5000}` pre-stages Storm Mode. Measured live: under 1 s. |  |
@@ -1395,6 +1397,17 @@ Reject = flag `rejected`, nothing executes. Every approval writes an `approvals`
   - Stolen phone, Resident 174 (flag 17, the fake runner's freeze_cert baseline): review run 90 **agreed**. 9 steps, 5 cited ids, 16,828 credits, 30.0 s. It also noted that the baseline's text missed the region mismatch and the idle gap.
   - Neither shows a disagreement. How often the reviewer disagrees, and whether that helps, is for an eval on stored proposals (§15.3).
 
+### 14.7c Appeals as one Droid session [v4.21]
+
+- **One conversation per appeal thread.** A thread is a shop and the flag its texts are about (`messages.merchant_id`, `flag_id`). Its first text opens a Droid session with StormDesk's system prompt (v2), the 11 read-only tools, the built-ins off and the permission handler. Each later text resumes that session with `Session.resume(session_id, mcp_servers=…, disabled_tools=BUILTIN_TOOLS, disable_builtin_skills=True, interactions=…)` and streams one new turn with `output=AppealReply`. Verified on droid-sdk 0.5.0 with droid 0.244.0: a resumed session keeps its model and system prompt, and an unknown id raises `SessionNotFoundError`.
+- **Prompts** (`prompt.py`, `APPEAL_PROMPT_VERSION = 1`). The opening turn says who is appealing which flag and gives the thread so far, the hold notice included, then the new text. Later turns give only the new text, plus anything the session didn't see: that its previous reply was held back and why ("Your previous reply was not sent: …"), and messages answered while Droid couldn't run.
+- **Guardrails on every turn.** The tools and permission handler are passed again on each resume. The reply is sent only if it cites at least one id and every cited id exists (§14.7, `photon/appeal.pick_reply`). Otherwise the shop gets the neutral acknowledgement, and the next turn is told. A failed structured output is asked again once, in the same session.
+- **A session that can't be resumed** (expired, or saved on another machine) is replaced by a new session seeded with the last 30 messages of the thread from `messages`. That turn records `session: restarted`, `resumed_from` and `resume_error`. If Droid can't run at all, the labelled fake runner answers as before (§14.2).
+- **Where the session id lives.** There's no new table. Every turn is a `stormdesk_runs` row (job `respond`) with the session id in `session_id` and `transcript.appeal` = `{mode, flag_id, in_message_id, out_message_id, reply_sent, session: started | resumed | restarted, turn, prompt_version}`. Like every run it also has model, credits, duration, attempts and permission denials. The thread's session is the one its latest Droid turn ran in, as long as that turn's message is still on the thread: a thread cleared from `messages` starts a new conversation. A thread's turns run one at a time (a lock per thread in `photon/appeal.py`), so each turn knows what the shop was actually sent.
+- **Switch.** `STORMDESK_APPEAL_SESSIONS=1` is the default when the server loads its environment (bare `Settings` in tests: off). `0` gives one fresh run per message, as before (`transcript.appeal.mode = per_message`). The fake runner keeps its labelled deterministic reply in both modes.
+- **Dashboard.** Under each StormDesk reply, the Photon thread says which turn of which Droid session wrote it ("Droid · turn 2 · same Droid session 8c1f2a3b"), or why the reply was held back. Its header says "One Droid session · 3 turns · N credits". The Droid tab counts appeal turns and sessions (resumed, restarted) and labels each respond run with its turn (§18.7).
+LIVE_PROOF_PLACEHOLDER
+
 ### 14.8 Demo replay
 
 Agent runs take 30–90 s. For the planted demo cases, run StormDesk ahead of time (Saturday night) and store transcripts. The dashboard can **replay** a stored transcript step by step (labeled "replay of run at 11:42 PM") or run live on request.
@@ -1641,6 +1654,8 @@ Adoption, foot traffic (`p_link`), relay density (`p_uplink`). Moving a slider r
 - One handle can be both a shop and a resident (one Telegram account at the table): `FREEZE` is the resident's, anything else is the shop's appeal.
 - Dashboard: Cases → Owner freezes lists them with the thread; a `cap_drain` flag on a frozen-by-owner cert shows the request.
 
+**[v4.21] Appeals as one conversation, as built.** Each shop's appeal thread (shop + flag) is one Droid session, resumed for every new text, so the agent remembers what the shop said and what it checked, and argues from it (§14.7c). The citation check still applies to every reply. FREEZE is untouched: it never reaches StormDesk. `STORMDESK_APPEAL_SESSIONS=0` gives one run per message.
+
 ### 17.3 Demo conversation (target)
 
 ```
@@ -1718,6 +1733,7 @@ What Droid does in the running product, at the table in seconds, from stored run
 - **Totals per job** count Droid's own finished runs (valid share, mean credits and duration). Fake-runner runs, fallbacks included, are counted beside them and never in a success rate.
 - **Guardrails:** invalid citations rejected, structured output failed after the retry, fallbacks, and, once runs record them (`transcript.attempts`, `transcript.permission_denials`, or `fallback_attempts` / `fallback_permission_denials` for a fallback's Droid attempt, §14.7b), structured-output retries and permission-handler denials. A guardrail no stored run records has a null count and the tab says "not recorded yet", never 0.
 - **Reviews (§14.7b):** verdict counts of valid Droid reviews; `transcript.reviewed.run_id` links a review to the run it checked.
+- **Appeals (§14.7c) [v4.21]:** respond runs that are turns of an appeal's Droid session: turns, sessions, how many turns resumed a session and how many restarted from the stored thread. Each such run is labelled "appeal turn N".
 - **Harness:** the 11 read-only tools, the built-in tools switched off, prompt versions, the runner new jobs get now, and Droid's cool-down if one is on.
 
 The tab (`#droid`): summary tiles, Droid's runs (fake-runner runs behind a toggle, badged), a run view with its tool calls replayed step by step (the Cases tab's `StepList`), the guardrail events with links to their runs, totals per job, and runs in progress live from `stormdesk_step`. Empty state: "No StormDesk runs yet."
@@ -1952,6 +1968,7 @@ If judging slots are < 3 min, drop the Town beat from the core and show StormDes
 | Phone can't sign API writes yet **[v4.3]** | accept unsigned writes | `API_SIG_REQUIRED=0` |
 | Droid slow or failing | replay stored transcripts | dashboard toggle |
 | Reviewer slow, failing or too costly **[v4.15]** | triage alone: the flag as StormDesk proposed it | `STORMDESK_REVIEW=0` |
+| Appeal sessions misbehave **[v4.21]** | one fresh Droid run per message | `STORMDESK_APPEAL_SESSIONS=0` |
 | Chalk eval task can't reach tunnel | run agent locally, upload outputs, score in Chalk | `chalk/evals/run_local.py` |
 | Photon webhook issues | outbound notice only; show the thread from the DB | config |
 | Venue Wi-Fi blocks server | phone hotspot for Mac 2 and the gas station | — |
