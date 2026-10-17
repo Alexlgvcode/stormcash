@@ -3,15 +3,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  bankPill,
   itemsOf,
   openingNote,
   pairsLine,
+  reconciledLine,
   signedUsd,
   simulatedNote,
-  summary,
   unreachable,
   usd,
-  verdict,
   type ReconcileAccount,
   type Reconciliation,
 } from "./reconcile.ts";
@@ -47,20 +47,27 @@ test("money is integer cents formatted once", () => {
   assert.equal(signedUsd(0), "$0.00");
 });
 
-test("each account says reconciled, its difference, or why it has no number", () => {
-  assert.deepEqual(verdict(checking), { tone: "ok", text: "✓ Reconciled" });
-  assert.deepEqual(verdict(pool), { tone: "diff", text: "Difference −$4.00" });
-  assert.equal(verdict({ ...pool, status: "error", error: "GET /accounts: ConnectTimeout" }).text, "Nessie unreachable");
-  assert.equal(verdict({ ...pool, status: "no_nessie_account" }).text, "Ledger only");
+test("each account says it matches, its difference and why, or why it has no number", () => {
+  assert.deepEqual(bankPill(checking), { tone: "ok", text: "Matches" });
+  assert.deepEqual(bankPill(pool), { tone: "diff", text: "−$4.00 · In Nessie, not in our ledger" });
+  assert.equal(bankPill({ ...pool, by_kind: [] }).text, "−$4.00 · Unexplained");
+  assert.equal(bankPill({ ...pool, status: "error", error: "GET /accounts: ConnectTimeout" }).text, "Nessie unreachable");
+  assert.equal(bankPill({ ...pool, status: "no_nessie_account" }).text, "Ledger only");
 });
 
-test("the summary counts only accounts that were read", () => {
-  assert.deepEqual(summary(result([checking, pool])), { tone: "diff", text: "1 of 2 accounts reconciled · 1 with a difference" });
-  assert.deepEqual(summary(result([checking])), { tone: "ok", text: "1 of 1 account reconciled ✓" });
+test("the reconciled line counts only accounts that were read", () => {
+  assert.deepEqual(reconciledLine(result([checking, pool])), {
+    tone: "diff",
+    text: "Reconciled with Nessie, 1 of 2 accounts · 1 with a difference",
+  });
+  assert.deepEqual(reconciledLine(result([checking])), { tone: "ok", text: "Reconciled with Nessie, 1 of 1 account" });
   const down = { ...pool, status: "error" as const };
-  assert.deepEqual(summary(result([checking, down])), { tone: "error", text: "1 of 1 account reconciled ✓ · 1 unreadable" });
-  assert.equal(summary(result([down])).text, "Nessie unreachable: nothing could be checked");
-  assert.equal(summary(result([], { nessie: { enabled: false, error: null } })).tone, "off");
+  assert.deepEqual(reconciledLine(result([checking, down])), {
+    tone: "error",
+    text: "Reconciled with Nessie, 1 of 1 account · 1 unreadable",
+  });
+  assert.equal(reconciledLine(result([down])).text, "Nessie unreachable: nothing could be checked");
+  assert.equal(reconciledLine(result([], { nessie: { enabled: false, error: null } })).tone, "off");
 });
 
 test("the opening says where each side's number comes from", () => {

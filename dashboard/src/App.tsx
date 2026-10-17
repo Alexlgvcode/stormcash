@@ -1,9 +1,11 @@
-// One page, five tabs, persistent header (spec §18). The tab lives in the URL
-// hash so a reload lands on the same tab. `#intro` (or the I key) lays the
-// opening slide over the dashboard; the live stream stays connected under it.
-import { useEffect, useState } from "react";
-import { Header } from "./components/Header";
+// One page, five tabs, persistent sidebar (spec §18, issue #93). The tab lives
+// in the URL hash so a reload lands on the same tab. `#intro` (or the I key)
+// lays the opening slide over the dashboard; the live stream stays connected
+// under it.
+import { useEffect, useState, type ReactNode } from "react";
 import { Intro } from "./components/Intro";
+import { Sidebar } from "./components/Sidebar";
+import { PageHeader } from "./components/ui";
 import { EventsProvider } from "./events";
 import { ProofPage } from "./proof/ProofPage";
 import { AccountsTab } from "./tabs/Accounts";
@@ -12,18 +14,12 @@ import { DroidTab } from "./tabs/Droid";
 import { EvalsTab } from "./tabs/Evals";
 import { TownTab } from "./tabs/Town";
 
-const TABS = [
-  { id: "accounts", label: "Accounts" },
-  { id: "cases", label: "Cases" },
-  { id: "town", label: "Town" },
-  { id: "evals", label: "Evals" },
-  { id: "droid", label: "Droid" },
-] as const;
-type TabId = (typeof TABS)[number]["id"];
+const TABS = ["accounts", "cases", "town", "evals", "droid"] as const;
+type TabId = (typeof TABS)[number];
 
 function tabFromHash(): TabId {
   const id = location.hash.replace("#", "");
-  return TABS.some((t) => t.id === id) ? (id as TabId) : "accounts";
+  return TABS.includes(id as TabId) ? (id as TabId) : "accounts";
 }
 
 const introFromHash = () => location.hash === "#intro";
@@ -43,7 +39,7 @@ export default function App() {
   if (proof) {
     // The public page a judge opens from the Proof QR: no header, no tabs, no live stream.
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100">
+      <div className="min-h-screen bg-slate-950 text-slate-100 [color-scheme:dark]">
         <ProofPage caseId={Number(proof[1])} />
       </div>
     );
@@ -70,30 +66,46 @@ function Dashboard() {
 
   return (
     <EventsProvider>
-      <div className="min-h-screen bg-slate-950 text-slate-100" inert={intro}>
-        <Header />
-        <nav className="flex gap-1 border-b border-slate-800 px-6">
-          {TABS.map((t) => (
-            <a
-              key={t.id}
-              href={`#${t.id}`}
-              className={`border-b-4 px-5 py-3 text-xl font-semibold ${
-                tab === t.id ? "border-sky-400 text-white" : "border-transparent text-slate-400 hover:text-slate-200"
-              }`}
-            >
-              {t.label}
-            </a>
-          ))}
-        </nav>
-        <main>
+      <div className="flex min-h-screen bg-page text-ui text-ink" inert={intro}>
+        <Sidebar tab={intro ? "intro" : tab} />
+        <main className="min-w-0 flex-1 px-10 pt-8">
           {tab === "accounts" && <AccountsTab />}
-          {tab === "cases" && <CasesTab />}
-          {tab === "town" && <TownTab />}
-          {tab === "evals" && <EvalsTab />}
-          {tab === "droid" && <DroidTab />}
+          {tab === "cases" && (
+            <NotRedesigned title="Cases">
+              <CasesTab />
+            </NotRedesigned>
+          )}
+          {tab === "town" && (
+            <NotRedesigned title="Town">
+              <TownTab />
+            </NotRedesigned>
+          )}
+          {tab === "evals" && (
+            <NotRedesigned title="Evals">
+              <EvalsTab />
+            </NotRedesigned>
+          )}
+          {tab === "droid" && (
+            <NotRedesigned title="Droid">
+              <DroidTab />
+            </NotRedesigned>
+          )}
         </main>
       </div>
       {intro && <Intro onClose={closeIntro} />}
     </EventsProvider>
+  );
+}
+
+// A tab whose content hasn't moved to the new design yet: its old dark panels,
+// unchanged, under the new page title.
+function NotRedesigned({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <>
+      <PageHeader title={title} />
+      <div className="-mx-10 min-h-[calc(100vh-7rem)] bg-slate-950 text-base text-slate-100 [color-scheme:dark]">
+        {children}
+      </div>
+    </>
   );
 }

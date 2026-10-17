@@ -1,7 +1,47 @@
 @import "tailwindcss";
 
-/* Intro slide fade-in; used through motion-safe: so reduced motion skips it. */
+/* Design tokens (issue #93): a white page with no cards, sections as a heading
+   over a hairline, tables as plain rows. Carbon blue comes from the phones and
+   is only for the active nav item, the selected tab, links and the one primary
+   action. Sizes run about 20% over Stripe's, for judges about 1 m away (§18). */
 @theme {
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+
+  --color-page: #ffffff;
+  --color-rule: #ebeef1;
+  --color-ink: #30313d;
+  --color-heading: #1a1b25;
+  --color-secondary: #687385;
+  --color-nav: #414552;
+  --color-muted: #545969;
+  --color-accent: #2b3a9e;
+  --color-accent-tint: #e4e7f6;
+
+  --color-success: #05690d;
+  --color-success-bg: #d7f7c2;
+  --color-danger: #b3093c;
+  --color-danger-bg: #ffe7f2;
+  --color-warning: #a35a00;
+  --color-warning-bg: #fff4e5;
+  --color-neutral: #545969;
+  --color-neutral-bg: #ebeef1;
+
+  --text-eyebrow: 12px;
+  --text-eyebrow--line-height: 16px;
+  --text-eyebrow--letter-spacing: 0.06em;
+  --text-th: 13px;
+  --text-th--line-height: 18px;
+  --text-ui: 15px;
+  --text-ui--line-height: 22px;
+  --text-section: 17px;
+  --text-section--line-height: 24px;
+  --text-title: 28px;
+  --text-title--line-height: 34px;
+
+  --radius-pill: 4px;
+  --radius-button: 6px;
+
+  /* Intro slide fade-in; used through motion-safe: so reduced motion skips it. */
   --animate-intro-in: intro-in 0.6s ease-out both;
 
   @keyframes intro-in {
@@ -13,11 +53,12 @@
 }
 
 :root {
-  color-scheme: dark;
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: light;
 }
 
 body {
   margin: 0;
-  background: #020617;
+  background: var(--color-page);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
 }

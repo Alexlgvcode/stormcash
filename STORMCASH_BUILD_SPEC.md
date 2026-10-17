@@ -24,6 +24,7 @@
 > **v4.20 (Oct 17):** the public proof page checks each proof a second time with our C++ verifier (`cpp/verify`) compiled to WebAssembly, next to WebCrypto; the two implementations share no code (§18.6). Marked **[v4.20]**.
 > **v4.21 (Oct 17):** a shop's appeal by text is one conversation (§17.2): each appeal thread (shop + flag) keeps one Droid session, resumed with `Session.resume` for every new text, with the same read-only tools, permission handler and citation check on every turn; a session that can't be resumed is replaced by a new one seeded with the thread from `messages`. `STORMDESK_APPEAL_SESSIONS` (§6.3, §12.1, §14.7c, §18.7, §22.4). No migration: each turn's run stores its session, turn and thread. Marked **[v4.21]**.
 > **v4.22 (Oct 17):** Droid proposes a new deterministic detector as a pull request (§14.7d): it writes a pure detector and its test in a throwaway worktree, under a permission handler and two macOS sandbox profiles; our server re-runs the tests and an evaluation on the simulator's labelled candidates and rejects any mismatch; then deterministic code opens a PR labelled for a person and never merges it. `STORMDESK_AUTHOR`, `POST /v1/stormdesk/author-detector`, `stormdesk_runs.job = 'author'`, `server/stormcash/detectors_proposed/` (§6.3, §11.1, §12.1, §14.1, §18.5, §18.7, §22.4). Migration `007_stormdesk_author.sql`. Marked **[v4.22]**.
+> **v4.23 (Oct 17):** dashboard redesign, part 1 (#93, §18): a white page with a left sidebar in place of the header, and the Accounts tab as Balances, Reconciliation and Nessie log views in plain tables instead of cards. The other tabs keep their content inside the new shell for now. Marked **[v4.23]**.
 > **Builds on:** "StormCash: The 10/10 Build" v3 (Oct 16, Alexandre Lugovoi, on Brian Maina's Oct 11 draft). Everything new since v3 is marked **[v4]**.
 
 ---
@@ -1717,6 +1718,8 @@ React + Vite + TS, one page with four tabs and a persistent header. Live via SSE
 
 Title, "Demo mode", connection dot, **Reset demo** button (calls `/v1/demo/reset`, < 30 s), clock.
 
+**[v4.23] As built (#93).** The header is a left sidebar: "StormCash", the tabs with small icons (Intro, Accounts, Cases, Town, then an "Agents" group with Droid and Evals), and at the bottom "Demo mode", "Nessie off: ledger only" when it is, the connection dot, the clock and Reset demo. Each tab opens with its title and a grey subtitle. Design tokens (white page, hairline rules, carbon blue #2B3A9E as the only accent, status pills) live in `dashboard/src/index.css`; the shared pieces (page header, tabs, section, table, pill, button) in `dashboard/src/components/ui.tsx`.
+
 ### 18.2 Accounts tab (Capital One add-on)
 
 - Cards: Maya Checking, Maya Escrow, Pharmacy, Gas Station, Guarantee Pool (Nessie), plus a "Simulated town (ledger only)" totals card. Live Nessie balances, labeled "from Nessie transactions" (§11.4); animate on change.
@@ -1724,6 +1727,8 @@ Title, "Demo mode", connection dot, **Reset demo** button (calls `/v1/demo/reset
 - Ledger panel: "Ledger balanced ✓", totals per account type.
 - Queued Nessie payouts counter (fallback visible).
 - **[v4.17]** "Reconciled with Capital One Nessie" panel (§11.4a): per account ✓ or the difference with its explanation, how each side represents the opening, simulated money as "ledger only, never sent to Nessie", the `SC` pair check, when it last ran, and a Re-check button. It re-runs (debounced) on `accounts`, `payment`, `upload` and `nessie_call` SSE events. If Nessie can't be read it says so and shows the last successful check's time.
+
+- **[v4.23] As built (#93).** Three views. **Balances**: one status line ("Ledger balanced", "Reconciled with Nessie, n of n accounts", "Nessie queued: n" when payouts wait, the check's time), a table Account | Owner | Balance | Bank (owner per §11.4's account mapping; Bank is "Matches" or the difference with its reasons from the reconciliation), "Simulated town: n shops, ledger only, never sent to Nessie", and the latest Nessie calls (time, description, amount, status). **Reconciliation**: the full panel above as a table, with the pair check, the simulated-town line and the ledger totals per account type. **Nessie log**: "Nessie queued: n" and every logged call.
 
 ### 18.3 Cases tab (Digital Trust + Factory add-ons)
 

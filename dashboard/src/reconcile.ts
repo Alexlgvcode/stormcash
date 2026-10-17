@@ -86,12 +86,15 @@ export function signedUsd(cents: number): string {
 
 export type Tone = "ok" | "diff" | "error" | "off";
 
-export function verdict(a: ReconcileAccount): { tone: Tone; text: string } {
+/** What the bank says about one account: Matches, the difference and its reasons, or why it has no number. */
+export function bankPill(a: ReconcileAccount): { tone: Tone; text: string } {
   switch (a.status) {
     case "reconciled":
-      return { tone: "ok", text: "✓ Reconciled" };
-    case "difference":
-      return { tone: "diff", text: `Difference ${signedUsd(a.difference_cents ?? 0)}` };
+      return { tone: "ok", text: "Matches" };
+    case "difference": {
+      const why = (a.by_kind ?? []).map((k) => k.label).join("; ") || "Unexplained";
+      return { tone: "diff", text: `${signedUsd(a.difference_cents ?? 0)} · ${why}` };
+    }
     case "error":
       return { tone: "error", text: "Nessie unreachable" };
     default:
@@ -99,18 +102,17 @@ export function verdict(a: ReconcileAccount): { tone: Tone; text: string } {
   }
 }
 
-/** "4 of 5 accounts reconciled ✓", counted only over accounts that were read. */
-export function summary(r: Reconciliation): { tone: Tone; text: string } {
+/** "Reconciled with Nessie, 4 of 5 accounts · 1 with a difference", counted only over accounts that were read. */
+export function reconciledLine(r: Reconciliation): { tone: Tone; text: string } {
   if (!r.nessie.enabled) return { tone: "off", text: "Nessie is switched off: every account is ledger only" };
   const read = r.accounts.filter((a) => a.status === "reconciled" || a.status === "difference");
   const ok = read.filter((a) => a.status === "reconciled").length;
   const errors = r.accounts.filter((a) => a.status === "error").length;
   if (read.length === 0 && errors) return { tone: "error", text: "Nessie unreachable: nothing could be checked" };
-  const all = ok === read.length && read.length > 0;
-  const parts = [`${ok} of ${read.length} ${read.length === 1 ? "account" : "accounts"} reconciled${all ? " ✓" : ""}`];
+  const parts = [`Reconciled with Nessie, ${ok} of ${read.length} ${read.length === 1 ? "account" : "accounts"}`];
   if (read.length - ok) parts.push(`${read.length - ok} with a difference`);
   if (errors) parts.push(`${errors} unreadable`);
-  return { tone: errors ? "error" : all ? "ok" : "diff", text: parts.join(" · ") };
+  return { tone: errors ? "error" : ok === read.length && read.length > 0 ? "ok" : "diff", text: parts.join(" · ") };
 }
 
 /** How the opening balance is represented on each side. */
