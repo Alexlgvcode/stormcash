@@ -11,7 +11,6 @@ const DOT_LABEL = { live: "Live", connecting: "Connecting…", down: "Disconnect
 
 type Item = { id: string; label: string; icon: IconName };
 const MAIN: Item[] = [
-  { id: "intro", label: "Intro", icon: "intro" },
   { id: "accounts", label: "Accounts", icon: "accounts" },
   { id: "cases", label: "Cases", icon: "cases" },
   { id: "town", label: "Town", icon: "town" },
@@ -22,13 +21,10 @@ const AGENTS: Item[] = [
 ];
 
 function NavItem({ item, active }: { item: Item; active: boolean }) {
-  const intro = item.id === "intro";
   return (
     <a
       href={`#${item.id}`}
       aria-current={active ? "page" : undefined}
-      aria-keyshortcuts={intro ? "I" : undefined}
-      title={intro ? "Opening slide (press I)" : undefined}
       className={`flex items-center gap-2.5 px-2.5 py-1.5 text-ui hover:bg-accent-tint ${
         active ? "font-medium text-accent" : "text-nav"
       }`}

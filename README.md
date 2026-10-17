@@ -72,7 +72,7 @@ A fresh database gets the whole schema (`psql "$DATABASE_URL" -f schema.sql`); a
 uvicorn --factory stormcash.app:create_app --host 0.0.0.0 --port 8000
 ```
 
-**Dashboard.** Build it once and the server serves it at `/`, along with the public proof page at `/proof/<case_id>`. The header's **Intro** button (or the `I` key, or the `#intro` link) opens the full-screen intro for the demo's opening beat. Details in [`dashboard/README.md`](dashboard/README.md):
+**Dashboard.** Build it once and the server serves it at `/`, along with the public proof page at `/proof/<case_id>`. Details in [`dashboard/README.md`](dashboard/README.md):
 
 ```bash
 cd dashboard && npm ci && npm run build

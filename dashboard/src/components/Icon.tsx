@@ -1,6 +1,5 @@
 // Small outline icons for the sidebar and status lines, drawn in currentColor.
 const PATHS = {
-  intro: ["M3 4h18v12H3z", "M12 16v4", "M8 20h8", "M10 8l4 2-4 2z"],
   accounts: ["M3 10h18", "M5 10v8", "M9.5 10v8", "M14.5 10v8", "M19 10v8", "M3 21h18", "M12 3l9 5H3z"],
   cases: ["M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z", "M9 12l2 2 4-4"],
   town: ["M9 4L3 6v14l6-2 6 2 6-2V4l-6 2z", "M9 4v14", "M15 6v14"],
