@@ -27,10 +27,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const getJSON = <T>(path: string) => request<T>(path);
 
-export const operatorPost = <T>(path: string, body: unknown = {}) =>
+export const operatorPost = <T>(path: string, body: unknown = {}, operator = "dashboard") =>
   request<T>(path, {
     method: "POST",
-    headers: { "content-type": "application/json", "X-SC-Operator": "dashboard" },
+    headers: { "content-type": "application/json", "X-SC-Operator": operator },
     body: JSON.stringify(body),
   });
 
@@ -180,4 +180,67 @@ export interface Quick {
   baseline: QuickResult;
   current: QuickResult;
   seconds: number;
+}
+
+export interface FlagRow {
+  flag_id: number;
+  candidate_id: number;
+  kind: string;
+  severity: "info" | "review" | "urgent";
+  subject_id: string;
+  subject_name: string | null;
+  evidence_ids: string[];
+  exposure_cents: number;
+  summary: string;
+  proposed_action: string;
+  citations_valid: boolean;
+  status: "open" | "approved" | "rejected" | "dismissed" | "invalid";
+  runner: string | null;
+  run_id: number | null;
+  created_at: number;
+}
+
+export interface Step {
+  index: number;
+  tool: string;
+  input_summary: string;
+  ok: boolean | null;
+}
+
+export interface FlagDetail {
+  flag: FlagRow;
+  candidate: { kind: string; window_start: number; window_end: number; features: Record<string, unknown> };
+  agent: {
+    runner: string;
+    run_id: number;
+    steps: Step[];
+    reasoning: string | null;
+    action_params: Record<string, string | number>;
+    merchant_notice: string | null;
+    missing_citations: string[];
+    error: string | null;
+  } | null;
+}
+
+export interface Run {
+  run_id: number;
+  job: string;
+  runner: string;
+  status: string;
+  citations_valid: boolean | null;
+  started_at: number;
+  finished_at: number | null;
+  error: string | null;
+  transcript?: { runner: string; steps: Step[]; missing_citations: string[]; error: string | null };
+}
+
+export interface Message {
+  message_id: number;
+  merchant_id: string;
+  flag_id: number | null;
+  direction: "in" | "out";
+  channel: string;
+  body: string;
+  created_at: number;
+  delivered?: boolean;
 }

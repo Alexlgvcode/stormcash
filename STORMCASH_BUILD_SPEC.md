@@ -848,7 +848,7 @@ CREATE TABLE payouts (
   amount_cents INT NOT NULL,
   source TEXT NOT NULL CHECK (source IN ('escrow','pool')),
   nessie_transfer_id TEXT,              -- [v4.2] deposit id of the Nessie withdrawal + deposit pair
-  status TEXT NOT NULL CHECK (status IN ('queued','pending','executed','failed','ledger_only')),
+  status TEXT NOT NULL CHECK (status IN ('queued','pending','executed','failed','ledger_only','held')),  -- [v4.3] held: an approved hold_pool_payout
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -1041,7 +1041,7 @@ All JSON. Byte fields base64url. Prefix `/v1`. Auth for demo: none on reads; res
 | `GET /v1/cases` / `GET /v1/cases/{id}` | | case with both tags, the cert, the rule, evidence, case file | WS2 |
 | `GET /v1/proof/{case_id}` | | everything the public verify page needs: cert (+server sig), tag A, tag B, holder_pub, rule. **[v4.3]** Each object comes with its `canonical` string so a browser can verify it with WebCrypto ECDSA P-256/SHA-256 over the UTF-8 bytes | WS2 |
 | `GET /v1/flags` / `GET /v1/flags/{id}` | | flag + candidate features + agent transcript | WS5 |
-| `POST /v1/flags/{id}/approve` / `reject` | `{note}` | executes actions (§14.6), returns approval | WS5 |
+| `POST /v1/flags/{id}/approve` / `reject` | `{note}` | executes actions (§14.6), returns approval. **[v4.3]** `X-SC-Operator` names the operator; `GET /v1/flags/{id}/approvals` lists decisions | WS5 |
 | `POST /v1/stormdesk/run` | `{candidate_id}` or `{case_id}` | `{flag}` or `{case_file_md}` (sync; used by evals) | WS5 |
 | `GET /v1/stormdesk/runs` / `GET /v1/stormdesk/runs/{id}` **[v4.3]** | `?case_id&candidate_id` | stored runs; one run with its full transcript for replay (§14.8). `POST /v1/stormdesk/run` needs the operator header | WS5 |
 | `GET /v1/town` | | regions, merchants (x, y, simulated), live dots, recent payments, uploads, alerts | WS4/WS2 |
@@ -1261,6 +1261,13 @@ class AppealReply(BaseModel):
 | `none` | Nothing. |
 
 Reject = flag `rejected`, nothing executes. Every approval writes an `approvals` row and an SSE event.
+
+**[v4.3] As built (`server/stormcash/approvals.py`).** `POST /v1/flags/{id}/approve` and `/reject` take `{note}` and the `X-SC-Operator` header (the operator's name). Only `open` flags with valid citations can be decided, and a decision is final. `hold_pool_payout`:
+- the shop's pool payouts not yet executed (`queued`, `pending`, `ledger_only`) become `held` (a new payout status), with the payment `held`;
+- their queued Nessie moves are cancelled;
+- the payout and its fraud receivable are reversed in the ledger, so it stays balanced;
+- `pool_eligible = false`, so future pool money is held at settlement.
+`lower_merchant_limit` needs `action_params.limit_cents`. Approving `hold_pool_payout` or `lower_merchant_limit` sends Photon's hold notice (`photon/notices.hold_notice`), recorded on the thread even when it can't be delivered. The `approval` SSE event carries the executed actions. A real shop with a registered handle also gets Photon's settled notice when its payout executes.
 
 ### 14.7 Guardrails
 
@@ -1518,6 +1525,7 @@ Title, "Demo mode", connection dot, **Reset demo** button (calls `/v1/demo/reset
 - **Case file** from StormDesk (markdown).
 - **StormDesk panel:** list of flags; selecting one shows the summary, evidence links, and the live/replayed tool-call steps (`get_merchant_payments` ✓, `query_features` ✓, …). **Approve** / **Reject** buttons with operator name.
 - Photon thread for the selected merchant flag.
+- **[v4.3] As built.** The Cases tab switches between *Hard cases* and *StormDesk flags*. A flag shows its subject, summary, exposure, reasoning, evidence ids (marked as checked), the tool calls (live from `stormdesk_step`, or a stored run replayed step by step, labelled "Replay of run at …"), Run again, Approve / Reject with the operator's name, and the Photon thread live from `message` events. Each hard case has a StormDesk section (Investigate, live steps, replay). Fake-runner output carries a "Fake runner · rules only" badge everywhere.
 - "Merchant knew" case view: the merchant's ACCEPT entry listing the conflicting tag, with its signature.
 
 ### 18.4 Town tab

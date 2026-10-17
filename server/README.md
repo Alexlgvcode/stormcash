@@ -32,6 +32,10 @@ psql "$DATABASE_URL" -f migrations/001_nessie_moves.sql
 psql "$DATABASE_URL" -f migrations/002_stormdesk_runs.sql
 ```
 
+```bash
+psql "$DATABASE_URL" -f migrations/003_payouts_held.sql
+```
+
 ## Run
 
 ```bash

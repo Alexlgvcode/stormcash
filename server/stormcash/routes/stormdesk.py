@@ -13,6 +13,39 @@ from .demo import require_operator
 router = APIRouter()
 
 
+class DecisionIn(BaseModel):
+    note: str | None = None
+
+
+def _decide(flag_id: int, request: Request, operator: str | None, approve: bool, note: str | None) -> dict:
+    from ..approvals import decide
+    from ..photon.routes import settings as photon_settings
+
+    operator = require_operator(operator)
+    return jsonable(decide(request.app.state.deps, flag_id, operator, approve, note,
+                           photon=photon_settings(request)))
+
+
+@router.post("/v1/flags/{flag_id}/approve")
+def approve_flag(flag_id: int, request: Request, body: DecisionIn | None = None,
+                 x_sc_operator: str | None = Header(None)) -> dict:
+    """A person approves: the proposed action runs deterministically (§14.6)."""
+    return _decide(flag_id, request, x_sc_operator, True, body.note if body else None)
+
+
+@router.post("/v1/flags/{flag_id}/reject")
+def reject_flag(flag_id: int, request: Request, body: DecisionIn | None = None,
+                x_sc_operator: str | None = Header(None)) -> dict:
+    """A person rejects: nothing runs."""
+    return _decide(flag_id, request, x_sc_operator, False, body.note if body else None)
+
+
+@router.get("/v1/flags/{flag_id}/approvals")
+def flag_approvals(flag_id: int, request: Request) -> list[dict]:
+    with request.app.state.deps.pool.connection() as conn:
+        return jsonable(all_rows(conn, "SELECT * FROM approvals WHERE flag_id = %s ORDER BY approval_id", (flag_id,)))
+
+
 class RunIn(BaseModel):
     candidate_id: int | None = None
     case_id: int | None = None
@@ -35,12 +68,19 @@ def _flag_row(row: dict) -> dict:
             "run_id": agent.get("run_id")}
 
 
+SUBJECT_NAME = """COALESCE(
+    (SELECT display_name FROM merchants WHERE encode(merchant_id, 'hex') = f.subject_id),
+    (SELECT r.display_name FROM residents r JOIN certificates c ON c.resident_id = r.resident_id
+     WHERE encode(c.cert_id, 'hex') = f.subject_id LIMIT 1),
+    (SELECT display_name FROM regions WHERE region_id = f.subject_id)) AS subject_name"""
+
+
 @router.get("/v1/flags")
 def list_flags(request: Request, status: str | None = None, limit: int = Query(100, ge=1, le=500)) -> list[dict]:
     with request.app.state.deps.pool.connection() as conn:
         rows = all_rows(
             conn,
-            """SELECT f.*, k.kind AS candidate_kind, k.window_start, k.window_end FROM flags f
+            f"""SELECT f.*, k.kind AS candidate_kind, k.window_start, k.window_end, {SUBJECT_NAME} FROM flags f
                JOIN candidates k USING (candidate_id) WHERE %s::text IS NULL OR f.status = %s
                ORDER BY f.flag_id DESC LIMIT %s""",
             (status, status, limit),
@@ -52,7 +92,7 @@ def list_flags(request: Request, status: str | None = None, limit: int = Query(1
 def get_flag(flag_id: int, request: Request) -> dict:
     """The flag, the candidate's frozen features and the agent transcript."""
     with request.app.state.deps.pool.connection() as conn:
-        flag = one(conn, "SELECT * FROM flags WHERE flag_id = %s", (flag_id,))
+        flag = one(conn, f"SELECT f.*, {SUBJECT_NAME} FROM flags f WHERE flag_id = %s", (flag_id,))
         if flag is None:
             raise HTTPException(404, "no such flag")
         candidate = one(conn, "SELECT * FROM candidates WHERE candidate_id = %s", (flag["candidate_id"],))

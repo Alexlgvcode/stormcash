@@ -20,10 +20,14 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import registry, sse
+from .approvals import ApprovalError
 from .config import Settings, load_settings
 from .db import make_pool
 from .deps import Deps
 from .nessie import MoneyMover, NessieClient
+from .photon import routes as photon_routes
+from .photon.config import PhotonSettings
+from .photon.config import load as load_photon
 from .regions import ensure_regions
 from .stormdesk.service import StormDesk, StormDeskError
 from .stormdesk.worker import Worker
@@ -35,6 +39,26 @@ REPLAY_EVERY_S = 10
 ESCROW_RELEASE_EVERY_S = 60
 
 
+def _settled_notice(deps: Deps, payout_id: int) -> None:
+    """Tell a real shop it was paid (§17), off the money path: a slow or failed send never delays ingest."""
+    if deps.photon is None:
+        return
+    from .photon import notices
+
+    with deps.pool.connection() as conn:  # only shops that registered a handle get notices
+        if conn.execute("""SELECT 1 FROM payouts o JOIN merchant_contacts c USING (merchant_id)
+                           WHERE o.payout_id = %s""", (payout_id,)).fetchone() is None:
+            return
+
+    def send() -> None:
+        try:
+            notices.settled_notice(deps, deps.photon, payout_id)
+        except Exception:
+            log.exception("settled notice for payout %s failed", payout_id)
+
+    threading.Thread(target=send, daemon=True, name=f"settled-{payout_id}").start()
+
+
 def build_deps(settings: Settings, nessie_transport: httpx.BaseTransport | None = None) -> Deps:
     pool = make_pool(settings.database_url)
     events = sse.Broker()
@@ -44,10 +68,16 @@ def build_deps(settings: Settings, nessie_transport: httpx.BaseTransport | None 
             settings.nessie_base_url, settings.nessie_api_key, pool, events, transport=nessie_transport
         )
     deps = Deps(settings, pool, events, nessie, MoneyMover(pool, nessie, events))
+    deps.mover.on_payout_executed = lambda payout_id: _settled_notice(deps, payout_id)
     with pool.connection() as conn:
         for table, migration in (("nessie_moves", "001_nessie_moves"), ("stormdesk_runs", "002_stormdesk_runs")):
             if conn.execute("SELECT to_regclass(%s) AS t", (table,)).fetchone()["t"] is None:
                 raise RuntimeError(f"database is missing {table}: apply server/migrations/{migration}.sql")
+        check = conn.execute(
+            "SELECT pg_get_constraintdef(oid) AS d FROM pg_constraint WHERE conname = 'payouts_status_check'"
+        ).fetchone()
+        if check is None or "held" not in check["d"]:
+            raise RuntimeError("payouts can't be held yet: apply server/migrations/003_payouts_held.sql")
         ensure_regions(conn)
     return deps
 
@@ -72,6 +102,7 @@ def create_app(
     settings: Settings | None = None,
     nessie_transport: httpx.BaseTransport | None = None,
     dashboard_dist: Path | None = DASHBOARD_DIST,
+    photon: PhotonSettings | None = None,
 ) -> FastAPI:
     settings = settings or load_settings()
 
@@ -79,6 +110,7 @@ def create_app(
     async def lifespan(app: FastAPI):
         deps = build_deps(settings, nessie_transport)
         app.state.deps = deps
+        app.state.photon = deps.photon = photon or load_photon()
         app.state.stormdesk = StormDesk(deps)
         stop = threading.Event()
         worker = None
@@ -104,6 +136,10 @@ def create_app(
     async def registry_error(request: Request, exc: registry.RegistryError) -> JSONResponse:
         return JSONResponse({"detail": exc.message}, status_code=exc.status)
 
+    @app.exception_handler(ApprovalError)
+    async def approval_error(request: Request, exc: ApprovalError) -> JSONResponse:
+        return JSONResponse({"detail": str(exc)}, status_code=exc.status)
+
     @app.exception_handler(StormDeskError)
     async def stormdesk_error(request: Request, exc: StormDeskError) -> JSONResponse:
         return JSONResponse({"detail": str(exc)}, status_code=exc.status)
@@ -115,6 +151,7 @@ def create_app(
     app.include_router(demo.router)
     app.include_router(town.router)
     app.include_router(stormdesk.router)
+    app.include_router(photon_routes.router)
     app.include_router(nessie_log.router)
     app.include_router(sse.router)
     _serve_dashboard(app, dashboard_dist)
