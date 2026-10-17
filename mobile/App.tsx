@@ -11,6 +11,7 @@ import { DemoMenuScreen } from './src/screens/DemoMenuScreen';
 import { JudgeModeScreen } from './src/screens/JudgeModeScreen';
 import { MerchantHomeScreen } from './src/screens/MerchantHomeScreen';
 import { PayScreen } from './src/screens/PayScreen';
+import { QrSyncScreen } from './src/screens/QrSyncScreen';
 import { RecordsScreen } from './src/screens/RecordsScreen';
 import { ResultScreen } from './src/screens/ResultScreen';
 import { SetupScreen } from './src/screens/SetupScreen';
@@ -48,6 +49,8 @@ export default function App() {
         return <ChargeScreen />;
       case 'records':
         return <RecordsScreen />;
+      case 'qrsync':
+        return <QrSyncScreen />;
       case 'demo':
         return <DemoMenuScreen />;
       case 'judge':

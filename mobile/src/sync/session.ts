@@ -67,10 +67,11 @@ export class SyncSession {
     private serverPub: Hex,
     private now: () => number,
     private onFinish: (r: SessionResult | null, error?: string) => void,
+    private timeoutMs = SESSION_TIMEOUT_MS, // QR sync is slower and passes a longer timeout
   ) {}
 
   start(): void {
-    this.timer = setTimeout(() => this.fail('timeout'), SESSION_TIMEOUT_MS);
+    this.timer = setTimeout(() => this.fail('timeout'), this.timeoutMs);
     this.channel.send({
       t: 'HELLO', v: 1, dp: hexToB64u(this.me.pub), role: this.me.role, n: hexToB64u(this.nonce),
       pv: currentPolicy()?.policy_ver ?? 0, inv: inventory().map(hexToB64u),

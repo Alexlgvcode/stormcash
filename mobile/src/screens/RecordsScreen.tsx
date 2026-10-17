@@ -60,6 +60,7 @@ export function RecordsScreen() {
         disabled={!online || uploading}
         onPress={() => syncManager.upload()}
       />
+      <Button title="Sync by QR" kind="secondary" onPress={() => nav.go({ name: 'qrsync' })} />
       <Button title="Back" kind="secondary" onPress={nav.home} />
     </Screen>
   );

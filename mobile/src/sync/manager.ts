@@ -83,13 +83,17 @@ class SyncManager {
   }
 
   /** Runs a session against an arbitrary channel (used by QR sync). */
-  newSession(send: (m: SyncMessage) => void, onDone: (r: SessionResult | null, err?: string) => void): SyncSession {
+  newSession(
+    send: (m: SyncMessage) => void,
+    onDone: (r: SessionResult | null, err?: string) => void,
+    timeoutMs?: number,
+  ): SyncSession {
     const { priv, pub } = deviceKey();
     return new SyncSession({ send }, { priv, pub, role: getRole() ?? 'resident', label: getDemoLabel() },
       getServerPub(), nowS, (r, err) => {
         this.finished(r, err);
         onDone(r, err);
-      });
+      }, timeoutMs);
   }
 
   private finished(r: SessionResult | null, err?: string) {
