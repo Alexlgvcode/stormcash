@@ -1,8 +1,9 @@
 # cpp/: the C++ toolkit
 
-`stormcash-verify` is a third, independent implementation of the checking side of the StormCash protocol (spec §7–§10), next to the Python server (`server/stormcash/protocol/`) and the TypeScript phones (`mobile/src/protocol/`). It was written from the spec in C++20, and it agrees with the other two on every one of the 124 shared test vectors. It can also check a case proof offline, the way the public proof page does in a browser.
+Two tools, both off the demo path (nothing in the server, phones or dashboard depends on them):
 
-It is off the demo path: nothing in the server, phones or dashboard depends on it.
+- **`stormcash-verify`** (`verify/`, this page) is a third, independent implementation of the checking side of the StormCash protocol (spec §7–§10), next to the Python server (`server/stormcash/protocol/`) and the TypeScript phones (`mobile/src/protocol/`). It was written from the spec in C++20, and it agrees with the other two on every one of the 124 shared test vectors. It can also check a case proof offline, the way the public proof page does in a browser.
+- **Scale Lab** (`stormcash-scale`, [`scale/`](scale/README.md)) is a city-scale simulator of the §16 town's gossip, validated against the Python simulator. Everything it reports is simulated.
 
 ## Build and run
 
@@ -24,7 +25,11 @@ ctest --test-dir cpp/build --output-on-failure
 cpp/build/verify/stormcash-verify vectors spec/vectors.json --strict
 ```
 
-CI (the `cpp` job) builds in Debug with AddressSanitizer, UndefinedBehaviorSanitizer and `-Werror`, then runs the unit tests and the vectors. The options are `-DSTORMCASH_SANITIZE=ON` and `-DSTORMCASH_WERROR=ON`.
+```bash
+cpp/build/scale/stormcash-scale run --residents 100000 --replicates 20
+```
+
+CI (the `cpp` job) builds in Debug with AddressSanitizer, UndefinedBehaviorSanitizer and `-Werror`, runs the unit tests and the vectors, then builds Release with `-Werror` to catch warnings that only appear with optimization. The options are `-DSTORMCASH_SANITIZE=ON` and `-DSTORMCASH_WERROR=ON`.
 
 ## `stormcash-verify vectors`
 
@@ -127,7 +132,7 @@ Decisions worth knowing:
 
 ## Tests
 
-`ctest` runs 89 tests:
+`ctest` runs 89 tests for the verifier (and 17 for Scale Lab, see [`scale/README.md`](scale/README.md)):
 
 - **Unit tests** for each layer (`verify/tests/test_*.cpp`). They cover RFC 4648 base64 vectors, NIST SHA-256 vectors, every encoding edge (NFC, astral characters, embedded NUL, invalid UTF-8, sort order), a key that isn't on the curve (x = 1), BER and trailing-byte DER, codec strictness, and each equivocation condition on hand-built tags.
 - **All of `spec/vectors.json`**, with 124 vectors and nothing skipped.

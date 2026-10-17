@@ -1,0 +1,4 @@
+# Peak memory of one replicate on one thread (macOS /usr/bin/time -l), Apple M2 Pro, 2026-10-17 12:25 EDT. SIMULATED runs.
+residents 10000: peak RSS 13 MB, 0.18 s wall
+residents 100000: peak RSS 116 MB, 2.74 s wall
+residents 1000000: peak RSS 970 MB, 44.60 s wall

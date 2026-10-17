@@ -1,0 +1,677 @@
+{
+ "simulated": true,
+ "label": "one million residents",
+ "note": "SIMULATED by stormcash-scale (cpp/scale): the §16 town's rules on a grid of town tiles, with abstract tags (no keys or signatures). Not measurements of real phones.",
+ "tool": "stormcash-scale",
+ "command": "run",
+ "axis": null,
+ "machine": {
+  "cpu": "Apple M2 Pro",
+  "logical_cpus": 10,
+  "os": "Darwin 25.6.0 arm64"
+ },
+ "threads": 4,
+ "wall_seconds": 227.21,
+ "runs": [
+  {
+   "params": {
+    "towns_x": 50,
+    "towns_y": 50,
+    "residents": 1000000,
+    "hours": 72,
+    "start_local_minute": 0,
+    "adoption": 0.6,
+    "storm_share": 0.7,
+    "storm_at_h": 2.0,
+    "p_link": 0.6,
+    "p_uplink": 0.03,
+    "shelter_uplink": 0.5,
+    "trip_every_min": 240.0,
+    "pair_cooldown_min": 60,
+    "carry_after_server_min": 60,
+    "trip_radius": 50.0,
+    "policy_on_every_uplink": true,
+    "cheater_share": 0.025,
+    "cheaters": -1,
+    "cheats_per_cheater": 2
+   },
+   "base_seed": 1,
+   "wall_seconds": 227.2,
+   "summary": {
+    "replicates": 8,
+    "totals": {
+     "payments": 16467638,
+     "settled": 16189853,
+     "contacts": 122438574,
+     "double_spend_attempts": 159963,
+     "refused_offline": 55190,
+     "caught_at_settlement": 104736,
+     "cheaters": 119966,
+     "pool_loss_cents": 105762579
+    },
+    "share_refused_offline": {
+     "pooled": 0.345,
+     "replicate_mean": {
+      "mean": 0.345,
+      "ci95": [
+       0.3423,
+       0.3477
+      ],
+      "sd": 0.0032,
+      "n": 8
+     }
+    },
+    "share_caught_at_settlement": {
+     "pooled": 0.6548,
+     "replicate_mean": {
+      "mean": 0.6548,
+      "ci95": [
+       0.6521,
+       0.6574
+      ],
+      "sd": 0.0032,
+      "n": 8
+     }
+    },
+    "mean_loss_per_cheater_cents": {
+     "pooled": 882,
+     "replicate_mean": {
+      "mean": 881.6,
+      "ci95": [
+       873.9,
+       889.3
+      ],
+      "sd": 9.2,
+      "n": 8
+     }
+    },
+    "median_hours_to_settlement": {
+     "replicate_mean": {
+      "mean": 2.267,
+      "ci95": [
+       2.256,
+       2.277
+      ],
+      "sd": 0.013,
+      "n": 8
+     }
+    },
+    "hops_histogram": {
+     "0": {
+      "count": 1669289,
+      "share": 0.1014
+     },
+     "1": {
+      "count": 4290033,
+      "share": 0.2606
+     },
+     "2": {
+      "count": 3564374,
+      "share": 0.2165
+     },
+     "3": {
+      "count": 3088137,
+      "share": 0.1876
+     },
+     "4": {
+      "count": 1839067,
+      "share": 0.1117
+     },
+     "5": {
+      "count": 1034300,
+      "share": 0.0628
+     },
+     "6": {
+      "count": 532093,
+      "share": 0.0323
+     },
+     "7": {
+      "count": 248170,
+      "share": 0.0151
+     },
+     "8": {
+      "count": 114253,
+      "share": 0.0069
+     },
+     "9": {
+      "count": 48954,
+      "share": 0.003
+     },
+     "10": {
+      "count": 20240,
+      "share": 0.0012
+     },
+     "11": {
+      "count": 8120,
+      "share": 0.0005
+     },
+     "12": {
+      "count": 3083,
+      "share": 0.0002
+     },
+     "13": {
+      "count": 1220,
+      "share": 0.0001
+     },
+     "14": {
+      "count": 394,
+      "share": 0.0
+     },
+     "15": {
+      "count": 127,
+      "share": 0.0
+     },
+     "16": {
+      "count": 51,
+      "share": 0.0
+     },
+     "17": {
+      "count": 12,
+      "share": 0.0
+     },
+     "18": {
+      "count": 3,
+      "share": 0.0
+     },
+     "19": {
+      "count": 2,
+      "share": 0.0
+     }
+    },
+    "wall_seconds_per_replicate": {
+     "mean": 112.122,
+     "ci95": [
+      101.827,
+      122.418
+     ],
+     "sd": 12.313,
+     "n": 8
+    }
+   },
+   "replicates": [
+    {
+     "seed": 9626026794937781409,
+     "summary": {
+      "shops": 95000,
+      "residents": 600187,
+      "payments": 2058702,
+      "accepted": 2024725,
+      "refused": {
+       "C2": 30093,
+       "C6": 3884
+      },
+      "out_of_money": 4403575,
+      "contacts": 15327058,
+      "uploads": 378668,
+      "items_uploaded": 2058000,
+      "settled": 2024321,
+      "wall_seconds": 101.195
+     },
+     "double_spends": {
+      "attempts": 19981,
+      "refused_offline": 6885,
+      "accepted_offline": 13096,
+      "caught_at_settlement": 13092,
+      "not_caught_by_end": 4,
+      "share_refused_offline": 0.3446,
+      "share_caught_at_settlement": 0.6552,
+      "refusals_by_check": {
+       "C2": 4312,
+       "C6": 2573
+      },
+      "by_mode": {
+       "reuse": 10029,
+       "skip": 9952
+      }
+     },
+     "cheaters": 15005,
+     "pool_loss_cents": 13417705,
+     "mean_loss_per_cheater_cents": 894,
+     "median_hours_to_settlement": 2.25,
+     "hops_histogram": {
+      "0": 207734,
+      "1": 537118,
+      "2": 444412,
+      "3": 386352,
+      "4": 230599,
+      "5": 130040,
+      "6": 66405,
+      "7": 31037,
+      "8": 14190,
+      "9": 5957,
+      "10": 2461,
+      "11": 1031,
+      "12": 375,
+      "13": 176,
+      "14": 72,
+      "15": 25,
+      "16": 10,
+      "17": 5,
+      "18": 1
+     }
+    },
+    {
+     "seed": 17976013367585798959,
+     "summary": {
+      "shops": 95000,
+      "residents": 600163,
+      "payments": 2061073,
+      "accepted": 2026987,
+      "refused": {
+       "C2": 30266,
+       "C6": 3820
+      },
+      "out_of_money": 4402431,
+      "contacts": 15279130,
+      "uploads": 379034,
+      "items_uploaded": 2060369,
+      "settled": 2026575,
+      "wall_seconds": 100.066
+     },
+     "double_spends": {
+      "attempts": 20012,
+      "refused_offline": 6849,
+      "accepted_offline": 13163,
+      "caught_at_settlement": 13157,
+      "not_caught_by_end": 6,
+      "share_refused_offline": 0.3422,
+      "share_caught_at_settlement": 0.6575,
+      "refusals_by_check": {
+       "C2": 4313,
+       "C6": 2536
+      },
+      "by_mode": {
+       "reuse": 10134,
+       "skip": 9878
+      }
+     },
+     "cheaters": 15004,
+     "pool_loss_cents": 13319656,
+     "mean_loss_per_cheater_cents": 888,
+     "median_hours_to_settlement": 2.27,
+     "hops_histogram": {
+      "0": 208708,
+      "1": 538364,
+      "2": 446711,
+      "3": 387550,
+      "4": 229217,
+      "5": 128454,
+      "6": 66178,
+      "7": 30569,
+      "8": 14165,
+      "9": 6124,
+      "10": 2657,
+      "11": 992,
+      "12": 439,
+      "13": 176,
+      "14": 38,
+      "15": 20,
+      "16": 4,
+      "17": 1,
+      "19": 2
+     }
+    },
+    {
+     "seed": 5135510087813718029,
+     "summary": {
+      "shops": 95000,
+      "residents": 600216,
+      "payments": 2060269,
+      "accepted": 2025627,
+      "refused": {
+       "C2": 30786,
+       "C6": 3856
+      },
+      "out_of_money": 4400623,
+      "contacts": 15289123,
+      "uploads": 379962,
+      "items_uploaded": 2059563,
+      "settled": 2025217,
+      "wall_seconds": 100.33
+     },
+     "double_spends": {
+      "attempts": 19992,
+      "refused_offline": 6878,
+      "accepted_offline": 13114,
+      "caught_at_settlement": 13108,
+      "not_caught_by_end": 6,
+      "share_refused_offline": 0.344,
+      "share_caught_at_settlement": 0.6557,
+      "refusals_by_check": {
+       "C2": 4339,
+       "C6": 2539
+      },
+      "by_mode": {
+       "reuse": 9911,
+       "skip": 10081
+      }
+     },
+     "cheaters": 15005,
+     "pool_loss_cents": 12996687,
+     "mean_loss_per_cheater_cents": 866,
+     "median_hours_to_settlement": 2.28,
+     "hops_histogram": {
+      "0": 210142,
+      "1": 537292,
+      "2": 446209,
+      "3": 387285,
+      "4": 229424,
+      "5": 128810,
+      "6": 65865,
+      "7": 30324,
+      "8": 14051,
+      "9": 6087,
+      "10": 2454,
+      "11": 1022,
+      "12": 371,
+      "13": 140,
+      "14": 61,
+      "15": 20,
+      "16": 4,
+      "17": 2
+     }
+    },
+    {
+     "seed": 1338852967855001672,
+     "summary": {
+      "shops": 95000,
+      "residents": 599886,
+      "payments": 2059311,
+      "accepted": 2024619,
+      "refused": {
+       "C2": 30799,
+       "C6": 3893
+      },
+      "out_of_money": 4397672,
+      "contacts": 15286045,
+      "uploads": 378470,
+      "items_uploaded": 2058591,
+      "settled": 2024209,
+      "wall_seconds": 100.893
+     },
+     "double_spends": {
+      "attempts": 20071,
+      "refused_offline": 7019,
+      "accepted_offline": 13052,
+      "caught_at_settlement": 13049,
+      "not_caught_by_end": 3,
+      "share_refused_offline": 0.3497,
+      "share_caught_at_settlement": 0.6501,
+      "refusals_by_check": {
+       "C2": 4410,
+       "C6": 2609
+      },
+      "by_mode": {
+       "reuse": 9883,
+       "skip": 10188
+      }
+     },
+     "cheaters": 14997,
+     "pool_loss_cents": 13135175,
+     "mean_loss_per_cheater_cents": 876,
+     "median_hours_to_settlement": 2.27,
+     "hops_histogram": {
+      "0": 206424,
+      "1": 537263,
+      "2": 444103,
+      "3": 387130,
+      "4": 230700,
+      "5": 129813,
+      "6": 66886,
+      "7": 31433,
+      "8": 14546,
+      "9": 6172,
+      "10": 2570,
+      "11": 980,
+      "12": 358,
+      "13": 155,
+      "14": 42,
+      "15": 14,
+      "16": 2
+     }
+    },
+    {
+     "seed": 7130135381485904382,
+     "summary": {
+      "shops": 95000,
+      "residents": 599450,
+      "payments": 2056627,
+      "accepted": 2022388,
+      "refused": {
+       "C2": 30460,
+       "C6": 3779
+      },
+      "out_of_money": 4395393,
+      "contacts": 15245397,
+      "uploads": 379516,
+      "items_uploaded": 2055891,
+      "settled": 2021973,
+      "wall_seconds": 122.768
+     },
+     "double_spends": {
+      "attempts": 19968,
+      "refused_offline": 6861,
+      "accepted_offline": 13107,
+      "caught_at_settlement": 13101,
+      "not_caught_by_end": 6,
+      "share_refused_offline": 0.3436,
+      "share_caught_at_settlement": 0.6561,
+      "refusals_by_check": {
+       "C2": 4324,
+       "C6": 2537
+      },
+      "by_mode": {
+       "reuse": 9748,
+       "skip": 10220
+      }
+     },
+     "cheaters": 14986,
+     "pool_loss_cents": 13289287,
+     "mean_loss_per_cheater_cents": 887,
+     "median_hours_to_settlement": 2.28,
+     "hops_histogram": {
+      "0": 209566,
+      "1": 536867,
+      "2": 446060,
+      "3": 386040,
+      "4": 229373,
+      "5": 128625,
+      "6": 65508,
+      "7": 30062,
+      "8": 13887,
+      "9": 5883,
+      "10": 2443,
+      "11": 1007,
+      "12": 364,
+      "13": 140,
+      "14": 50,
+      "15": 10,
+      "16": 6
+     }
+    },
+    {
+     "seed": 3123423782547585788,
+     "summary": {
+      "shops": 95000,
+      "residents": 599591,
+      "payments": 2057118,
+      "accepted": 2023092,
+      "refused": {
+       "C2": 30229,
+       "C6": 3797
+      },
+      "out_of_money": 4396162,
+      "contacts": 15299627,
+      "uploads": 378093,
+      "items_uploaded": 2056402,
+      "settled": 2022666,
+      "wall_seconds": 123.113
+     },
+     "double_spends": {
+      "attempts": 19931,
+      "refused_offline": 6791,
+      "accepted_offline": 13140,
+      "caught_at_settlement": 13138,
+      "not_caught_by_end": 2,
+      "share_refused_offline": 0.3407,
+      "share_caught_at_settlement": 0.6592,
+      "refusals_by_check": {
+       "C2": 4262,
+       "C6": 2529
+      },
+      "by_mode": {
+       "reuse": 9972,
+       "skip": 9959
+      }
+     },
+     "cheaters": 14990,
+     "pool_loss_cents": 13310753,
+     "mean_loss_per_cheater_cents": 888,
+     "median_hours_to_settlement": 2.27,
+     "hops_histogram": {
+      "0": 208592,
+      "1": 535696,
+      "2": 446732,
+      "3": 383317,
+      "4": 230106,
+      "5": 128739,
+      "6": 66933,
+      "7": 31421,
+      "8": 14398,
+      "9": 6276,
+      "10": 2547,
+      "11": 1042,
+      "12": 392,
+      "13": 144,
+      "14": 42,
+      "15": 13,
+      "16": 10,
+      "17": 2
+     }
+    },
+    {
+     "seed": 17007339015811181132,
+     "summary": {
+      "shops": 95000,
+      "residents": 599587,
+      "payments": 2057763,
+      "accepted": 2023360,
+      "refused": {
+       "C2": 30465,
+       "C6": 3938
+      },
+      "out_of_money": 4393579,
+      "contacts": 15334057,
+      "uploads": 378510,
+      "items_uploaded": 2057070,
+      "settled": 2022947,
+      "wall_seconds": 124.652
+     },
+     "double_spends": {
+      "attempts": 20036,
+      "refused_offline": 7004,
+      "accepted_offline": 13032,
+      "caught_at_settlement": 13029,
+      "not_caught_by_end": 3,
+      "share_refused_offline": 0.3496,
+      "share_caught_at_settlement": 0.6503,
+      "refusals_by_check": {
+       "C2": 4391,
+       "C6": 2613
+      },
+      "by_mode": {
+       "reuse": 9917,
+       "skip": 10119
+      }
+     },
+     "cheaters": 14990,
+     "pool_loss_cents": 13183971,
+     "mean_loss_per_cheater_cents": 880,
+     "median_hours_to_settlement": 2.27,
+     "hops_histogram": {
+      "0": 210316,
+      "1": 533887,
+      "2": 445584,
+      "3": 385589,
+      "4": 229503,
+      "5": 129409,
+      "6": 66945,
+      "7": 31262,
+      "8": 14391,
+      "9": 6068,
+      "10": 2471,
+      "11": 1016,
+      "12": 379,
+      "13": 160,
+      "14": 64,
+      "15": 14,
+      "16": 10,
+      "17": 1,
+      "18": 1
+     }
+    },
+    {
+     "seed": 13436860069706327623,
+     "summary": {
+      "shops": 95000,
+      "residents": 599546,
+      "payments": 2056775,
+      "accepted": 2022374,
+      "refused": {
+       "C2": 30542,
+       "C6": 3859
+      },
+      "out_of_money": 4397219,
+      "contacts": 15378137,
+      "uploads": 378069,
+      "items_uploaded": 2056036,
+      "settled": 2021945,
+      "wall_seconds": 123.962
+     },
+     "double_spends": {
+      "attempts": 19972,
+      "refused_offline": 6903,
+      "accepted_offline": 13069,
+      "caught_at_settlement": 13062,
+      "not_caught_by_end": 7,
+      "share_refused_offline": 0.3456,
+      "share_caught_at_settlement": 0.654,
+      "refusals_by_check": {
+       "C2": 4337,
+       "C6": 2566
+      },
+      "by_mode": {
+       "reuse": 10037,
+       "skip": 9935
+      }
+     },
+     "cheaters": 14989,
+     "pool_loss_cents": 13109345,
+     "mean_loss_per_cheater_cents": 875,
+     "median_hours_to_settlement": 2.25,
+     "hops_histogram": {
+      "0": 207807,
+      "1": 533546,
+      "2": 444563,
+      "3": 384874,
+      "4": 230145,
+      "5": 130410,
+      "6": 67373,
+      "7": 32062,
+      "8": 14625,
+      "9": 6387,
+      "10": 2637,
+      "11": 1030,
+      "12": 405,
+      "13": 129,
+      "14": 25,
+      "15": 11,
+      "16": 5,
+      "17": 1,
+      "18": 1
+     }
+    }
+   ]
+  }
+ ]
+}

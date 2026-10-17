@@ -29,6 +29,12 @@ include(cmake/Dependencies.cmake)
 # Warnings for our own code only; third-party code builds with its own flags.
 function(stormcash_warnings target)
   target_compile_options(${target} PRIVATE -Wall -Wextra -Wpedantic -Wshadow -Wnon-virtual-dtor)
+  if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    # GCC 12-13 at -O2 and up flag the memcmp inside std::vector<unsigned char>
+    # comparisons (Bytes ==, <) with a bound they can't prove: a known false
+    # positive in libstdc++'s inlined code, not in ours.
+    target_compile_options(${target} PRIVATE -Wno-stringop-overread)
+  endif()
   if(STORMCASH_WERROR)
     target_compile_options(${target} PRIVATE -Werror)
   endif()
@@ -40,3 +46,4 @@ if(STORMCASH_BUILD_TESTS)
 endif()
 
 add_subdirectory(verify)
+add_subdirectory(scale)
