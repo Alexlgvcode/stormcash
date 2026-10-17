@@ -157,18 +157,29 @@ _A live Droid run (`claude-sonnet-5-5`) triaging the Corner Store candidate on t
 
 - **Features for the agent.** StormDesk's `query_features` tool asks for a shop's, certificate's or region's features: contact rates against nearby shops, pool-funded share, drain speed, upload gaps, active weather alerts. The Chalk feature set (#28) builds them from our Postgres data, Nessie balances and the National Weather Service alerts API. If Chalk is off or can't answer, the tool answers from the detectors' own frozen features and says so (`source: "postgres_fallback"`).
 - **Evaluations.** The simulator writes ground truth for every seeded town (`sim/out/<seed>/labels.json`), including deliberate traps: a remote shop, a victim shop, an honest resident stocking up, a drifting clock and a quiet region. Chalk Evaluations compares the rules-only baseline with StormDesk on those labels (#33). The Evals tab shows only numbers from a real run.
-- **Results so far** (real Chalk runs, 43 labeled candidates from seeds 42, 7, 13, 99 and 2026, StormDesk on Droid with `claude-sonnet-5-5`):
+- **Results** (real Chalk runs, StormDesk on Droid with `claude-sonnet-5-5`, prompt version recorded on every row):
 
-  | | Rules only | StormDesk, prompt v1 |
+  **Held-out towns.** Seeds 1 and 2 were chosen and committed before any of their rows existed and were never seen while prompt v2 was written (20 rows, 11 honest). Seed 3 was chosen too but didn't fit in the credit budget, by a rule written down before the run.
+
+  | | Rules only | StormDesk, prompt v2 |
   |---|---|---|
-  | Chalk run | `71142eed-2864-413d-ac27-da1e3c537e50` | `a91828a0-342b-4030-b046-a926fe5ade9d` |
-  | Real cases caught | 23 / 23 | 2 / 23 |
-  | Colluding shops caught | 9 / 9 | 1 / 9 |
-  | Honest subjects wrongly flagged | 20 / 20 | 2 / 20 |
-  | Evidence citations valid | n/a | 42 / 43 |
+  | Chalk run | `dc1fd4c9-734e-408d-8c48-9c583dcb3867` | `51b74f56-d8d8-466b-a07c-3ddf8baa8064` |
+  | Real cases caught | 9 / 9 | 6 / 9 |
+  | Stolen phones · colluding shops · dark regions | 4/4 · 3/3 · 2/2 | 4/4 · 2/3 · 0/2 |
+  | Honest subjects wrongly flagged | 11 / 11 | 0 / 11 |
+  | Evidence citations valid | n/a | 20 / 20 |
 
-  Rules alone flag every honest subject; prompt v1 was far too lenient. **Prompt v2** (see Honest limits) has one real run so far, Chalk `aca3204b-db75-4908-a388-4594d4ee97a7`, which stopped at its credit cap after 32 of 43 rows. It is recorded as incomplete and is not a score: on the 32 rows both versions answered, v2 caught 12 of 18 real cases (v1: 2 of 18) and wrongly flagged 2 of 14 honest subjects (v1: 2 of 14). A complete v2 run is next (#100).
-- **Held-out towns.** Seeds 1, 2 and 3 were chosen and committed before any of their rows existed and were never seen while prompt v2 was written: 30 rows, 16 honest. Rules-only on them (Chalk `ff6d77b3-81da-49e5-aa83-8336506d7f83`) caught 14 of 14 real cases and flagged all 16 honest subjects. StormDesk's held-out run is next (#100).
+  **Main dataset** (43 rows from seeds 42, 7, 13, 99 and 2026). Prompt v2 was written after reading v1's errors on these rows, so its score here is not a blind test.
+
+  | | Rules only | StormDesk, prompt v1 | StormDesk, prompt v2 |
+  |---|---|---|---|
+  | Chalk run | `71142eed-2864-413d-ac27-da1e3c537e50` | `a91828a0-342b-4030-b046-a926fe5ade9d` | `4119a11e-018f-41ae-86fc-9cede513969f` |
+  | Real cases caught | 23 / 23 | 2 / 23 | 14 / 23 |
+  | Stolen phones · colluding shops · dark regions | 9/9 · 9/9 · 5/5 | 0/9 · 1/9 · 1/5 | 9/9 · 2/9 · 3/5 |
+  | Honest subjects wrongly flagged | 20 / 20 | 2 / 20 | 3 / 20 |
+  | Evidence citations valid | n/a | 42 / 43 | 37 / 43 |
+
+  Rules alone catch everything and flag every honest subject. Prompt v1 was far too lenient. Prompt v2, on towns it had never seen, caught every stolen phone and 2 of 3 colluding shops and wrongly flagged no honest subject, but it caught no dark region. It still lets some colluders through, and on the main set 6 of its 43 answers cited a record that doesn't exist; those are stored as invalid and never shown as actionable. That's why a person approves every action. An earlier v2 attempt that stopped at its credit cap after 32 of 43 rows (`aca3204b-db75-4908-a388-4594d4ee97a7`) is recorded as incomplete and is not a score. Factory credits: v2 main run 1,815,847; held-out run 937,859.
 
 ## How we use Capital One Nessie
 

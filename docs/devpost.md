@@ -1,6 +1,6 @@
 # StormCash on Devpost
 
-Paste each section into the matching Devpost field. Two things are marked **FILL BEFORE SUBMIT**: the eval numbers (copy them from the dashboard's Evals tab once the real StormDesk run is saved, with its Chalk run id) and the demo video link. Don't type any other number that isn't already here: every figure below comes from a real run or from the code.
+Paste each section into the matching Devpost field. One thing is still marked **FILL BEFORE SUBMIT**: the demo video link. Don't type any number that isn't already here: every figure below comes from a real run or from the code (eval numbers from Chalk runs, listed with their ids in the README).
 
 Submission deadline: **Sunday Oct 18, 8:00 AM** (aim for 7:30). Track: **Digital Trust**. Sponsor challenges: **Best Use of Nessie (Capital One)**, **Factory Droid SDK**, **Chalk**, **Photon**.
 
@@ -41,6 +41,7 @@ We wanted to know how much of a payment can be checked with no network at all, a
 - **Chalk:** feature classes and SQL resolvers over our Postgres data plus live National Weather Service alerts, queried by StormDesk at runtime, and Chalk Evaluations scoring StormDesk against a rules-only baseline.
 - **Photon:** hold notices and appeal conversations with shop owners over Telegram.
 - **Simulator:** a deterministic 40-shop town built on the same protocol and settlement code as the real phones, with labeled scenarios and deliberate traps, used for the dashboard's Town tab and as the eval dataset.
+- **C++ verifier:** `stormcash-verify`, a third independent implementation of the protocol's checks (OpenSSL), which reproduces every shared test vector and checks a cheating proof offline from the command line.
 - **Dashboard:** React, Vite and TypeScript, with Accounts, Cases, Town and Evals tabs and a public "Verify it yourself" proof page that checks the signatures in the judge's own browser.
 
 ## Challenges we ran into
@@ -48,6 +49,7 @@ We wanted to know how much of a payment can be checked with no network at all, a
 - **Nessie didn't work the way we expected.** In hour one we found that account balances in the current Nessie API are fixed when an account is created, transfers have no payee, and amounts are whole dollars. We redesigned settlement so every money movement is a matched withdrawal and deposit, and the dashboard computes live balances from Nessie's own transaction records.
 - **Two languages, one signature.** Python and TypeScript had to agree on every byte: string normalization, signature encoding, deterministic signing. Shared test vectors caught the differences before they reached the phones.
 - **Latency to a hosted database.** Loading the simulated town into Neon first took 46 minutes, because every statement waited on a network round trip. Pipelining the writes brought it to about 40 seconds.
+- **Our first agent was too lenient.** Its first real evaluation caught 2 of 23 real fraud cases: it dismissed stolen phones because "the escrow covered it". We rewrote the prompt with general analyst principles, labeled the new score as not blind, and tested it on towns it had never seen.
 - **Offline double spending can't be fully prevented.** We had to be honest about the limit: a shop that no record has reached can be fooled once, up to the cap. We designed for bounded loss, offline refusal whenever a record has arrived, and proof at settlement every time.
 
 ## Accomplishments that we're proud of
@@ -56,6 +58,8 @@ We wanted to know how much of a payment can be checked with no network at all, a
 - The proof of cheating is two signatures anyone can verify in their own browser, not a fraud score.
 - No AI in the money path. Hard fraud rules are deterministic code; the agent can't move money or freeze anything, and every claim it makes must cite a real record.
 - The simulated town is checked by exactly the same code as the real phones.
+- On towns it had never seen, the agent wrongly flagged none of 11 honest subjects (rules alone flagged all 11) while catching every stolen phone.
+- Three independent implementations of the protocol, in Python, TypeScript and C++, agree byte for byte on 124 shared test vectors.
 
 ## What we learned
 
@@ -72,7 +76,7 @@ We wanted to know how much of a payment can be checked with no network at all, a
 
 ## Built with
 
-python, fastapi, postgresql, neon, react, typescript, vite, tailwindcss, react-native, expo, swift, multipeer-connectivity, ecdsa, capital-one-nessie, factory-droid, chalk, photon, telegram, cloudflare
+python, fastapi, postgresql, neon, react, typescript, vite, tailwindcss, react-native, expo, swift, c++, cmake, openssl, multipeer-connectivity, ecdsa, capital-one-nessie, factory-droid, chalk, photon, telegram, cloudflare
 
 ---
 
@@ -86,7 +90,7 @@ Paste these where Devpost asks how you used each sponsor.
 
 **Chalk.** StormDesk reads live Chalk features at runtime (shop contact rates against neighbors, pool-funded share, certificate drain speed, upload gaps, weather alerts). We evaluated it with Chalk Evaluations on labeled simulated towns with deliberate traps, against a rules-only baseline.
 
-> **FILL BEFORE SUBMIT:** add the headline numbers exactly as shown on the Evals tab (StormDesk vs. rules-only: colluders caught, honest shops wrongly flagged, citations valid), with the Chalk run id. If there's no real StormDesk run by then, leave numbers out and say the rules-only baseline is evaluated and the agent run is in progress.
+On two held-out simulated towns, chosen before the run and never seen while we wrote the agent's prompt, StormDesk caught 6 of 9 real fraud cases, including every stolen phone, and wrongly flagged 0 of 11 honest subjects, with every cited record valid (Chalk run `51b74f56-d8d8-466b-a07c-3ddf8baa8064`). The rules-only baseline on the same rows caught all 9 but also flagged all 11 honest subjects (`dc1fd4c9-734e-408d-8c48-9c583dcb3867`). Our first prompt was far too lenient (2 of 23 real cases on our main set), so we rewrote it, said so openly, and then tested it blind. It still misses some colluding shops and every dark region on the held-out towns, which is why a person approves every action.
 
 **Photon.** When an operator approves a hold, the shop owner gets a notice on Telegram whose numbers all come from the flag's evidence. Their reply is answered by StormDesk, citing their own signed logs, and anything uncertain goes to a person.
 
