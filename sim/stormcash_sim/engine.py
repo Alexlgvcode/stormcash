@@ -259,22 +259,28 @@ class Sim:
         for spec in shop_specs:
             shop = Shop(len(self.devices), spec.name, derive_key(p.seed, spec.name), spec.region, spec.x, spec.y,
                         spec.uplink_per_hour)
-            _, mcert, _ = registry.register_merchant(
-                self.deps, spec.name, shop.pub, spec.region, spec.x, spec.y, simulated=True, now=self.t0,
-                merchant_id=derive_id(p.seed, spec.name),
-            )
-            shop.mcert = mcert
             self.shops.append(shop)
             self.devices.append(shop)
         for spec in adopters:
             r = Resident(len(self.devices), spec.name, derive_key(p.seed, spec.name), spec.region, spec.x, spec.y,
                          p.p_uplink)
-            _, r.cert, _ = registry.register_resident(self.deps, spec.name, r.pub, spec.region, simulated=True,
-                                                      now=self.t0, cert_id=derive_id(p.seed, spec.name))
-            r.head = genesis(r.cert.cert_id)
-            r.storm = rng.random() < p.storm_share
             self.residents.append(r)
             self.devices.append(r)
+        # One transaction for the whole town: a round trip per entity is slow on a hosted DB.
+        mcerts, certs = registry.register_simulated(
+            self.deps,
+            [dict(display_name=s.name, merchant_pub=s.pub, region_id=s.region, x=s.x, y=s.y,
+                  merchant_id=derive_id(p.seed, s.name)) for s in self.shops],
+            [dict(display_name=r.name, holder_pub=r.pub, region_id=r.region, cert_id=derive_id(p.seed, r.name))
+             for r in self.residents],
+            now=self.t0,
+        )
+        for shop, mcert in zip(self.shops, mcerts, strict=True):
+            shop.mcert = mcert
+        for r, cert in zip(self.residents, certs, strict=True):
+            r.cert = cert
+            r.head = genesis(r.cert.cert_id)
+            r.storm = rng.random() < p.storm_share
         self.neighbors = {
             s.idx: [o for o in self.shops if town.distance(s.x, s.y, o.x, o.y) <= CONTACT_RANGE]
             for s in self.shops
@@ -323,9 +329,11 @@ class Sim:
             self.scripts.pop(idx)(tick)
             return
         if kind == "storm":
-            for r in self.residents:
-                if r.storm:
-                    r.cert = registry.raise_storm_mode(self.deps, r.cert.cert_id, STORM_CAP_CENTS, now=self._now(tick))
+            storm = [r for r in self.residents if r.storm]
+            certs = registry.raise_storm_mode_many(self.deps, [r.cert.cert_id for r in storm], STORM_CAP_CENTS,
+                                                   now=self._now(tick))
+            for r, cert in zip(storm, certs, strict=True):
+                r.cert = cert
             return
         r = self.devices[idx]
         assert isinstance(r, Resident)

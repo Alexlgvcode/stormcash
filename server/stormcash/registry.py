@@ -13,7 +13,7 @@ import uuid
 import psycopg
 
 from . import ledger
-from .db import all_rows, one, scalar
+from .db import all_rows, one, pipelined, scalar
 from .deps import Deps
 from .nessie import MoneyMover, NessieError, is_whole_dollars
 from .protocol import crypto, encoding
@@ -307,6 +307,86 @@ def register_merchant(
     return merchant_id, issue_mcert(deps.server_key, row, now), True
 
 
+def register_simulated(
+    deps: Deps, merchants: list[dict], residents: list[dict], *, now: int | None = None
+) -> tuple[list[Mcert], list[Cert]]:
+    """Register the seeded simulator's town in one transaction.
+
+    Does what register_merchant and register_resident do for new simulated
+    entities (no Nessie, ids from the seed), without a round trip per entity.
+    `merchants` hold register_merchant's arguments (display_name, merchant_pub,
+    region_id, x, y, merchant_id), `residents` register_resident's (display_name,
+    holder_pub, region_id, cert_id). Keys already registered go through those
+    functions, which return what exists."""
+    now = _now(now)
+    merchants = [{**m, "display_name": _string(m["display_name"], "display_name"),
+                  "region_id": _string(m.get("region_id"), "region_id") or None} for m in merchants]
+    residents = [{**r, "display_name": _string(r["display_name"], "display_name"),
+                  "region_id": _string(r.get("region_id"), "region_id") or None} for r in residents]
+    for m in merchants:
+        _pub(m["merchant_pub"], "merchant_pub")
+    for r in residents:
+        _pub(r["holder_pub"], "holder_pub")
+    mcerts: dict[int, Mcert] = {}
+    certs: dict[int, Cert] = {}
+    with pipelined(deps.pool) as conn:
+        known_cur = conn.execute(
+            "SELECT region_id FROM regions WHERE region_id = ANY(%s)",
+            (sorted({e["region_id"] for e in merchants + residents if e["region_id"]}),),
+        )
+        taken_cur = conn.execute(
+            """SELECT merchant_pub AS pub FROM merchants WHERE merchant_pub = ANY(%s)
+               UNION ALL SELECT holder_pub FROM residents WHERE holder_pub = ANY(%s)""",
+            ([m["merchant_pub"] for m in merchants], [r["holder_pub"] for r in residents]),
+        )
+        known = {r["region_id"] for r in known_cur.fetchall()}
+        taken = {bytes(r["pub"]) for r in taken_cur.fetchall()}
+
+        def check_region(region_id: str | None) -> None:
+            if region_id and region_id not in known:
+                raise Invalid(f"unknown region_id {region_id!r}")
+
+        for i, m in enumerate(merchants):
+            if m["merchant_pub"] in taken:
+                continue
+            check_region(m["region_id"])
+            row = {**m, "merchant_id": m.get("merchant_id") or crypto.random_id()}
+            conn.execute(
+                """INSERT INTO merchants (merchant_id, display_name, merchant_pub, region_id, x, y, simulated)
+                   VALUES (%s, %s, %s, %s, %s, %s, TRUE)""",
+                (row["merchant_id"], row["display_name"], row["merchant_pub"], row["region_id"], row.get("x"),
+                 row.get("y")),
+            )
+            mcerts[i] = issue_mcert(deps.server_key, row, now)
+        for i, r in enumerate(residents):
+            if r["holder_pub"] in taken:
+                continue
+            check_region(r["region_id"])
+            resident_id = uuid.uuid4()
+            cert_id = r.get("cert_id") or crypto.random_id()
+            conn.execute(
+                """INSERT INTO residents (resident_id, display_name, holder_pub, region_id, simulated)
+                   VALUES (%s, %s, %s, %s, TRUE)""",
+                (resident_id, r["display_name"], r["holder_pub"], r["region_id"]),
+            )
+            certs[i] = issue_cert(
+                conn, deps.server_key, cert_id=cert_id, cert_ver=1, holder_pub=r["holder_pub"],
+                cap_cents=BASE_CAP_CENTS, now=now, escrow_ref=f"sim-{resident_id}", resident_id=resident_id,
+            )
+            conn.execute(
+                "INSERT INTO cert_status (cert_id, status, max_cap_cents) VALUES (%s, 'active', %s)",
+                (cert_id, BASE_CAP_CENTS),
+            )
+            ledger.post(conn, ledger.escrow(cert_id), ledger.checking(resident_id), BASE_CAP_CENTS, "lock escrow")
+    for i, m in enumerate(merchants):
+        if i not in mcerts:
+            mcerts[i] = register_merchant(deps, **m, simulated=True, now=now)[1]
+    for i, r in enumerate(residents):
+        if i not in certs:
+            certs[i] = register_resident(deps, **r, simulated=True, now=now)[1]
+    return [mcerts[i] for i in range(len(merchants))], [certs[i] for i in range(len(residents))]
+
+
 # Storm Mode ----------------------------------------------------------------------
 
 
@@ -338,39 +418,95 @@ def raise_storm_mode(
     deps: Deps, cert_id: bytes, cap_cents: int, *, caller_pub: bytes | None = None, now: int | None = None
 ) -> Cert:
     """Issue a new version at cap_cents and top escrow up so it covers the cap."""
+    return raise_storm_mode_many(deps, [cert_id], cap_cents, caller_pub=caller_pub, now=now)[0]
+
+
+def raise_storm_mode_many(
+    deps: Deps, cert_ids: list[bytes], cap_cents: int, *, caller_pub: bytes | None = None, now: int | None = None
+) -> list[Cert]:
+    """raise_storm_mode for several certs in one transaction. Everything it reads
+    is fetched in one round trip (the town simulator raises ~170 certs at once
+    against a hosted database); certs are handled in order as if one by one."""
     now = _now(now)
     if not isinstance(cap_cents, int) or not BASE_CAP_CENTS < cap_cents <= MAX_CAP_CENTS:
         raise Invalid(f"cap_cents must be above {BASE_CAP_CENTS} and at most {MAX_CAP_CENTS}")
-    with deps.pool.connection() as conn:
-        status, latest, resident = _lock_cert(conn, cert_id, caller_pub)
-        checking_id, escrow_id = _nessie_accounts(deps, resident)
-        if escrow_id and not is_whole_dollars(cap_cents):
-            raise Invalid("cap_cents must be whole dollars for a Nessie-backed resident")
-        if status["storm_mode"] and latest.cap_cents == cap_cents:
-            return latest  # already there
-        if cap_cents < latest.cap_cents:
-            raise Invalid("use /v1/storm-mode/close to lower the cap")
-        # Escrow must cover what the new cap still allows: cap − already paid from escrow.
-        top_up = cap_cents - paid_from_escrow(conn, cert_id) - ledger.balance(conn, ledger.escrow(cert_id))
-        cert = issue_cert(
-            conn, deps.server_key, cert_id=cert_id, cert_ver=latest.cert_ver + 1, holder_pub=latest.holder_pub,
-            cap_cents=cap_cents, now=now, escrow_ref=latest.escrow_ref, resident_id=resident["resident_id"],
+    certs, moves = [], []
+    with pipelined(deps.pool) as conn:
+        status_cur = conn.execute(
+            "SELECT * FROM cert_status WHERE cert_id = ANY(%s) ORDER BY cert_id FOR UPDATE", (cert_ids,)
         )
-        conn.execute(
-            """UPDATE cert_status SET status = 'active', storm_mode = TRUE, storm_mode_at = %s,
-                      max_cap_cents = GREATEST(max_cap_cents, %s) WHERE cert_id = %s""",
-            (now, cap_cents, cert_id),
+        latest_cur = conn.execute(
+            """SELECT DISTINCT ON (cert_id) * FROM certificates WHERE cert_id = ANY(%s)
+               ORDER BY cert_id, cert_ver DESC""",
+            (cert_ids,),
         )
-        txn_id = None
-        if top_up > 0:
-            txn_id = _move(
-                conn, debit=ledger.escrow(cert_id), credit=ledger.checking(resident["resident_id"]), cents=top_up,
-                ref="storm mode top-up", nessie_from=checking_id, nessie_to=escrow_id,
-                summary=f"Storm Mode top-up, {resident['display_name']} checking → escrow",
+        resident_cur = conn.execute(
+            """SELECT DISTINCT ON (c.cert_id) c.cert_id AS for_cert, r.* FROM residents r
+               JOIN certificates c ON c.resident_id = r.resident_id
+               WHERE c.cert_id = ANY(%s) ORDER BY c.cert_id""",
+            (cert_ids,),
+        )
+        paid_cur = conn.execute(
+            """SELECT p.cert_id, COALESCE(SUM(po.amount_cents), 0) AS paid FROM payouts po
+               JOIN payments p ON p.tag_hash = po.tag_hash
+               WHERE p.cert_id = ANY(%s) AND po.source = 'escrow' GROUP BY p.cert_id""",
+            (cert_ids,),
+        )
+        balances = ledger.balances(conn, [ledger.escrow(c) for c in cert_ids])
+        statuses = {bytes(r["cert_id"]): r for r in status_cur.fetchall()}
+        latest = {bytes(r["cert_id"]): cert_from_row(r) for r in latest_cur.fetchall()}
+        residents = {bytes(r.pop("for_cert")): r for r in resident_cur.fetchall()}
+        paid = {bytes(r["cert_id"]): r["paid"] for r in paid_cur.fetchall()}
+        for cert_id in cert_ids:
+            status, resident = _check_cert(statuses, latest, residents, cert_id, caller_pub)
+            checking_id, escrow_id = _nessie_accounts(deps, resident)
+            if escrow_id and not is_whole_dollars(cap_cents):
+                raise Invalid("cap_cents must be whole dollars for a Nessie-backed resident")
+            if status["storm_mode"] and latest[cert_id].cap_cents == cap_cents:
+                certs.append(latest[cert_id])  # already there
+                continue
+            if cap_cents < latest[cert_id].cap_cents:
+                raise Invalid("use /v1/storm-mode/close to lower the cap")
+            # Escrow must cover what the new cap still allows: cap − already paid from escrow.
+            top_up = cap_cents - paid.get(cert_id, 0) - balances[ledger.escrow(cert_id)]
+            cert = issue_cert(
+                conn, deps.server_key, cert_id=cert_id, cert_ver=latest[cert_id].cert_ver + 1,
+                holder_pub=latest[cert_id].holder_pub, cap_cents=cap_cents, now=now,
+                escrow_ref=latest[cert_id].escrow_ref, resident_id=resident["resident_id"],
             )
-    if txn_id:
+            conn.execute(
+                """UPDATE cert_status SET status = 'active', storm_mode = TRUE, storm_mode_at = %s,
+                          max_cap_cents = GREATEST(max_cap_cents, %s) WHERE cert_id = %s""",
+                (now, cap_cents, cert_id),
+            )
+            # Keep what this loop read current, in case a cert is listed twice.
+            statuses[cert_id] = {**status, "status": "active", "storm_mode": True}
+            latest[cert_id] = cert
+            if top_up > 0:
+                balances[ledger.escrow(cert_id)] += top_up
+                txn_id = _move(
+                    conn, debit=ledger.escrow(cert_id), credit=ledger.checking(resident["resident_id"]),
+                    cents=top_up, ref="storm mode top-up", nessie_from=checking_id, nessie_to=escrow_id,
+                    summary=f"Storm Mode top-up, {resident['display_name']} checking → escrow",
+                )
+                if txn_id:
+                    moves.append(txn_id)
+            certs.append(cert)
+    for txn_id in moves:
         deps.mover.execute(txn_id)
-    return cert
+    return certs
+
+
+def _check_cert(statuses: dict, latest: dict, residents: dict, cert_id: bytes,
+                caller_pub: bytes | None) -> tuple[dict, dict]:
+    status = statuses.get(cert_id)
+    if status is None or cert_id not in latest:
+        raise NotFound("unknown cert_id")
+    if caller_pub is not None and caller_pub != latest[cert_id].holder_pub:
+        raise Forbidden("only the certificate holder can change Storm Mode")
+    if status["status"] == "frozen":
+        raise Conflict("certificate is frozen")
+    return status, residents.get(cert_id)
 
 
 def close_storm_mode(deps: Deps, cert_id: bytes, *, caller_pub: bytes | None = None, now: int | None = None) -> Cert:

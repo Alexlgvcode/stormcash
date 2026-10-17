@@ -59,6 +59,18 @@ def balance(conn: psycopg.Connection, account: str) -> int:
     )
 
 
+def balances(conn: psycopg.Connection, accounts: list[str]) -> dict[str, int]:
+    """balance() of several accounts in one query."""
+    out = dict.fromkeys(accounts, 0)
+    out.update({r["account"]: r["b"] for r in all_rows(
+        conn,
+        """SELECT account, COALESCE(SUM(debit_cents - credit_cents), 0) AS b FROM ledger_entries
+           WHERE account = ANY(%s) GROUP BY account""",
+        (accounts,),
+    )})
+    return out
+
+
 def unbalanced_txns(conn: psycopg.Connection) -> list[uuid.UUID]:
     """Invariant check: txn_ids whose debits and credits differ (should be none)."""
     rows = all_rows(

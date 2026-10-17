@@ -30,6 +30,13 @@ def cert_tags(conn: psycopg.Connection, cert_id: bytes) -> list[Tag]:
     return [_tag_from_row(r) for r in all_rows(conn, "SELECT * FROM tags WHERE cert_id = %s", (cert_id,))]
 
 
+def _tags_by_cert(rows: list[dict]) -> dict[bytes, list[Tag]]:
+    out: dict[bytes, list[Tag]] = {}
+    for r in rows:
+        out.setdefault(bytes(r["cert_id"]), []).append(_tag_from_row(r))
+    return out
+
+
 def _insert_case(ctx, conn: psycopg.Connection, rule: str, *, evidence: dict, detected_where: str = "server",
                  exposure_cents: int = 0, cert_id=None, merchant_id=None, device_pub=None,
                  tag_a=None, tag_b=None) -> dict:
@@ -158,24 +165,22 @@ def merchant_logs(conn: psycopg.Connection, merchant_pub: bytes, z: Tag, conflic
     entries for z, and both sides' CONTACT entries of every contact whose id
     lists carry a conflicting tag's id8. Other entries can't make R5 fire, so
     rules.merchant_knew gives the same answer on this subset as on every log."""
+    return [Dlog.from_json(r["body"]) for r in _send_merchant_logs(conn, merchant_pub, z, conflicts).fetchall()]
+
+
+def _send_merchant_logs(conn: psycopg.Connection, merchant_pub: bytes, z: Tag, conflicts: list[Tag]) -> psycopg.Cursor:
+    """merchant_logs' query, sent without waiting for it. Entry bodies carry
+    contact ids as base64url; a 32-byte id encodes on one line, so the SQL
+    conversion matches b64u_encode."""
     x8s = [id8(x.tag_hash) for x in conflicts]
-    contact_ids = [
-        b64u_encode(bytes(r["contact_id"]))
-        for r in all_rows(
-            conn,
-            """SELECT DISTINCT contact_id FROM contacts
-               WHERE (device_pub = %s AND recv_ids && %s::bytea[]) OR (peer_pub = %s AND sent_ids && %s::bytea[])""",
-            (merchant_pub, x8s, merchant_pub, x8s),
-        )
-    ]
-    rows = all_rows(
-        conn,
+    return conn.execute(
         """SELECT body FROM device_log WHERE device_pub = %s AND kind = 'ACCEPT' AND body->>'th' = %s
            UNION ALL
-           SELECT body FROM device_log WHERE kind = 'CONTACT' AND body->>'cid' = ANY(%s)""",
-        (merchant_pub, b64u_encode(z.tag_hash), contact_ids),
+           SELECT body FROM device_log WHERE kind = 'CONTACT' AND body->>'cid' IN (
+               SELECT rtrim(translate(encode(contact_id, 'base64'), '+/', '-_'), '=') FROM contacts
+               WHERE (device_pub = %s AND recv_ids && %s::bytea[]) OR (peer_pub = %s AND sent_ids && %s::bytea[]))""",
+        (merchant_pub, b64u_encode(z.tag_hash), merchant_pub, x8s, merchant_pub, x8s),
     )
-    return [Dlog.from_json(r["body"]) for r in rows]
 
 
 def accept_time(conn: psycopg.Connection, merchant_pub: bytes, z: Tag, fallback: int) -> int:
@@ -192,18 +197,39 @@ def accept_time(conn: psycopg.Connection, merchant_pub: bytes, z: Tag, fallback:
 def check_merchant_knew(ctx, conn: psycopg.Connection, z: Tag, merchant: dict, det_ts: int) -> dict | None:
     """R5 for payment z at merchant M. Opens the case (once) and suspends M's
     pool eligibility. Returns the case evidence when R5 holds."""
+    tags = _tags_by_cert(all_rows(conn, "SELECT * FROM tags WHERE cert_id = %s", (z.cert_id,)))
+    return check_merchant_knew_many(ctx, conn, [(z, merchant, det_ts)], tags)[0]
+
+
+def check_merchant_knew_many(
+    ctx, conn: psycopg.Connection, payments: list[tuple[Tag, dict, int]], tags: dict[bytes, list[Tag]]
+) -> list[dict | None]:
+    """check_merchant_knew for several payments (z, merchant, det_ts), given the
+    stored tags of their certs. The logs of all of them are read in one round
+    trip; R5 writes nothing those reads see, so it's the same as one by one."""
+    sent = []
+    for z, merchant, _ in payments:
+        conflicts = [x for x in tags.get(z.cert_id, []) if x.tag_hash != z.tag_hash and rules.equivocation(x, z)]
+        # No conflicting tag: skip loading the logs.
+        sent.append(_send_merchant_logs(conn, bytes(merchant["merchant_pub"]), z, conflicts) if conflicts else None)
+    out = []
+    for (z, merchant, det_ts), cur in zip(payments, sent, strict=True):
+        if cur is None:
+            out.append(None)
+            continue
+        logs = [Dlog.from_json(r["body"]) for r in cur.fetchall()]
+        # t_accept: M's ACCEPT entry for z (the only ACCEPT entries read), else the payer's DET ts.
+        t_accept = min((e.ts for e in logs if e.kind == "ACCEPT"), default=det_ts)
+        hit = rules.merchant_knew(
+            z, merchant_pub=bytes(merchant["merchant_pub"]), t_accept=t_accept, cert_tags=tags[z.cert_id], logs=logs,
+        )
+        out.append(None if hit is None else _merchant_knew_case(ctx, conn, z, merchant, t_accept, hit))
+    return out
+
+
+def _merchant_knew_case(ctx, conn: psycopg.Connection, z: Tag, merchant: dict, t_accept: int,
+                        hit: rules.MerchantKnew) -> dict:
     merchant_pub = bytes(merchant["merchant_pub"])
-    tags = cert_tags(conn, z.cert_id)
-    conflicts = [x for x in tags if x.tag_hash != z.tag_hash and rules.equivocation(x, z)]
-    if not conflicts:
-        return None  # no conflicting tag: skip loading the logs
-    t_accept = accept_time(conn, merchant_pub, z, det_ts)
-    hit = rules.merchant_knew(
-        z, merchant_pub=merchant_pub, t_accept=t_accept, cert_tags=tags,
-        logs=merchant_logs(conn, merchant_pub, z, conflicts),
-    )
-    if hit is None:
-        return None
     evidence = {
         "clause": hit.clause, "conflict": hit.conflict.hex(), "payment": z.tag_hash.hex(), "t_accept": t_accept,
         "contact_id": None if hit.contact_id is None else hit.contact_id.hex(),
@@ -221,28 +247,53 @@ def check_merchant_knew(ctx, conn: psycopg.Connection, z: Tag, merchant: dict, d
     return evidence
 
 
-def _recheck(ctx, conn: psycopg.Connection, where: str, params: tuple) -> None:
-    rows = all_rows(
-        conn,
+def send_recheck(conn: psycopg.Connection, where: str, params: tuple) -> tuple[psycopg.Cursor, psycopg.Cursor]:
+    """Send R5's re-check reads without waiting: the accepted payments matching
+    `where` (over p = payments, m = merchants) and the stored tags of their certs."""
+    rows = conn.execute(
         f"""SELECT p.device_ts, t.*, m.merchant_id AS m_id, m.merchant_pub AS m_pub
             FROM payments p JOIN tags t ON t.tag_hash = p.tag_hash JOIN merchants m ON m.merchant_id = p.merchant_id
-            WHERE p.status IN ('settled', 'held') AND {where}""",
+            WHERE p.status IN ('settled', 'held') AND {where} ORDER BY m.merchant_pub, p.tag_hash""",
         params,
     )
-    for row in rows:
-        merchant = {"merchant_id": row["m_id"], "merchant_pub": row["m_pub"]}
-        if check_merchant_knew(ctx, conn, _tag_from_row(row), merchant, row["device_ts"]):
+    tags = conn.execute(
+        f"""SELECT * FROM tags WHERE cert_id IN (
+                SELECT p.cert_id FROM payments p JOIN merchants m ON m.merchant_id = p.merchant_id
+                WHERE p.status IN ('settled', 'held') AND {where})""",
+        params,
+    )
+    return rows, tags
+
+
+def finish_recheck(ctx, conn: psycopg.Connection, sent: tuple[psycopg.Cursor, psycopg.Cursor],
+                   only: set[bytes] | None = None) -> None:
+    """Re-run R5 on what send_recheck read (for `only` these merchants' payments)."""
+    rows, tags = sent[0].fetchall(), _tags_by_cert(sent[1].fetchall())
+    if only is not None:
+        rows = [r for r in rows if bytes(r["m_pub"]) in only]
+    payments = [(_tag_from_row(r), {"merchant_id": r["m_id"], "merchant_pub": r["m_pub"]}, r["device_ts"]) for r in rows]
+    for row, hit in zip(rows, check_merchant_knew_many(ctx, conn, payments, tags), strict=True):
+        if hit:
             conn.execute("UPDATE payments SET status = 'denied_knowing' WHERE tag_hash = %s", (row["tag_hash"],))
+
+
+def _recheck(ctx, conn: psycopg.Connection, where: str, params: tuple) -> None:
+    finish_recheck(ctx, conn, send_recheck(conn, where, params))
+
+
+def send_recheck_merchants(conn: psycopg.Connection, device_pubs: list[bytes]) -> tuple[psycopg.Cursor, psycopg.Cursor]:
+    """recheck_merchant_payments for several devices, sent at once."""
+    return send_recheck(
+        conn, "m.merchant_pub = ANY(%s) AND EXISTS (SELECT 1 FROM cases c WHERE c.cert_id = p.cert_id)",
+        (device_pubs,),
+    )
 
 
 def recheck_merchant_payments(ctx, conn: psycopg.Connection, device_pub: bytes) -> None:
     """§11.2 step 5: after a device's log arrives, re-run R5 for its accepted
     payments whose certs have cases. Already-paid money stays paid; the case
     records it."""
-    _recheck(
-        ctx, conn, "m.merchant_pub = %s AND EXISTS (SELECT 1 FROM cases c WHERE c.cert_id = p.cert_id)",
-        (device_pub,),
-    )
+    finish_recheck(ctx, conn, send_recheck_merchants(conn, [device_pub]))
 
 
 def recheck_cert_payments(ctx, conn: psycopg.Connection, cert_id: bytes) -> None:
@@ -254,34 +305,43 @@ def recheck_cert_payments(ctx, conn: psycopg.Connection, cert_id: bytes) -> None
 
 def pair_contact(conn: psycopg.Connection, entry: Dlog) -> None:
     """Mark both rows paired when both sides logged this contact naming each other."""
+    pair_contacts(conn, [entry])
+
+
+def pair_contacts(conn: psycopg.Connection, entries: list[Dlog]) -> None:
+    """pair_contact for several CONTACT entries in one statement."""
     conn.execute(
-        """UPDATE contacts SET paired = TRUE
-           WHERE contact_id = %s AND (device_pub, peer_pub) IN ((%s, %s), (%s, %s))
-           AND (SELECT count(*) FROM contacts WHERE contact_id = %s
-                AND (device_pub, peer_pub) IN ((%s, %s), (%s, %s))) = 2""",
-        (entry.contact_id, entry.device_pub, entry.peer_pub, entry.peer_pub, entry.device_pub,
-         entry.contact_id, entry.device_pub, entry.peer_pub, entry.peer_pub, entry.device_pub),
+        """UPDATE contacts c SET paired = TRUE
+           FROM unnest(%s::bytea[], %s::bytea[], %s::bytea[]) AS e(contact_id, device_pub, peer_pub)
+           WHERE c.contact_id = e.contact_id
+           AND (c.device_pub, c.peer_pub) IN ((e.device_pub, e.peer_pub), (e.peer_pub, e.device_pub))
+           AND (SELECT count(*) FROM contacts x WHERE x.contact_id = e.contact_id
+                AND (x.device_pub, x.peer_pub) IN ((e.device_pub, e.peer_pub), (e.peer_pub, e.device_pub))) = 2""",
+        ([e.contact_id for e in entries], [e.device_pub for e in entries], [e.peer_pub for e in entries]),
     )
 
 
-def check_log(ctx, conn: psycopg.Connection, entry: Dlog) -> None:
+def check_log(ctx, conn: psycopg.Connection, entry: Dlog, entries: list[Dlog] | None = None) -> bool:
     """R6 around a newly stored entry; a merchant loses pool eligibility.
+    True if it opened a case.
 
     Only seq − 1, seq and seq + 1 can produce a new fork or broken link, so the
-    check stays O(1) per entry however long the log gets."""
+    check stays O(1) per entry however long the log gets. `entries` are the
+    stored entries at those seqs when the caller already has them."""
     device_pub = entry.device_pub
-    entries = [Dlog.from_json(r["body"]) for r in all_rows(
-        conn, "SELECT body FROM device_log WHERE device_pub = %s AND seq BETWEEN %s AND %s",
-        (device_pub, entry.seq - 1, entry.seq + 1),
-    )]
+    if entries is None:
+        entries = [Dlog.from_json(r["body"]) for r in all_rows(
+            conn, "SELECT body FROM device_log WHERE device_pub = %s AND seq BETWEEN %s AND %s",
+            (device_pub, entry.seq - 1, entry.seq + 1),
+        )]
     finding = rules.log_tamper(entries)
     if finding is None:
-        return
+        return False
     if scalar(
         conn, "SELECT 1 FROM cases WHERE rule = 'LOG_TAMPER' AND device_pub = %s AND (evidence->>'seq')::int = %s",
         (device_pub, finding.seq),
     ):
-        return
+        return False
     at_seq = sorted(e.entry_hash.hex() for e in entries if e.seq == finding.seq)
     merchant = one(conn, "SELECT merchant_id FROM merchants WHERE merchant_pub = %s", (device_pub,))
     _insert_case(
@@ -291,3 +351,4 @@ def check_log(ctx, conn: psycopg.Connection, entry: Dlog) -> None:
     )
     if merchant is not None:
         suspend_pool(conn, bytes(merchant["merchant_id"]))
+    return True
