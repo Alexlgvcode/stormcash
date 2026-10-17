@@ -18,7 +18,8 @@
 > **v4.14 (Oct 17):** prompt v2 evaluated complete on the 43-row dataset, and on held-out seeds fixed before the run (#100, §15.3): the held-out section on the Evals tab, the prompt-version guard, and an idempotent eval gateway. Marked **[v4.14]**.
 > **v4.15 (Oct 17):** a reviewer Droid (§14.7b): a second session tries to refute each triage Flag with the same read-only tools before a person sees it; a valid disagreement marks the flag "agents disagree" and keeps it open for a person, who still decides. `STORMDESK_REVIEW`, `POST /v1/stormdesk/review`, `flags.review` / `agents_disagree`, `stormdesk_runs.job = 'review'` (§6.3, §11.1, §12.1, §14.1, §22.4). Migration `005_stormdesk_review.sql`. Marked **[v4.15]**.
 > **v4.16 (Oct 17):** the reviewer Droid evaluated on held-out rows (§15.3, §14.7b): "v2 alone" vs "v2 + reviewer" as two Chalk Evaluations on run B's frozen outputs; a one-row-at-a-time driver that never sends a review twice. Marked **[v4.16]**.
-> **v4.17 (Oct 17):** a demo dry run (§21.6): `python -m stormcash.dryrun` plays the server side of the 2:30 script as three labelled test identities and prints ✓ or ✗ per beat, before every judge. StormDesk's worker skips dry-run identities and a demo reset removes them; `GET /v1/demo/dry-run` (§12.1, §14.7a). Marked **[v4.17]**.
+> **v4.17 (Oct 17):** live reconciliation of the ledger with Nessie's own records (§11.4a): `GET /v1/accounts/reconcile` and a "Reconciled with Capital One Nessie" panel on the Accounts tab (§12.1, §18.2). Balances and the check share one ≤ 10 s cache of each account's records. Marked **[v4.17]**.
+> **v4.18 (Oct 17):** a demo dry run (§21.6): `python -m stormcash.dryrun` plays the server side of the 2:30 script as three labelled test identities and prints ✓ or ✗ per beat, before every judge. StormDesk's worker skips dry-run identities and a demo reset removes them; `GET /v1/demo/dry-run` (§12.1, §14.7a). Marked **[v4.18]**.
 > **Builds on:** "StormCash: The 10/10 Build" v3 (Oct 16, Alexandre Lugovoi, on Brian Maina's Oct 11 draft). Everything new since v3 is marked **[v4]**.
 
 ---
@@ -1043,6 +1044,18 @@ Rules:
 - **[v4.3] Reads** (`GET`) are logged too; `GET /v1/nessie/log` hides them unless `?reads=1`, and only writes are published as `nessie_call` SSE events.
 - A payout is `executed` only when both Nessie records exist. Never fake "executed".
 
+### 11.4a Reconciliation with Nessie (`reconcile.py`) [v4.17]
+
+`GET /v1/accounts/reconcile` proves the ledger and the bank agree, per real account that has a Nessie account (each real resident's checking and escrow, each real shop, the guarantee pool), in integer cents. Read-only: it never writes to the ledger or to Nessie.
+
+- **Nessie's side:** the account's fixed `balance` (its opening) + completed deposits − completed withdrawals, from the same ≤ 10 s cache as the balances (`NessieClient.account_records`). Records whose status isn't `completed` are listed, not counted.
+- **Our side:** the opening + Σ ledger movements on the ledger accounts the Nessie account mirrors (a resident's escrow covers all their certs), leaving out simulated money. The ledger books no opening entry, so the opening is compared on its own: ours is the logged "open account" call in `nessie_calls` (request `balance`), else StormCash's opening rule (checking $500, escrow and shops $0), else, for an account opened outside this database (the pool, by `nessie_setup`), Nessie's own value, said so.
+- **Simulated money** (a txn whose other side is a simulated resident or shop, or a settlement whose payer is simulated) is shown per account as "ledger only, never sent to Nessie", never as a difference.
+- **A difference is split by txn** using the `SC <txn_id>` in each Nessie description, so the items add up to it exactly: `opening` (the two openings differ), `queued` (a `nessie_moves` row not executed yet), `half_pair` (one half recorded), `in_flight` (executed after Nessie was read), `pending_in_nessie`, `ledger_only` (not whole dollars, no pool account in Nessie, a `ledger_only` payout), `held` (an approved hold booked and reversed in the ledger), `not_in_ledger` (an `SC` record with no ledger txn; our call log says whether we made it and where its other half went), `unlinked` (a record with no `SC` id), and `unexplained` for anything else. Nessie is read before the database, so a txn posted in between shows as queued or in flight, not missing.
+- **Pairs:** every `SC <txn_id>` on the accounts read, and every move touching them, must be one completed withdrawal on the move's source and one completed deposit on its destination, both equal to the ledger amount. Problems are listed by kind.
+- **Nessie unreachable:** the account says so with the error and no number; `last_ok_at` is the last check that read every account (server memory). `NESSIE_DISABLED=1` makes every account "ledger only".
+- Response: `{checked_at, ok, last_ok_at, nessie: {enabled, error}, accounts: [{key, label, kind, nessie_account_id, status: reconciled|difference|error|no_nessie_account, error, fetched_at, opening: {cents, source: call_log|rule|nessie, call_id, at, nessie_cents}, ledger_cents, simulated: {cents, txns, label}|null, expected_cents, nessie_cents, difference_cents, records, by_kind, items, items_total}], pairs: {checked, complete, problems, problems_total}, simulated_town}`.
+
 ---
 
 ## 12. Server API
@@ -1062,6 +1075,7 @@ All JSON. Byte fields base64url. Prefix `/v1`. Auth for demo: none on reads; res
 | `POST /v1/sync` | `{device_pub, items: [...]}` | `{rcpt, policy, certs: [...]}` | WS2 |
 | `GET /v1/policy` | `?since=ver` | `{policy}` | WS2 |
 | `GET /v1/accounts` | | live Nessie balances for demo entities (computed from Nessie transactions, §11.4) + ledger totals. **[v4.3]** `{accounts: [{key, label, kind, nessie_account_id, nessie_cents, nessie_error, ledger_cents}], simulated_town, ledger: {balanced, unbalanced_txns, totals}, nessie: {enabled, queued}}`; a Nessie failure shows as `nessie_error`, never as a number | WS2 |
+| `GET /v1/accounts/reconcile` **[v4.17]** | | the ledger against Nessie's own records per real account, with every difference explained by txn and every `SC` pair checked (§11.4a) | WS2 |
 | `GET /v1/health` **[v4.3]** | | `{ok, time, demo_mode, nessie_enabled, api_sig_required, server_pub}` for the header and phones | WS2 |
 | `GET /v1/nessie/log` | `?limit=50` | rows of `nessie_calls` | WS2 |
 | `GET /v1/cases` / `GET /v1/cases/{id}` | | case with both tags, the cert, the rule, evidence, case file | WS2 |
@@ -1080,10 +1094,10 @@ All JSON. Byte fields base64url. Prefix `/v1`. Auth for demo: none on reads; res
 | `POST /v1/photon/resident-contact` **[v4.13]** | `{resident_id \| display_name, channel, handle}` | the resident and the saved handle. Operator header; `display_name` must match exactly one real (not simulated) resident, e.g. Maya | WS7 |
 | `GET /v1/photon/messages` **[v4.13]** | `?merchant_id=` or `?resident_id=` | `{messages}`: one shop's or resident's Photon thread, oldest first | WS7 |
 | `GET /v1/photon/freezes` **[v4.13]** | `?cert_id&limit` | certs whose owner texted FREEZE: `[{cert_id, status, frozen_at, owner_freeze_at, resident_id, display_name, policy_ver}]`, `policy_ver` = the first POLICY listing the cert | WS7 |
-| `POST /v1/demo/reset` | | clears real-device demo data, reissues Maya's cert, keeps the simulated town. **[v4.17]** Removes the dry run's identities first (§21.6) and returns `dry_run_removed` | WS2 |
+| `POST /v1/demo/reset` | | clears real-device demo data, reissues Maya's cert, keeps the simulated town. **[v4.18]** Removes the dry run's identities first (§21.6) and returns `dry_run_removed` | WS2 |
 |  |  | **[v4.3]** Operator header. Deletes what touches a real resident or shop (payments, tags, cases, candidates, logs, contacts, uploads, payouts, whole ledger transactions, queued moves), opens fresh Nessie accounts under the same customers (checking $500, escrow $0, shops $0; Nessie balances can't be edited), reissues each real resident a new cert (new `cert_id`, $20 locked), restores the shops' pool eligibility and publishes a POLICY without the old certs. The phone gets its new cert by registering again. Optional `{storm_cap_cents: 5000}` pre-stages Storm Mode. Measured live: under 1 s. |  |
 | `POST /v1/demo/seed-town` | `{seed}` | runs the simulator into the DB (§16) | WS4 |
-| `GET /v1/demo/dry-run` **[v4.17]** | | `{prefix, stormdesk_skips_dry_run, stormdesk_worker, stormdesk_runner, stormdesk_review}`: what the dry run checks before it writes anything (§21.6) | WS2 |
+| `GET /v1/demo/dry-run` **[v4.18]** | | `{prefix, stormdesk_skips_dry_run, stormdesk_worker, stormdesk_runner, stormdesk_review}`: what the dry run checks before it writes anything (§21.6) | WS2 |
 | `GET /v1/stream` | | SSE | WS2 |
 
 ### 12.2 `POST /v1/sync` example
@@ -1340,7 +1354,7 @@ Reject = flag `rejected`, nothing executes. Every approval writes an `approvals`
 - **Runners.** `STORMDESK_RUNNER=droid|fake|auto` (auto = Droid only when the SDK, the `droid` CLI and `FACTORY_API_KEY` are present). `DroidRunner` uses `droid-sdk` 0.5.0: our tools are an in-process MCP server named `stormdesk`, `SessionConfig(system_prompt, mcp_servers, disabled_tools, disable_builtin_skills=True)`, `Session.stream(prompt, output=Model)`, `ToolCall`/`ToolResult` events become steps, and a failed structured output is retried once. The permission handler allows only `McpToolAction`s from the `stormdesk` server naming one of our 11 tools and cancels everything else. The `disabled_tools` list is every built-in tool id (verified with `list_tools()`, §14.2). If Droid can't run at all, the fake runner answers the job and the run records `fallback_from_droid` (§14.2). `FakeRunner` calls the same tools and applies the rules-only baseline (every candidate gets its default action; case files from `verify_tags` + `get_cert_chain`). Its triage also calls `query_features` with `as_of` = the candidate's `window_end` and says in the reasoning whether Chalk or the Postgres fallback answered; it reports those values but doesn't weigh them. Its summaries start with "Fake runner", its session ids with `fake-`, and every run records its runner, so a fake result is never shown as an agent's judgement (§0 rule 3).
 - **Storage.** Every run is a `stormdesk_runs` row (§11.1) with its transcript. Triage writes one `flags` row per candidate (`dismissed` for kind `none`, `invalid` on a citation miss or no output). A re-run updates it unless an operator already approved or rejected it. An investigation writes `cases.case_file_md` only when its citations hold.
 - **Citations** (§14.7) accept tag/payment hashes, device-log entry hashes, contact ids, cert ids, merchant ids (hex, optional `kind:` prefix) and weather alert ids. A flag of a real kind must cite at least one; a dismissal may cite none.
-- **Worker.** Polls every 5 s for candidates without a flag and cases without a case file (at most 2 runs each), up to 4 at a time (the same limit covers `POST /v1/stormdesk/run`). `STORMDESK_AUTO=0` turns it off. **[v4.17]** It never queues a case or candidate of the demo dry run's identities (display names starting `Dry-run `, §21.6), so a dry run never starts Droid or writes a run.
+- **Worker.** Polls every 5 s for candidates without a flag and cases without a case file (at most 2 runs each), up to 4 at a time (the same limit covers `POST /v1/stormdesk/run`). `STORMDESK_AUTO=0` turns it off. **[v4.18]** It never queues a case or candidate of the demo dry run's identities (display names starting `Dry-run `, §21.6), so a dry run never starts Droid or writes a run.
 - **SSE `stormdesk_step`:** `{run_id, job, subject, runner, index, tool, input_summary, ok}` per tool call, then `{run_id, done, status}`. A `flag` event follows triage.
 - `query_features` asks Chalk (§15.2) **[v4.6]**; the Postgres fallback (§22.4: the detectors' frozen features) answers when Chalk is off or fails.
 - Checked on the seeded town with the fake runner: all 22 hard cases and 12 candidates give valid outputs with verified citations.
@@ -1650,6 +1664,7 @@ Title, "Demo mode", connection dot, **Reset demo** button (calls `/v1/demo/reset
 - Nessie call log (scrolling): `POST withdrawal Maya Escrow, $12 · completed` / `POST deposit Pharmacy, $12 · completed`.
 - Ledger panel: "Ledger balanced ✓", totals per account type.
 - Queued Nessie payouts counter (fallback visible).
+- **[v4.17]** "Reconciled with Capital One Nessie" panel (§11.4a): per account ✓ or the difference with its explanation, how each side represents the opening, simulated money as "ledger only, never sent to Nessie", the `SC` pair check, when it last ran, and a Re-check button. It re-runs (debounced) on `accounts`, `payment`, `upload` and `nessie_call` SSE events. If Nessie can't be read it says so and shows the last successful check's time.
 
 ### 18.3 Cases tab (Digital Trust + Factory add-ons)
 
@@ -1853,7 +1868,7 @@ If judging slots are < 3 min, drop the Town beat from the core and show StormDes
 3. Nessie down → queued payouts visible, ledger moving.
 4. Everything broken → 2-minute recorded video on Mac 2.
 
-### 21.6 Demo dry run (pre-flight) [v4.17]
+### 21.6 Demo dry run (pre-flight) [v4.18]
 
 `cd server && python -m stormcash.dryrun --base-url http://localhost:8000`, before every judging slot and after any merge. It plays the server side of §21.2 headlessly, about 15 s against the hosted database, and prints ✓ or ✗ with a one-line reason and the time for each step. Exit code 0 only when every step passed.
 
@@ -1937,7 +1952,7 @@ If judging slots are < 3 min, drop the Town beat from the core and show StormDes
 - [ ] `seed-town 42` loaded; planted StormDesk runs replayable
 - [ ] Final Chalk eval run rendered on the Evals tab
 - [ ] Demo reset < 30 s, tested 3 times
-- [ ] **[v4.17]** `python -m stormcash.dryrun` all ✓ before each judging slot (§21.6)
+- [ ] **[v4.18]** `python -m stormcash.dryrun` all ✓ before each judging slot (§21.6)
 - [ ] 2-minute backup video recorded
 - [ ] README: pitch, setup, honest limits, "Where Droid runs", "How we use Chalk", "How we use Nessie", "How we use Photon"
 - [ ] Devpost skeleton + architecture image
