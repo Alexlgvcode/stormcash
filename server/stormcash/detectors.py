@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 import psycopg
 from psycopg.types.json import Jsonb
 
-from .db import all_rows, one, scalar
+from .db import all_rows, one, pipelined, scalar
 
 log = logging.getLogger(__name__)
 
@@ -66,23 +66,21 @@ def _insert(conn: psycopg.Connection, kind: str, subject_id: str, window_start: 
 
 def merchant_silence(conn: psycopg.Connection, window_end: int, only: set[bytes] | None = None) -> list[dict]:
     """Evaluate the 6 h window ending at window_end (for `only` these merchants)."""
+    return _silence(conn, window_end, _silence_data(_send_silence(conn, window_end)), only)
+
+
+def _send_silence(conn: psycopg.Connection, window_end: int) -> tuple[psycopg.Cursor, ...]:
+    """merchant_silence's reads for one window, sent without waiting."""
     ws, we = window_end - SILENCE_WINDOW_S, window_end
-    hours = SILENCE_WINDOW_S / HOUR
-    merchants = all_rows(conn, "SELECT merchant_id, merchant_pub, x, y FROM merchants")
-    contact_counts = {
-        bytes(r["merchant_id"]): r["n"]
-        for r in all_rows(
-            conn,
+    return (
+        conn.execute("SELECT merchant_id, merchant_pub, x, y FROM merchants"),
+        conn.execute(
             """SELECT m.merchant_id, count(DISTINCT c.contact_id) AS n FROM merchants m
                JOIN contacts c ON c.device_pub = m.merchant_pub OR c.peer_pub = m.merchant_pub
                WHERE c.ts >= %s AND c.ts < %s GROUP BY m.merchant_id""",
             (ws, we),
-        )
-    }
-    pay = {
-        bytes(r["merchant_id"]): r
-        for r in all_rows(
-            conn,
+        ),
+        conn.execute(
             """SELECT p.merchant_id,
                       count(*) AS accepted_count,
                       count(*) FILTER (WHERE p.funded_pool_cents > 0) AS pool_funded_count,
@@ -94,8 +92,24 @@ def merchant_silence(conn: psycopg.Connection, window_end: int, only: set[bytes]
                WHERE p.device_ts >= %s AND p.device_ts < %s AND p.status = ANY(%s)
                GROUP BY p.merchant_id""",
             (ws, we, list(ACCEPTED)),
-        )
-    }
+        ),
+    )
+
+
+def _silence_data(sent: tuple[psycopg.Cursor, ...]) -> tuple[list[dict], dict[bytes, int], dict[bytes, dict]]:
+    merchants, contacts, pay = sent
+    return (
+        merchants.fetchall(),
+        {bytes(r["merchant_id"]): r["n"] for r in contacts.fetchall()},
+        {bytes(r["merchant_id"]): r for r in pay.fetchall()},
+    )
+
+
+def _silent(data: tuple, only: set[bytes] | None) -> list[tuple]:
+    """The merchants that took pool money in the window while their contact
+    rate stayed under 0.2 of their neighbors' median. Only these need more reads."""
+    merchants, contact_counts, pay = data
+    hours = SILENCE_WINDOW_S / HOUR
     out = []
     for m in merchants:
         mid = bytes(m["merchant_id"])
@@ -113,8 +127,16 @@ def merchant_silence(conn: psycopg.Connection, window_end: int, only: set[bytes]
         ]
         neighbor_median = statistics.median(neighbors) if neighbors else 0.0
         silence_ratio = cph / max(neighbor_median, 0.1)
-        if silence_ratio >= 0.2:
-            continue
+        if silence_ratio < 0.2:
+            out.append((m, stats, cph, neighbors, neighbor_median, silence_ratio))
+    return out
+
+
+def _silence(conn: psycopg.Connection, window_end: int, data: tuple, only: set[bytes] | None) -> list[dict]:
+    ws, we = window_end - SILENCE_WINDOW_S, window_end
+    out = []
+    for m, stats, cph, neighbors, neighbor_median, silence_ratio in _silent(data, only):
+        mid = bytes(m["merchant_id"])
         mine = all_rows(
             conn,
             """SELECT contact_id, bool_or(paired) AS paired, bool_or(device_pub = %s) AS logged_by_me
@@ -211,29 +233,59 @@ def cap_drain_for_payment(conn: psycopg.Connection, cert_id: bytes, t: int) -> d
 
 
 def region_dark(conn: psycopg.Connection, now: int) -> list[dict]:
-    out = []
-    for region in all_rows(conn, "SELECT region_id FROM regions ORDER BY region_id"):
-        rid = region["region_id"]
-        certs = all_rows(
-            conn,
-            """SELECT DISTINCT ON (c.cert_id) c.cert_id, c.expires_at, c.issued_at
+    return _region_dark(conn, now, _dark_data(_send_dark(conn)))
+
+
+def _send_dark(conn: psycopg.Connection) -> tuple[psycopg.Cursor, ...]:
+    """region_dark's reads for every region at once (they don't depend on the
+    hour), sent without waiting."""
+    return (
+        conn.execute("SELECT region_id FROM regions ORDER BY region_id"),
+        # Each cert's latest version, unless frozen; a cert's region is its resident's.
+        conn.execute(
+            """SELECT DISTINCT ON (c.cert_id) r.region_id, c.cert_id, c.expires_at, c.issued_at
                FROM certificates c JOIN residents r ON r.resident_id = c.resident_id
                JOIN cert_status s ON s.cert_id = c.cert_id
-               WHERE r.region_id = %s AND s.status <> 'frozen'
-               ORDER BY c.cert_id, c.cert_ver DESC""",
-            (rid,),
-        )
+               WHERE s.status <> 'frozen'
+               ORDER BY c.cert_id, c.cert_ver DESC"""
+        ),
+        conn.execute(
+            "SELECT region_id, extract(epoch FROM max(received_at))::bigint AS t FROM uploads GROUP BY region_id"
+        ),
+    )
+
+
+def _dark_data(sent: tuple[psycopg.Cursor, ...]) -> tuple[list[str], dict[str, list[dict]], dict[str, int]]:
+    regions, certs, uploads = sent
+    by_region: dict[str, list[dict]] = {}
+    for c in certs.fetchall():
+        by_region.setdefault(c["region_id"], []).append(c)
+    return [r["region_id"] for r in regions.fetchall()], by_region, {r["region_id"]: r["t"] for r in uploads.fetchall()}
+
+
+def _dark(data: tuple, now: int) -> list[tuple]:
+    """The regions dark at `now`: most active certs expire within 12 h and
+    nobody there uploaded for 48 h. Only these need more reads."""
+    regions, by_region, last_uploads = data
+    out = []
+    for rid in regions:
+        certs = by_region.get(rid, [])
         active = [c for c in certs if c["expires_at"] > now and c["issued_at"] <= now]
         if not active:
             continue
         expiring = sum(1 for c in active if c["expires_at"] < now + 12 * HOUR) / len(active)
-        last_upload = scalar(
-            conn, "SELECT extract(epoch FROM max(received_at))::bigint FROM uploads WHERE region_id = %s", (rid,)
-        )
+        last_upload = last_uploads.get(rid)
         since = last_upload if last_upload is not None else min(c["issued_at"] for c in certs)
         hours_since = (now - since) / HOUR
         if expiring < 0.3 or hours_since < 48:
             continue
+        out.append((rid, active, expiring, since, hours_since))
+    return out
+
+
+def _region_dark(conn: psycopg.Connection, now: int, data: tuple) -> list[dict]:
+    out = []
+    for rid, active, expiring, since, hours_since in _dark(data, now):
         alerts = all_rows(
             conn,
             """SELECT event, severity, source FROM weather_alerts WHERE region_id = %s
@@ -263,6 +315,18 @@ def region_dark(conn: psycopg.Connection, now: int) -> list[dict]:
 # Entry point ------------------------------------------------------------------------------
 
 
+@dataclass
+class Reads:
+    """What one detector run reads, sent and not yet waited for."""
+
+    since: int
+    hour: int
+    ends: list[int]  # hour boundaries to evaluate
+    new: psycopg.Cursor
+    hourly: list[tuple[psycopg.Cursor, ...]]
+    dark: tuple[psycopg.Cursor, ...] | None
+
+
 def run_incremental(deps, now: int) -> list[dict]:
     """Evaluate what's new since the last run; returns the new candidates.
 
@@ -271,41 +335,69 @@ def run_incremental(deps, now: int) -> list[dict]:
     hours), so they cost nothing on most uploads. Store-and-forward data can
     arrive hours late, so a newly received pool-funded payment also re-checks
     the silence windows (of its merchant) that contain it."""
-    state: DetectorState = deps.detector_state
-    created: list[dict] = []
-    with deps.pool.connection() as conn:
-        since = state.last_run if state.last_run is not None else now - HOUR
-        late: dict[int, set[bytes]] = {}  # window_end -> merchants to re-check
-        rows = all_rows(
-            conn,
-            """SELECT cert_id, device_ts, merchant_id, funded_pool_cents, tag_hash,
-                      extract(epoch FROM received_at)::bigint AS received
-               FROM payments
-               WHERE received_at >= to_timestamp(%s) AND received_at <= to_timestamp(%s) AND status = ANY(%s)
-               ORDER BY device_ts, tag_hash""",
-            (since, now, list(ACCEPTED)),
-        )
-        new = [p for p in rows if bytes(p["tag_hash"]) not in state.seen]
-        for p in new:
-            state.seen[bytes(p["tag_hash"])] = p["received"]
-            row = cap_drain_for_payment(conn, bytes(p["cert_id"]), p["device_ts"])
-            if row:
-                created.append(row)
-            if p["funded_pool_cents"] > 0:
-                first_end = (p["device_ts"] // HOUR + 1) * HOUR
-                for end in range(first_end, min(first_end + SILENCE_WINDOW_S, now // HOUR * HOUR + 1), HOUR):
-                    late.setdefault(end, set()).add(bytes(p["merchant_id"]))
-        state.last_run = now
-        state.seen = {h: t for h, t in state.seen.items() if t >= since}  # only the look-back needs them
-        for end in sorted(late):
-            created += merchant_silence(conn, end, only=late[end])
+    with pipelined(deps.pool) as conn:
+        reads = send_incremental(deps, conn, now)
+    return finish_incremental(deps, now, reads)
 
-        hour = now // HOUR
-        first = hour if state.last_hour is None else max(state.last_hour + 1, hour - MAX_CATCHUP_HOURS)
-        for h in range(first, hour + 1):
-            created += merchant_silence(conn, h * HOUR)
-            created += region_dark(conn, h * HOUR)
-        state.last_hour = hour
+
+def send_incremental(deps, conn: psycopg.Connection, now: int) -> Reads:
+    """Send what every run reads, without waiting: ingest sends it with its
+    COMMIT, so a run costs no round trip of its own unless a candidate may fire."""
+    state: DetectorState = deps.detector_state
+    since = state.last_run if state.last_run is not None else now - HOUR
+    hour = now // HOUR
+    first = hour if state.last_hour is None else max(state.last_hour + 1, hour - MAX_CATCHUP_HOURS)
+    ends = [h * HOUR for h in range(first, hour + 1)]
+    # merchants_15m counts what cap_drain_for_payment needs at least 3 of.
+    new = conn.execute(
+        """SELECT p.cert_id, p.device_ts, p.merchant_id, p.funded_pool_cents, p.tag_hash,
+                  extract(epoch FROM p.received_at)::bigint AS received,
+                  (SELECT count(DISTINCT q.merchant_id) FROM payments q
+                   WHERE q.cert_id = p.cert_id AND q.device_ts BETWEEN p.device_ts - %s AND p.device_ts
+                   AND q.status = ANY(%s)) AS merchants_15m
+           FROM payments p
+           WHERE p.received_at >= to_timestamp(%s) AND p.received_at <= to_timestamp(%s) AND p.status = ANY(%s)
+           ORDER BY p.device_ts, p.tag_hash""",
+        (DRAIN_WINDOW_S, list(ACCEPTED), since, now, list(ACCEPTED)),
+    )
+    return Reads(since, hour, ends, new, [_send_silence(conn, end) for end in ends],
+                 _send_dark(conn) if ends else None)
+
+
+def finish_incremental(deps, now: int, reads: Reads) -> list[dict]:
+    """The rest of run_incremental, once its reads are in. Candidates are created
+    in the same order as evaluating one by one."""
+    state: DetectorState = deps.detector_state
+    rows = reads.new.fetchall()
+    hourly = [_silence_data(sent) for sent in reads.hourly]
+    dark = _dark_data(reads.dark) if reads.dark else None
+
+    late: dict[int, set[bytes]] = {}  # window_end -> merchants to re-check
+    new = [p for p in rows if bytes(p["tag_hash"]) not in state.seen]
+    for p in new:
+        state.seen[bytes(p["tag_hash"])] = p["received"]
+        if p["funded_pool_cents"] > 0:
+            first_end = (p["device_ts"] // HOUR + 1) * HOUR
+            for end in range(first_end, min(first_end + SILENCE_WINDOW_S, now // HOUR * HOUR + 1), HOUR):
+                late.setdefault(end, set()).add(bytes(p["merchant_id"]))
+    state.last_run = now
+    state.seen = {h: t for h, t in state.seen.items() if t >= reads.since}  # only the look-back needs them
+    drains = [p for p in new if p["merchants_15m"] >= 3]
+
+    created: list[dict] = []
+    if drains or late or any(_silent(d, None) for d in hourly) or any(_dark(dark, end) for end in reads.ends):
+        with pipelined(deps.pool) as conn:
+            for p in drains:
+                row = cap_drain_for_payment(conn, bytes(p["cert_id"]), p["device_ts"])
+                if row:
+                    created.append(row)
+            late_sent = {end: _send_silence(conn, end) for end in sorted(late)}
+            for end in sorted(late):
+                created += _silence(conn, end, _silence_data(late_sent[end]), late[end])
+            for end, data in zip(reads.ends, hourly, strict=True):
+                created += _silence(conn, end, data, None)
+                created += _region_dark(conn, end, dark)
+    state.last_hour = reads.hour
 
     for row in created:
         deps.events.publish("candidate", row)
