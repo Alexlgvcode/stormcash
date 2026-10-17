@@ -47,6 +47,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 OPERATOR = "chalk-eval"  # X-SC-Operator on every run (§14.6 operator header)
 RUN_TIMEOUT_S = 900
 JOB_TTL_S = 6 * 3600
+ROW_MARGIN = 1.25  # a row may cost more than the average so far
 
 
 SESSIONS_ROOT = os.path.expanduser("~/.factory/sessions")
@@ -172,12 +173,12 @@ class Jobs:
             print(f"gateway: BREAKER TRIPPED: {reason}", flush=True)
 
     def projected_credits(self, extra: int = 0) -> float:
-        """Credits spent so far plus the rows still running and `extra` new ones, each at the average row cost
-        (row_estimate until a row is done). In-flight sessions are counted in both: deliberately cautious."""
+        """Credits spent so far plus the rows still running and `extra` new ones, each at 1.25 x the average
+        done row (row_estimate until a row is done). In-flight sessions are counted in both: deliberately cautious."""
         with self.lock:
             done = [j["credits"] for j in self.jobs.values() if j.get("credits") is not None]
             running = sum(1 for j in self.jobs.values() if j["status"] == "running")
-        per_row = max(sum(done) / len(done), self.row_estimate) if done else self.row_estimate
+        per_row = ROW_MARGIN * sum(done) / len(done) if done else self.row_estimate
         return audit(self.sessions_dir, self.started)["factory_credits"] + (running + extra) * per_row
 
     def start(self, seed: int, candidate_id: int) -> str:

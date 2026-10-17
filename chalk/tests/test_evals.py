@@ -446,9 +446,9 @@ def test_a_row_is_admitted_only_if_it_fits_under_the_cap(tmp_path, fake_server):
                         sessions_root=str(tmp_path), row_estimate=40000)
     jobs.started = 0
     assert jobs.projected_credits(extra=1) == 30000 + 40000  # the session on disk + one row at the estimate
-    run_one(jobs)  # 30000 spent, average row 30000 < estimate: 30000 + 40000 fits
-    assert jobs.tripped is None
-    with pytest.raises(gateway.Refused):  # a third row would project 30000 + 2 x 40000 > 100000
+    run_one(jobs)  # 30000 spent; rows now cost 1.25 x 30000 = 37500 each
+    assert jobs.tripped is None and jobs.projected_credits(extra=1) == 30000 + 37500
+    with pytest.raises(gateway.Refused):  # with one running, another projects 30000 + 2 x 37500 > 100000
         jobs.start(42, 6), jobs.start(42, 7)
     assert "credit cap: one more row projects" in jobs.tripped
 
