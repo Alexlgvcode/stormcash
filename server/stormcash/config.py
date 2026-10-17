@@ -54,6 +54,12 @@ class Settings:
     # every new text. Off unless loaded from the environment (STORMDESK_APPEAL_SESSIONS, default on);
     # off = one fresh run per message.
     stormdesk_appeal_sessions: bool = False
+    # Droid writes a proposed detector in a sandbox and our code opens a PR for a person (§14.7d).
+    # Off unless STORMDESK_AUTHOR=1. The sandbox is a worktree of STORMDESK_AUTHOR_BASE; a run stops
+    # at STORMDESK_AUTHOR_MAX_CREDITS Factory credits.
+    stormdesk_author: bool = False
+    stormdesk_author_base: str = "origin/main"
+    stormdesk_author_max_credits: int = 250_000
     # The Evals tab's Chalk results (§18.5); empty: chalk/evals/results in this checkout.
     evals_results_dir: str = ""
 
@@ -110,5 +116,8 @@ def load_settings(env_file: Path | None = SERVER_DIR / ".env") -> Settings:
         stormdesk_auto=_flag(env.get("STORMDESK_AUTO"), True),
         stormdesk_review=_flag(env.get("STORMDESK_REVIEW"), True),
         stormdesk_appeal_sessions=_flag(env.get("STORMDESK_APPEAL_SESSIONS"), True),
+        stormdesk_author=_flag(env.get("STORMDESK_AUTHOR"), False),
+        stormdesk_author_base=env.get("STORMDESK_AUTHOR_BASE") or "origin/main",
+        stormdesk_author_max_credits=int(env.get("STORMDESK_AUTHOR_MAX_CREDITS") or 250_000),
         evals_results_dir=env.get("EVALS_RESULTS_DIR", ""),
     )

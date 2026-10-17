@@ -51,6 +51,7 @@ flowchart LR
   - With prompt v2 (next point), it flagged the shop. It weighed the shop's silence, the 67% pool-funded share and the 4 caught cheater certificates together, proposed holding pool payouts, and noted that the neighbour baseline was thin. Citations valid, 70,319 credits.
 
   We show every answer as it is.
+- **The author job is macOS only** (it needs `sandbox-exec`) and refuses to run elsewhere. Its first detector's perfect score is on simulated towns that plant the very pattern it relies on (see "Droid writes a detector").
 - **StormDesk's prompt is v2, and its eval is not a blind holdout.** The first real eval (v1, 43 rows) caught 2 of 23 real cases. It dismissed stolen phones because their escrow covered every cent, and colluding shops as the cheaters' victims. We then added general principles to the prompt (a drained escrow is the resident's loss; weigh a shop's silence, pool-funded share and number of cheater certificates together). Those principles were written after reading v1's errors on that same dataset, so a v2 score on it is not a blind test. Each run records its prompt version.
 
 ## Run it
@@ -181,6 +182,31 @@ _A live Droid run (`claude-sonnet-5-5`) triaging the Corner Store candidate on t
 | Invalid citations reaching a person | 0 | 0 |
 
 The reviewer agreed 17 times, disagreed once and said the evidence was insufficient twice, so 3 rows were escalated to a person. Two of those were real cases v2 had dismissed. The one disagreement was with v2's correct hold on Corner Store, which was already in front of a person. The reviewer never changes the proposal; it only decides whether a person must look.
+
+### Droid writes a detector; a person merges it or not
+
+The one job where Droid writes code ([`author.py`](server/stormcash/stormdesk/author.py), [`sandbox.py`](server/stormcash/stormdesk/sandbox.py), [`detector_eval.py`](server/stormcash/stormdesk/detector_eval.py)). On the Evals tab an operator clicks **Ask Droid to write a detector** for a gap the evals found, or calls `POST /v1/stormdesk/author-detector`. The first gap: StormDesk v2 caught 0 of 2 dark regions on held-out towns, and the rules-only baseline flags every quiet region too.
+
+- **Sandbox.** A throwaway git worktree of `origin/main` in a temp directory, with no `.env`. Droid's built-in Create and Edit tools are on, and the permission handler allows them on two files only: `server/stormcash/detectors_proposed/<name>.py` and `server/tests/test_proposed_<name>.py`. Every refusal is recorded.
+- **No shell.** We found that Droid's CLI auto-runs commands it rates read-only (`ls`) without asking the permission handler, so its shell is off. The two allowlisted commands are two tools, `run_tests` and `run_eval`, and Droid reads through our tools, confined to the worktree and blind to held-out rows.
+- **Two OS sandboxes.** The `droid` CLI runs under a macOS sandbox profile with a scrubbed environment: it writes only inside the sandbox and can't read `.env`, credentials or held-out data. The tests and the eval run in a second profile with no network, so no database.
+- **Measured.** The evaluation script runs the detector, a pure function checked before import, over the labelled candidates of the Chalk eval datasets, next to the rules-only detector. Droid may read the dev seeds; of the held-out seeds 1–3 it only ever sees aggregate counts.
+- **Checked by our code, not Droid.** After the session closes, the server checks that only the two files changed, that the detector is pure and that no secret is in them. Then it re-runs the tests and the eval itself, and rejects the run if anything in Droid's `DetectorProposal` differs: name, files, test result or any number.
+- **Hand-off.** Only then does deterministic code commit the two files as the repo owner and open a PR, "Detector proposed by Droid: <name>", with the rationale, our re-run's metrics, the run id, model and credits. It is labelled `droid-proposal` and never merged by code. Nothing calls the detector until a person merges a follow-up that wires it into `detectors.run_incremental`.
+- Every run is a `stormdesk_runs` row with `job = 'author'`, on the Droid tab. `STORMDESK_AUTHOR=1` turns it on.
+
+**First live run** (run #95, `claude-sonnet-5-5`, 21,186 Factory credits, 36 s, 0 permission denials). Droid proposed `region_dark_alert_gate`: keep the two existing thresholds, and also require an active weather alert. Our re-run matched every number, and it opened [Alexlgvcode/stormcash#122](https://github.com/Alexlgvcode/stormcash/pull/122), left open for a person.
+
+| Rows | Detector | Precision | Recall |
+|---|---|---|---|
+| Dev (seeds 42, 7, 13, 99, 2026; 9 rows) | `region_dark_alert_gate` | 1.00 | 1.00 |
+| | rules only | 0.56 | 1.00 |
+| Held-out (seeds 1, 2, 3; 6 rows) | `region_dark_alert_gate` | 1.00 | 1.00 |
+| | rules only | 0.50 | 1.00 |
+
+Droid's own caveat, and ours: the simulator plants an alert on every dark region and none on the quiet-region traps, so the perfect score shows the rule fits the simulator, not that it holds in a real town. A region that goes dark before any warning would be missed, and 15 rows is a small sample.
+
+![Droid's proposed detector, our re-run's numbers and the pull request it opened](docs/images/droid-author-run95-pr.jpg)
 
 ## How we use Chalk
 

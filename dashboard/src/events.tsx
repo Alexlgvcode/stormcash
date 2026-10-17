@@ -15,7 +15,7 @@ interface Events {
 // Every event the server publishes (§12.3); EventSource needs them by name.
 const EVENT_NAMES = [
   "nessie_call", "accounts", "payment", "case_opened", "policy", "candidate",
-  "stormdesk_step", "flag", "approval", "message", "upload", "town", "appeal", "owner_freeze",
+  "stormdesk_step", "flag", "approval", "message", "upload", "town", "appeal", "owner_freeze", "author",
 ];
 
 const EventsContext = createContext<Events | null>(null);
