@@ -1,0 +1,121 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" width="1600" height="900" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#142029"/>
+    </marker>
+    <marker id="arrowRed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#c8102e"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1600" height="900" fill="#ffffff"/>
+
+  <!-- Title -->
+  <text x="50" y="72" font-size="36" font-weight="700" fill="#142029">StormCash architecture</text>
+  <text x="50" y="106" font-size="18" fill="#56636e">Offline payments that refuse cheaters, settled through Capital One Nessie</text>
+
+  <!-- Offline zone -->
+  <rect x="50" y="150" width="470" height="680" rx="16" fill="#f4f6f8" stroke="#b9c3cc" stroke-width="2" stroke-dasharray="8 6"/>
+  <text x="74" y="186" font-size="16" font-weight="700" fill="#c8102e" letter-spacing="2">OFFLINE · NO TOWERS</text>
+
+  <!-- Phones -->
+  <rect x="170" y="215" width="200" height="105" rx="14" fill="#ffffff" stroke="#142029" stroke-width="2"/>
+  <text x="270" y="253" font-size="22" font-weight="700" fill="#142029" text-anchor="middle">Pharmacy</text>
+  <text x="270" y="278" font-size="15" fill="#56636e" text-anchor="middle">iPhone · merchant</text>
+  <text x="270" y="300" font-size="15" fill="#56636e" text-anchor="middle">checks C1–C6 offline</text>
+
+  <rect x="170" y="410" width="200" height="105" rx="14" fill="#ffffff" stroke="#142029" stroke-width="2"/>
+  <text x="270" y="448" font-size="22" font-weight="700" fill="#142029" text-anchor="middle">Maya</text>
+  <text x="270" y="473" font-size="15" fill="#56636e" text-anchor="middle">iPhone · resident</text>
+  <text x="270" y="495" font-size="15" fill="#56636e" text-anchor="middle">certificate + wallet</text>
+
+  <rect x="170" y="605" width="200" height="105" rx="14" fill="#ffffff" stroke="#142029" stroke-width="2"/>
+  <text x="270" y="643" font-size="22" font-weight="700" fill="#142029" text-anchor="middle">Gas Station</text>
+  <text x="270" y="668" font-size="15" fill="#56636e" text-anchor="middle">iPhone · merchant</text>
+  <text x="270" y="690" font-size="15" fill="#56636e" text-anchor="middle">refuses the double spend</text>
+
+  <!-- Phone links -->
+  <line x1="270" y1="322" x2="270" y2="408" stroke="#c8102e" stroke-width="3" marker-start="url(#arrowRed)" marker-end="url(#arrowRed)"/>
+  <text x="284" y="360" font-size="14" fill="#142029">pay by QR</text>
+  <text x="284" y="380" font-size="14" fill="#56636e">+ Multipeer gossip</text>
+
+  <line x1="270" y1="517" x2="270" y2="603" stroke="#c8102e" stroke-width="3" marker-start="url(#arrowRed)" marker-end="url(#arrowRed)"/>
+  <text x="284" y="555" font-size="14" fill="#142029">Multipeer gossip</text>
+  <text x="284" y="575" font-size="14" fill="#56636e">tags · logs · proofs</text>
+
+  <text x="74" y="764" font-size="15" fill="#56636e">Pharmacy and Gas Station never link directly:</text>
+  <text x="74" y="788" font-size="15" fill="#56636e">Maya's phone carries the record, 2 hops.</text>
+
+  <!-- Server -->
+  <rect x="640" y="380" width="330" height="200" rx="14" fill="#142029"/>
+  <text x="805" y="420" font-size="24" font-weight="700" fill="#ffffff" text-anchor="middle">StormCash server</text>
+  <text x="805" y="450" font-size="15" fill="#cfd8df" text-anchor="middle">FastAPI · Postgres (Neon)</text>
+  <text x="805" y="482" font-size="15" fill="#ffffff" text-anchor="middle">settlement · double-entry ledger</text>
+  <text x="805" y="506" font-size="15" fill="#ffffff" text-anchor="middle">hard fraud rules R1–R6</text>
+  <text x="805" y="530" font-size="15" fill="#ffffff" text-anchor="middle">signed freeze list · receipts</text>
+  <text x="805" y="554" font-size="15" fill="#ffffff" text-anchor="middle">detectors → candidates</text>
+
+  <!-- Upload up / receipts down -->
+  <path d="M372,660 H585 V540 H637" fill="none" stroke="#142029" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <text x="392" y="628" font-size="14" fill="#142029">any phone with a signal:</text>
+  <text x="392" y="648" font-size="14" font-weight="700" fill="#142029">POST /v1/sync</text>
+
+  <path d="M637,420 H550 V268 H373" fill="none" stroke="#142029" stroke-width="2.5" stroke-dasharray="6 5" marker-end="url(#arrow)"/>
+  <text x="382" y="236" font-size="14" fill="#142029">receipts, freeze list,</text>
+  <text x="382" y="256" font-size="14" fill="#142029">renewed certs</text>
+
+  <!-- Simulator -->
+  <rect x="640" y="690" width="280" height="100" rx="14" fill="#ffffff" stroke="#142029" stroke-width="2"/>
+  <text x="780" y="728" font-size="20" font-weight="700" fill="#142029" text-anchor="middle">Simulated town · 40 shops</text>
+  <text x="780" y="754" font-size="15" fill="#56636e" text-anchor="middle">same protocol + settlement code</text>
+  <text x="780" y="776" font-size="15" fill="#56636e" text-anchor="middle">labeled scenarios and traps</text>
+  <line x1="780" y1="688" x2="780" y2="584" stroke="#142029" stroke-width="2.5" marker-end="url(#arrow)"/>
+
+  <!-- Nessie -->
+  <rect x="1100" y="160" width="430" height="130" rx="14" fill="#ffffff" stroke="#c8102e" stroke-width="2.5"/>
+  <text x="1315" y="198" font-size="22" font-weight="700" fill="#142029" text-anchor="middle">Capital One Nessie</text>
+  <text x="1315" y="228" font-size="15" fill="#56636e" text-anchor="middle">checking · escrow · guarantee pool · shops</text>
+  <text x="1315" y="252" font-size="15" fill="#56636e" text-anchor="middle">every move = withdrawal + deposit pair</text>
+  <text x="1315" y="276" font-size="15" fill="#56636e" text-anchor="middle">balances read live on the dashboard</text>
+  <path d="M900,378 V225 H1097" fill="none" stroke="#142029" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <text x="914" y="300" font-size="14" fill="#142029">escrow · settlement ·</text>
+  <text x="914" y="320" font-size="14" fill="#142029">pool · refunds</text>
+
+  <!-- StormDesk -->
+  <rect x="1100" y="370" width="430" height="140" rx="14" fill="#ffffff" stroke="#c8102e" stroke-width="2.5"/>
+  <text x="1315" y="408" font-size="22" font-weight="700" fill="#142029" text-anchor="middle">StormDesk agent</text>
+  <text x="1315" y="436" font-size="15" fill="#56636e" text-anchor="middle">Factory Droid SDK</text>
+  <text x="1315" y="460" font-size="15" fill="#56636e" text-anchor="middle">11 read-only MCP tools · structured output</text>
+  <text x="1315" y="484" font-size="15" fill="#56636e" text-anchor="middle">cites real records · proposes, never acts</text>
+  <line x1="972" y1="440" x2="1097" y2="440" stroke="#142029" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <text x="984" y="428" font-size="14" fill="#142029">cases &amp;</text>
+  <text x="984" y="466" font-size="14" fill="#142029">candidates</text>
+
+  <!-- Chalk -->
+  <rect x="1100" y="565" width="200" height="110" rx="14" fill="#ffffff" stroke="#c8102e" stroke-width="2.5"/>
+  <text x="1200" y="603" font-size="22" font-weight="700" fill="#142029" text-anchor="middle">Chalk</text>
+  <text x="1200" y="630" font-size="15" fill="#56636e" text-anchor="middle">live features</text>
+  <text x="1200" y="654" font-size="15" fill="#56636e" text-anchor="middle">Evaluations</text>
+  <line x1="1200" y1="512" x2="1200" y2="562" stroke="#142029" stroke-width="2.5" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+  <text x="1212" y="543" font-size="14" fill="#142029">query_features</text>
+
+  <!-- Photon -->
+  <rect x="1330" y="565" width="200" height="110" rx="14" fill="#ffffff" stroke="#c8102e" stroke-width="2.5"/>
+  <text x="1430" y="603" font-size="22" font-weight="700" fill="#142029" text-anchor="middle">Photon</text>
+  <text x="1430" y="630" font-size="15" fill="#56636e" text-anchor="middle">Telegram notices</text>
+  <text x="1430" y="654" font-size="15" fill="#56636e" text-anchor="middle">and appeals</text>
+  <line x1="1430" y1="512" x2="1430" y2="562" stroke="#142029" stroke-width="2.5" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+  <text x="1442" y="543" font-size="14" fill="#142029">appeal replies</text>
+
+  <!-- Dashboard -->
+  <rect x="1100" y="720" width="430" height="110" rx="14" fill="#ffffff" stroke="#142029" stroke-width="2"/>
+  <text x="1315" y="758" font-size="22" font-weight="700" fill="#142029" text-anchor="middle">Dashboard · operator</text>
+  <text x="1315" y="786" font-size="15" fill="#56636e" text-anchor="middle">Accounts · Cases · Town · Evals</text>
+  <text x="1315" y="810" font-size="15" fill="#56636e" text-anchor="middle">public proof page: Verify it yourself</text>
+  <path d="M945,582 V775 H1097" fill="none" stroke="#142029" stroke-width="2.5" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+  <text x="958" y="805" font-size="14" fill="#142029">live events ·</text>
+  <text x="958" y="825" font-size="14" fill="#142029">approve / reject</text>
+
+  <!-- Tagline -->
+  <text x="640" y="866" font-size="20" font-weight="700" fill="#c8102e">Math flags. The agent investigates. A person decides.</text>
+</svg>
