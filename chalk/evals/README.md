@@ -98,6 +98,15 @@ Every function scorer gives 0 to an output that isn't a Flag. `summary-quality` 
 - **A fake-runner result is saved with `runner: "fake"` and `table_column: null`.** So is a Droid run where any row fell back to the fake runner (`runner: "mixed"`, or `fake` if every row did). Neither is ever a StormDesk score. The fake runner proves the pipeline only.
 - Rows with no Flag or a task error stay in the denominators as failures (`rows_without_flag`, `task_errors`).
 
+## Agent versions
+
+- **v1** (`20261017T135917Z-droid.json`, Chalk run `a91828a0-342b-4030-b046-a926fe5ade9d`): StormDesk's prompt as of #81, the first real run.
+- **prompt v2** (`--label "prompt v2"`): one general prompt fix (#11), written **after reading v1's errors on this same dataset**. So v2 is not a blind holdout: its score on these rows is an optimistic estimate. Both files stay. The Evals tab shows the newest complete run and lists the older one with its Chalk run id.
+
+```bash
+uv run python evals/run_eval.py stormdesk --label "prompt v2" --label-note "written after reading v1's errors on this dataset: not a blind holdout"
+```
+
 ## Results file (for the Evals tab, #38)
 
 ```jsonc

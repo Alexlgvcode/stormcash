@@ -92,7 +92,8 @@ def _score(row: dict, name: str) -> float | None:
 
 
 def summarize(rows: list[dict], *, chalk: dict, dataset: dict, mode: str, git_sha: str | None,
-              now: int, scorers: list[str] = SCORERS, droid_audit: dict | None = None) -> dict:
+              now: int, scorers: list[str] = SCORERS, droid_audit: dict | None = None,
+              label: str | None = None, label_note: str | None = None) -> dict:
     """The results file for one run. `rows` are the result dataset's rows (dicts); `scorers` are the
     evaluation's scorers (the rules-only evaluation has no citations-valid: it cites nothing)."""
     parsed = []
@@ -113,7 +114,9 @@ def summarize(rows: list[dict], *, chalk: dict, dataset: dict, mode: str, git_sh
         runner = "mixed"  # some session (e.g. a retried attempt) used another model
     task_errors = sum(1 for r, _ in parsed if r.get("output_error"))
     complete = task_errors == 0 and not (droid_audit or {}).get("tripped")
-    label = f"StormDesk (Droid{', ' + model if model else ''})" if runner == "droid" else LABELS[runner]
+    display = f"StormDesk (Droid{', ' + model if model else ''})" if runner == "droid" else LABELS[runner]
+    if label:
+        display = f"{display} · {label}"
 
     def caught(row, flag) -> bool:
         return flag is not None and flag["kind"] == row["label_kind"] and flag["proposed_action"] == row["label_action"]
@@ -220,7 +223,9 @@ def summarize(rows: list[dict], *, chalk: dict, dataset: dict, mode: str, git_sh
         "schema_version": 1,
         "eval": "stormdesk-triage",
         "runner": runner,
-        "runner_label": label,
+        "runner_label": display,
+        "label": label,
+        "label_note": label_note,
         "is_agent_result": runner == "droid",
         "complete": complete,
         "table_column": {"rules_only": "rules_only", "droid": "stormdesk"}.get(runner) if complete else None,

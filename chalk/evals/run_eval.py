@@ -17,6 +17,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -110,6 +111,7 @@ def gateway_stats() -> dict | None:
 
 
 def save_results(evaluation, run, droid_audit: dict | None = None) -> Path:
+    label, label_note = evaluation.metadata.get("label"), evaluation.metadata.get("label_note")
     """Read a succeeded run's result dataset and write its results file (named by when the run completed)."""
     if run.status != chalkcompute.EvaluationRunStatus.SUCCEEDED or run.result_dataset is None:
         raise SystemExit(f"run {run.id} ended {run.status.name}: {run.error_message} (no results saved)")
@@ -134,10 +136,12 @@ def save_results(evaluation, run, droid_audit: dict | None = None) -> Path:
                  "seeds": [s["seed"] for s in meta["seeds"]], "scenarios": meta["scenarios"],
                  "detector_misses": meta["detector_misses"], "sha256": dataset_sha},
         mode=mode, git_sha=(run.metadata or {}).get("git_sha") or None, now=now, droid_audit=droid_audit,
+        label=label, label_note=label_note,
     )
     RESULTS.mkdir(exist_ok=True)
     stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime(now))
-    path = RESULTS / f"{stamp}-{summary['runner']}{'-local' if mode == 'run_local' else ''}.json"
+    slug = re.sub(r"[^a-z0-9]+", "-", label.lower()).strip("-") if label else ""
+    path = RESULTS / f"{stamp}-{summary['runner']}{'-local' if mode == 'run_local' else ''}{'-' + slug if slug else ''}.json"
     path.write_text(json.dumps(summary, indent=2) + "\n")
     print_summary(summary, path)
     return path
@@ -163,6 +167,8 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("task", choices=("rules_only", "stormdesk", "resummarize"))
     ap.add_argument("run_id", nargs="?", help="resummarize: rewrite this run's results file from its result dataset")
+    ap.add_argument("--label", help='a name for this version of the agent, e.g. "prompt v2" (kept in the results)')
+    ap.add_argument("--label-note", help="what a reader must know about this version, saved next to the label")
     args = ap.parse_args()
     if args.task == "resummarize":
         run = chalkcompute.EvaluationRun.from_id(args.run_id)
@@ -183,7 +189,9 @@ def main() -> None:
         task = task_module.stormdesk_triage
         configured = stack["runner"]
         name = f"StormDesk triage: server ({'Droid' if configured == 'droid' else 'fake runner, not an agent'})"
-        metadata = {"configured_runner": configured, "configured_model": stack.get("model")}
+        name += f" · {args.label}" if args.label else ""
+        metadata = {"configured_runner": configured, "configured_model": stack.get("model"),
+                    "label": args.label, "label_note": args.label_note}
     else:
         import task_rules_only as task_module
         task = task_module.rules_only
