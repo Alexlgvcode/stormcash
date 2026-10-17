@@ -239,6 +239,9 @@ def test_a_droid_run_records_what_it_cost(deps, double_spend, monkeypatch):
     assert row["session_id"] == "droid-2"
     assert row["transcript"]["usage"]["factory_credits"] == agent["usage"]["factory_credits"] == 3963.0
     assert row["transcript"]["model"] == agent["model"] == "droid-core"
+    from stormcash.stormdesk.prompt import PROMPT_VERSION
+
+    assert out["prompt_version"] == row["transcript"]["prompt_version"] == PROMPT_VERSION == 2
 
 
 class DownDroid:
