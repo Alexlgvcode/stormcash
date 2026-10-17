@@ -26,6 +26,7 @@ import os
 import re
 import secrets
 import signal
+import socket
 import subprocess
 import sys
 import time
@@ -76,6 +77,43 @@ def wait_http(url: str, headers: dict[str, str] | None = None, timeout_s: float 
             time.sleep(1)
 
 
+def port_free(port: int) -> bool:
+    with socket.socket() as sock:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # like uvicorn: only a live listener blocks
+        try:
+            sock.bind(("127.0.0.1", port))
+        except OSError:
+            return False
+    return True
+
+
+def alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    return True
+
+
+def listeners(port: int) -> list[int]:
+    out = subprocess.run(["lsof", "-nP", f"-iTCP:{port}", "-sTCP:LISTEN", "-t"], capture_output=True, text=True)
+    return sorted(int(x) for x in out.stdout.split())
+
+
+def server_code() -> dict:
+    """Which server code the eval servers load: this checkout's server/ tree, and its StormDesk prompt version."""
+    repo = EVALS.parents[1]
+    git = lambda *a: subprocess.run(["git", *a], cwd=repo, capture_output=True, text=True).stdout.strip()  # noqa: E731
+    probe = subprocess.run([sys.executable, "-c", "import json, stormcash, stormcash.stormdesk.prompt as p; "
+                            "print(json.dumps([stormcash.__file__, getattr(p, 'PROMPT_VERSION', None)]))"],
+                           capture_output=True, text=True, check=True)
+    module, prompt_version = json.loads(probe.stdout)
+    return {"commit": git("rev-parse", "HEAD"), "server_tree": git("rev-parse", "HEAD:server"),
+            "server_dirty": bool(git("status", "--porcelain", "--", "server")), "module": module,
+            "module_in_checkout": Path(module).resolve().is_relative_to(repo / "server"),
+            "prompt_version": prompt_version}
+
+
 def tunnel_url(log_file: Path, timeout_s: float = 60.0) -> str:
     deadline = time.time() + timeout_s
     while time.time() < deadline:
@@ -105,6 +143,11 @@ def up(args) -> None:
     check_local(args.admin_url)
     if not KEY_FILE.exists():
         raise SystemExit("no eval towns yet: run build_dataset.py first")
+    # A server left over from an earlier stack would answer in place of the new one (with older code), so
+    # every port must be free before anything starts.
+    busy = [p for p in [BASE_PORT + i for i in range(len(args.seeds))] + [GATEWAY_PORT] if not port_free(p)]
+    if busy:
+        raise SystemExit(f"ports {busy} are in use (an old eval server or gateway?): stop them first")
     token = gateway_token()
     base_env = {k: v for k, v in os.environ.items() if not k.startswith(("CHALK_", "NESSIE_", "PHOTON_"))}
     server_env = {
@@ -143,6 +186,17 @@ def up(args) -> None:
 
     for seed, url in servers.items():
         wait_http(f"{url}/v1/health")
+    time.sleep(1)
+    dead = [name for name, pid in pids.items() if not alive(pid)]
+    if dead:
+        raise SystemExit(f"{dead} exited after starting (see {LOGS}); run stack.py down")
+    for i, seed in enumerate(args.seeds):  # the process answering each port must be the one just started
+        if listeners(BASE_PORT + i) != [pids[f"server-{seed}"]]:
+            raise SystemExit(f"port {BASE_PORT + i} isn't served by server-{seed}; run stack.py down")
+    state["server_code"] = code = server_code()
+    STACK.write_text(json.dumps(state, indent=2))
+    if code["server_dirty"] or not code["module_in_checkout"]:
+        raise SystemExit(f"the servers don't run this checkout's committed server/ code: {code}; run stack.py down")
     auth = {"Authorization": f"Bearer {token}"}
     wait_http(f"{state['gateway_local']}/runs/{'0' * 32}", auth)
     if not args.no_tunnel:
@@ -156,7 +210,8 @@ def up(args) -> None:
         if code != 404:
             raise SystemExit(f"the tunnel answered {code}, expected the gateway's 404")
     STACK.write_text(json.dumps(state, indent=2))
-    print(json.dumps({k: state[k] for k in ("runner", "model", "servers", "gateway_local", "public_url")}, indent=2))
+    print(json.dumps({k: state[k] for k in ("runner", "model", "servers", "gateway_local", "public_url",
+                                            "server_code")}, indent=2))
 
 
 def down(_args) -> None:
@@ -167,10 +222,21 @@ def down(_args) -> None:
     for name, pid in state["pids"].items():
         try:
             os.killpg(pid, signal.SIGTERM)
-            print(f"stopped {name} ({pid})")
         except ProcessLookupError:
             print(f"{name} ({pid}) was not running")
+            continue
+        for _ in range(30):  # uvicorn can hang in shutdown after Droid runs: SIGKILL after 15 s
+            if not alive(pid):
+                break
+            time.sleep(0.5)
+        else:
+            os.killpg(pid, signal.SIGKILL)
+            print(f"{name} ({pid}) ignored SIGTERM: killed")
+        print(f"stopped {name} ({pid})")
+    busy = [p for p in [BASE_PORT + i for i in range(len(state["servers"]))] + [GATEWAY_PORT] if not port_free(p)]
     STACK.unlink()
+    if busy:
+        raise SystemExit(f"ports {busy} are still in use: something else holds them")
 
 
 def status(_args) -> None:
