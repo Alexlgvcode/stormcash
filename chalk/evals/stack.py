@@ -1,7 +1,7 @@
 """Start or stop the eval stack: one server per seed town, the gateway, the tunnel.
 
     server/.venv/bin/python chalk/evals/stack.py up --runner fake
-    server/.venv/bin/python chalk/evals/stack.py up --runner droid --model claude-sonnet-5-5
+    server/.venv/bin/python chalk/evals/stack.py up --runner droid --model claude-sonnet-5-5 --max-credits 2500000
     server/.venv/bin/python chalk/evals/stack.py status
     server/.venv/bin/python chalk/evals/stack.py down
 
@@ -42,6 +42,7 @@ LOGS = STATE / "logs"
 GATEWAY_PORT = 8800
 BASE_PORT = 8100
 DEFAULT_FACTORY_ENV = Path.home() / "BatmanCave" / "stormcash" / "server" / ".env"
+SESSIONS_ROOT = Path.home() / ".factory" / "sessions"
 
 
 def gateway_token() -> str:
@@ -97,6 +98,8 @@ def factory_key(path: Path) -> str:
 
 
 def up(args) -> None:
+    if args.runner == "droid" and not (args.model and args.max_credits):
+        raise SystemExit("--runner droid needs --model (every row must use it) and --max-credits (a hard cap)")
     if STACK.exists():
         raise SystemExit("the stack is already up (stack.py down first)")
     check_local(args.admin_url)
@@ -126,8 +129,14 @@ def up(args) -> None:
     gateway_cmd += [f"--server={seed}={url}" for seed, url in servers.items()]
     if args.model:
         gateway_cmd += ["--model", args.model]
+    if args.runner == "droid":
+        # Droid keeps a session per run under ~/.factory/sessions/<server cwd, "/" as "-">/; the gateway
+        # audits them (one model only, no fallback, a hard credit cap) and takes the exact folder from the
+        # first row's session.
+        gateway_cmd += ["--require-model", args.model, "--max-credits", str(args.max_credits),
+                        "--sessions-dir", str(SESSIONS_ROOT / re.sub(r"[^A-Za-z0-9._-]", "-", str(EVALS)))]
     pids["gateway"] = spawn("gateway", gateway_cmd, {**base_env, "EVAL_GATEWAY_TOKEN": token})
-    state = {"runner": args.runner, "model": args.model, "servers": {str(k): v for k, v in servers.items()},
+    state = {"runner": args.runner, "model": args.model, "max_credits": args.max_credits, "servers": {str(k): v for k, v in servers.items()},
              "gateway_local": f"http://127.0.0.1:{GATEWAY_PORT}", "public_url": None, "pids": pids,
              "started_at": int(time.time())}
     STACK.write_text(json.dumps(state, indent=2))
@@ -176,7 +185,15 @@ def status(_args) -> None:
         except ProcessLookupError:
             alive = "NOT running"
         print(f"{name:14} {pid:>7} {alive}")
-    print(json.dumps({k: state[k] for k in ("runner", "model", "gateway_local", "public_url")}, indent=2))
+    print(json.dumps({k: state.get(k) for k in ("runner", "model", "max_credits", "gateway_local", "public_url")},
+                     indent=2))
+    try:  # the gateway's live Droid audit: credits so far, models seen, breaker
+        req = urllib.request.Request(state["gateway_local"] + "/stats",
+                                     headers={"Authorization": f"Bearer {gateway_token()}"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            print(json.dumps(json.loads(resp.read()), indent=2))
+    except (urllib.error.URLError, OSError) as exc:
+        print(f"gateway /stats unavailable: {exc}")
 
 
 def main() -> None:
@@ -188,6 +205,8 @@ def main() -> None:
     p_up.add_argument("--seeds", type=int, nargs="+", default=list(SEEDS))
     p_up.add_argument("--admin-url", default=ADMIN_URL)
     p_up.add_argument("--factory-env", type=Path, default=DEFAULT_FACTORY_ENV)
+    p_up.add_argument("--max-credits", type=float, default=None,
+                      help="droid: the gateway refuses new rows once the eval's Droid sessions used this many credits")
     p_up.add_argument("--no-tunnel", action="store_true")
     sub.add_parser("down")
     sub.add_parser("status")

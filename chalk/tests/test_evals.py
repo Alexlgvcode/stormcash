@@ -136,12 +136,13 @@ def test_to_output_keeps_the_flag_and_the_server_verdict():
 @pytest.fixture
 def fake_server():
     seen = []
+    state = {"run": RUN}
 
     class Server(BaseHTTPRequestHandler):
         def do_POST(self):  # noqa: N802
             body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
             seen.append((self.path, self.headers["X-SC-Operator"], body))
-            data = json.dumps(RUN).encode()
+            data = json.dumps(state["run"]).encode()
             self.send_response(200)
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
@@ -152,12 +153,12 @@ def fake_server():
 
     httpd = ThreadingHTTPServer(("127.0.0.1", 0), Server)
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
-    yield f"http://127.0.0.1:{httpd.server_port}", seen
+    yield f"http://127.0.0.1:{httpd.server_port}", seen, state
     httpd.shutdown()
 
 
 def test_gateway_runs_jobs_behind_the_token(fake_server):
-    server_url, seen = fake_server
+    server_url, seen, _ = fake_server
     token = "t" * 32
     httpd = ThreadingHTTPServer(("127.0.0.1", 0), gateway.make_handler(gateway.Jobs({42: server_url}, None), token))
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
@@ -230,13 +231,18 @@ def test_rules_only_summary():
                                                                          "trap_victim_shop": 1}
 
 
+def droid_out(f: dict, models=("m",), asked="m", **run) -> str:
+    return out(f, runner="droid", citations_valid=True, model=asked, models_used=list(models), factory_credits=100.0,
+               **run)
+
+
 def test_fake_and_mixed_runs_are_never_a_stormdesk_column():
     fake = row("colluder", "merchant_silence", "hold_pool_payout", False,
                out(flag(), runner="fake", citations_valid=True))
-    droid = row("trap_victim_shop", "none", "none", True,
-                out(flag(kind="none", proposed_action="none"), runner="droid", citations_valid=True, model="m"))
+    dismiss = flag(kind="none", proposed_action="none")
+    droid = row("trap_victim_shop", "none", "none", True, droid_out(dismiss))
     fallback = row("colluder", "merchant_silence", "hold_pool_payout", False,
-                   out(flag(), runner="droid", citations_valid=True, fallback_from_droid="model_usage_exhausted"))
+                   droid_out(flag(), fallback_from_droid="model_usage_exhausted"))
     assert summarize([fake])["table_column"] is None and summarize([fake])["runner"] == "fake"
     assert summarize([fake, droid])["runner"] == "mixed"
     assert summarize([droid, fallback])["runner"] == "mixed"
@@ -245,6 +251,36 @@ def test_fake_and_mixed_runs_are_never_a_stormdesk_column():
                                                                               "StormDesk (Droid, m)")
     assert s["metrics"]["honest_flagged"]["flagged"] == 0
     assert s["metrics"]["citations_valid"] == {"valid": 1, "checked": 1, "rate": 1.0}
+    assert s["metrics"]["factory_credits"]["rows_total"] == 100.0 and s["complete"] is True
+
+
+def test_a_stormdesk_result_needs_one_named_model_on_every_row():
+    dismiss = flag(kind="none", proposed_action="none")
+    sonnet = row("trap_victim_shop", "none", "none", True, droid_out(dismiss))
+    core = row("trap_stockup", "none", "none", True, droid_out(dismiss, models=("droid-core",)))
+    both = row("trap_stockup", "none", "none", True, droid_out(dismiss, models=("droid-core", "m")))
+    unknown = row("trap_stockup", "none", "none", True, droid_out(dismiss, models=()))
+    disagree = row("trap_stockup", "none", "none", True, droid_out(dismiss, server_model="droid-core"))
+    agree = row("trap_stockup", "none", "none", True, droid_out(dismiss, server_model="m"))
+    assert summarize([disagree])["runner"] == "mixed" and summarize([agree])["runner"] == "droid"
+    assert summarize([sonnet, core])["runner"] == "mixed"
+    assert summarize([both])["runner"] == "mixed"
+    assert summarize([unknown])["runner"] == "mixed"  # the model couldn't be read: not a StormDesk result
+    assert summarize([core])["runner"] == "mixed"  # not the model asked for
+    audit = {"tripped": None, "audit": {"models_seen": ["droid-core", "m"]}}  # a retried attempt on another model
+    s = results.summarize([sonnet], chalk={}, dataset={}, mode="chalk_task", git_sha=None, now=0, droid_audit=audit)
+    assert s["runner"] == "mixed" and s["table_column"] is None
+
+
+def test_an_incomplete_droid_run_is_not_a_stormdesk_column():
+    dismiss = flag(kind="none", proposed_action="none")
+    good = row("trap_victim_shop", "none", "none", True, droid_out(dismiss))
+    refused = {**row("colluder", "merchant_silence", "hold_pool_payout", False, None), "output_error": "409"}
+    s = summarize([good, refused])
+    assert (s["runner"], s["complete"], s["table_column"]) == ("droid", False, None)
+    tripped = {"tripped": "credit cap reached", "audit": {"models_seen": ["m"]}}
+    s = results.summarize([good], chalk={}, dataset={}, mode="chalk_task", git_sha=None, now=0, droid_audit=tripped)
+    assert (s["complete"], s["table_column"]) == (False, None)
 
 
 def test_failed_rows_count_as_failures():
@@ -300,3 +336,102 @@ def test_dataset_rows_match_spec_columns_and_meta():
         assert r["honest_subject"] == (r["label_kind"] == "none")
         assert isinstance(json.loads(r["features"]), dict)
     assert len({r["row_id"] for r in rows}) == len(rows)
+
+
+# Droid guard (gateway) ----------------------------------------------------------------------------
+
+def write_session(folder: Path, session_id: str, models, credits):
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / f"{session_id}.settings.json").write_text(json.dumps(
+        {"model": models[0] if models else None, "tokenUsage": {"factoryCredits": credits}}))
+    lines = [{"type": "session_start"}] + [{"type": "message", "message": {"role": "assistant", "modelId": m}}
+                                           for m in models]
+    (folder / f"{session_id}.jsonl").write_text("\n".join(json.dumps(x) for x in lines) + "\n")
+
+
+SID = "951a7cbe-3064-4a45-a787-5ba432e09b8f"
+
+
+def test_session_info_reads_model_and_credits(tmp_path):
+    write_session(tmp_path / "-some-cwd", SID, ["claude-sonnet-5-5", "claude-sonnet-5-5"], 47054)
+    info = gateway.find_session(SID, str(tmp_path))
+    assert info == {"models_used": ["claude-sonnet-5-5"], "factory_credits": 47054,
+                    "configured_model": "claude-sonnet-5-5", "folder": str(tmp_path / "-some-cwd")}
+    assert gateway.find_session("../../etc/passwd", str(tmp_path)) is None
+    assert gateway.audit(str(tmp_path / "-some-cwd"), 0) == {"sessions": 1, "factory_credits": 47054,
+                                                             "models_seen": ["claude-sonnet-5-5"]}
+    out_ = json.loads(gateway.to_output({**RUN, "runner": "droid", "flag": {"agent_session_id": SID}},
+                                        "claude-sonnet-5-5", info))
+    assert out_["_run"]["session_id"] == SID and out_["_run"]["models_used"] == ["claude-sonnet-5-5"]
+    assert out_["_run"]["factory_credits"] == 47054
+
+
+def run_one(jobs, seed=42, candidate_id=5):
+    job_id = jobs.start(seed, candidate_id)
+    for _ in range(100):
+        state = jobs.get(job_id)
+        if state["status"] != "running":
+            return state
+        threading.Event().wait(0.02)
+    raise AssertionError("job never finished")
+
+
+@pytest.mark.parametrize("models, credits, cap, trips", [
+    (["claude-sonnet-5-5"], 1000, 10**6, None),
+    (["droid-core"], 1000, 10**6, "not claude-sonnet-5-5"),
+    (["claude-sonnet-5-5"], 1000, 10**6, None),
+    (["claude-sonnet-5-5"], 2000, 1500, "credit cap reached"),
+])
+def test_breaker_refuses_rows_after_a_model_change_or_the_cap(tmp_path, fake_server, models, credits, cap, trips):
+    server_url, _, state = fake_server
+    sessions = tmp_path / "-eval-servers"
+    write_session(sessions, SID, models, credits)
+    state["run"] = {**RUN, "runner": "droid", "flag": {"agent_session_id": SID}}
+    jobs = gateway.Jobs({42: server_url}, "claude-sonnet-5-5", require_model="claude-sonnet-5-5", max_credits=cap,
+                        sessions_dir=str(sessions), sessions_root=str(tmp_path))
+    jobs.started = 0
+    assert run_one(jobs)["status"] == "done"
+    if trips is None:
+        assert jobs.tripped is None and run_one(jobs)["status"] == "done"
+    else:
+        assert trips in jobs.tripped
+        with pytest.raises(gateway.Refused):
+            jobs.start(42, 6)
+    assert jobs.stats()["audit"]["factory_credits"] == credits
+
+
+def test_audit_follows_the_folder_droid_wrote_to(tmp_path, fake_server):
+    server_url, _, state = fake_server
+    write_session(tmp_path / "-real-folder", SID, ["m"], 500)
+    state["run"] = {**RUN, "runner": "droid", "flag": {"agent_session_id": SID}}
+    jobs = gateway.Jobs({42: server_url}, "m", require_model="m", max_credits=10**6,
+                        sessions_dir=str(tmp_path / "-guessed-folder"), sessions_root=str(tmp_path))
+    jobs.started = 0
+    run_one(jobs)
+    assert jobs.tripped is None and jobs.stats()["audit"]["factory_credits"] == 500
+
+
+def test_breaker_trips_when_the_server_reports_another_model(tmp_path, fake_server):
+    server_url, _, state = fake_server
+    write_session(tmp_path / "-eval", SID, ["m"], 10)
+    state["run"] = {**RUN, "runner": "droid", "flag": {"agent_session_id": SID}, "model": "droid-core",
+                    "usage": {"factory_credits": 10}}
+    jobs = gateway.Jobs({42: server_url}, "m", require_model="m", max_credits=10**6,
+                        sessions_dir=str(tmp_path / "-eval"), sessions_root=str(tmp_path))
+    done = run_one(jobs)
+    assert "server says the run used droid-core" in jobs.tripped
+    assert json.loads(done["output"])["_run"]["server_usage"] == {"factory_credits": 10}
+
+
+def test_breaker_trips_on_a_fallback_or_a_missing_session(tmp_path, fake_server):
+    server_url, _, state = fake_server
+    jobs = gateway.Jobs({42: server_url}, "m", require_model="m", max_credits=10**6, sessions_dir=str(tmp_path),
+                        sessions_root=str(tmp_path))
+    state["run"] = {**RUN, "runner": "fake", "fallback_from_droid": "model_usage_exhausted"}
+    run_one(jobs)
+    assert "answered by fake" in jobs.tripped
+    jobs = gateway.Jobs({42: server_url}, "m", require_model="m", max_credits=10**6, sessions_dir=str(tmp_path),
+                        sessions_root=str(tmp_path))
+    state["run"] = {**RUN, "runner": "droid", "flag": {"agent_session_id": SID}}  # no session files
+    run_one(jobs)
+    assert "no session files" in jobs.tripped

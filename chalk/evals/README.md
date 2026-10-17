@@ -28,7 +28,7 @@ The Chalk files are self-contained on purpose: Chalk ships each one to its worke
 - `honest_subject`: true when flagging the subject would be a false flag (every trap).
 - `features`: the candidate's frozen feature snapshot (JSON). `row_id` is `seed:candidate_id`.
 
-The same seeds always give the same rows byte for byte. With these seeds there are **48 rows (27 honest)**, a bit under the spec's ~60 target. `meta.json` also lists the labelled subjects the detectors never raised (4 with these seeds). Neither runner ever sees those subjects, so the Evals tab should say so rather than count them.
+The same seeds always give the same rows byte for byte. With these seeds and the #82 simulator there are **43 rows (20 honest)**, under the spec's ~60 target. `meta.json` also lists the labelled subjects the detectors never raised (3 with these seeds: two colluders and a stolen phone). Which subjects the detectors miss depends on the time of day the scenarios land on; T0 was fixed before any run. Neither runner ever sees those subjects, so the Evals tab should say so rather than count them.
 
 **One database per seed, all local.** The detectors compare a shop with its neighbours, and the towns of two seeds overlap on the same grid, so each seed gets its own database (`stormcash_eval_<seed>`). They live on a local Postgres, never on the hosted Neon demo database, which keeps seed 42 for the demo. `build_dataset.py` refuses a non-local host. The towns are signed with a throwaway eval server key in `.state/server_key.pem`; the demo server's key is never read.
 
@@ -46,7 +46,7 @@ server/.venv/bin/python chalk/evals/build_dataset.py --rebuild  # drop and re-se
 ```bash
 brew install cloudflared                                   # no account needed: a quick tunnel
 server/.venv/bin/python chalk/evals/stack.py up --runner fake
-server/.venv/bin/python chalk/evals/stack.py up --runner droid --model claude-sonnet-5-5
+server/.venv/bin/python chalk/evals/stack.py up --runner droid --model claude-sonnet-5-5 --max-credits 2500000
 server/.venv/bin/python chalk/evals/stack.py down
 ```
 
@@ -59,6 +59,11 @@ Chalk task ──https──▶ trycloudflare.com ──▶ gateway :8800 ──
 - **Servers.** `uvicorn --factory stormcash.app:create_app` per seed, with `DATABASE_URL` set to that seed's local database and `NESSIE_DISABLED=1 PHOTON_DISABLED=1 CHALK_DISABLED=1 BACKGROUND_TASKS=0 STORMDESK_AUTO=0`. The only StormDesk runs are the ones the eval asks for. `CHALK_DISABLED=1` is needed because Chalk's `neon_stormcash` integration points at the demo database, not the eval towns: `query_features` answers from the eval database instead (`postgres_fallback`, the candidate's frozen features).
 - **Runner.** `--runner fake` is the labelled fake runner (§14.7a), which applies the rules-only logic through the real tools and citation check. `--runner droid` is the real agent: it reads `FACTORY_API_KEY` from the main checkout's `server/.env` (`--factory-env`) and gives it to the servers only. Without a key, Droid uses the `droid` CLI's login.
 - **Gateway** (`gateway.py`, stdlib). It routes `{seed, candidate_id}` to that seed's server and calls the real `POST /v1/stormdesk/run`. It answers with a job id the task polls, because an agent run can outlast the tunnel's ~100 s response limit. It serves only `POST /runs` and `GET /runs/<id>`, and only with the bearer token in `.state/gateway_token`, so the tunnel exposes nothing else of the server. Its output is the Flag JSON plus `_run`, the server's verdict: `runner`, `citations_valid`, `missing_citations`, `fallback_from_droid` and `run_id`.
+- **Droid guard** (`--runner droid` needs `--model` and `--max-credits`). Droid keeps every session under `~/.factory/sessions/<server cwd>/<session id>.jsonl` and `.settings.json`, with each message's `modelId` and the session's `factoryCredits`. The gateway reads them:
+  - each row's `_run` gets `session_id`, `models_used` and `factory_credits`;
+  - `GET /stats` (and `stack.py status`) sums every session the eval servers wrote since the gateway started, retried attempts included.
+  - Its breaker trips, and new rows get 409, as soon as a session used another model (Factory moves sessions to "Droid Core" when Standard Usage runs out), a row fell back to the fake runner, a row's session can't be read, or the credit cap is reached. A tripped or partial run is `complete: false` and never a StormDesk result. Every row of a StormDesk result comes from the one named model.
+  - Price a run first: a few rows with the same runner, then the per-row credits times 48.
 - **Tunnel.** `cloudflared tunnel --url http://127.0.0.1:8800`. The URL changes on every `up`; `run_eval.py` reads it from `.state/stack.json` and deploys the task with it.
 
 ## Running
@@ -89,7 +94,7 @@ Every function scorer gives 0 to an output that isn't a Flag. `summary-quality` 
 
 ## Honesty rules for results
 
-- **The runner is read from the outputs, never from configuration.** `rules_only` is the baseline column. `droid` means every row was answered by Droid with no fallback, and it is the only result that may fill the StormDesk column (`table_column: "stormdesk"`, `is_agent_result: true`).
+- **The runner is read from the outputs, never from configuration.** `rules_only` is the baseline column. `droid` means every row was answered by Droid with no fallback, and every row's session (and every audited session) used the one model asked for. It is the only result that may fill the StormDesk column (`table_column: "stormdesk"`, `is_agent_result: true`), and only when `complete` (no task errors, breaker not tripped).
 - **A fake-runner result is saved with `runner: "fake"` and `table_column: null`.** So is a Droid run where any row fell back to the fake runner (`runner: "mixed"`, or `fake` if every row did). Neither is ever a StormDesk score. The fake runner proves the pipeline only.
 - Rows with no Flag or a task error stay in the denominators as failures (`rows_without_flag`, `task_errors`).
 

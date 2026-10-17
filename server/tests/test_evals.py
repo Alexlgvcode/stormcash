@@ -9,15 +9,19 @@ from stormcash.routes import evals
 RULES_ONLY = evals.DEFAULT_DIR / "20261017T023627Z-rules_only.json"
 
 
-def test_the_saved_runs_fill_only_the_rules_only_column(app_client):
+def test_the_saved_runs_fill_both_columns(app_client):
     out = app_client.get("/v1/evals").json()
-    rules = out["columns"]["rules_only"]
-    assert rules["runner"] == "rules_only" and rules["dataset"]["rows"] == len(rules["rows"]) == 48
-    assert rules["chalk"]["run_id"] == "85ec3bf0-3cf2-4cd9-bde2-0fb2b0d38326"
-    # Until a real Droid run lands, the StormDesk column stays empty; fake runs are pipeline checks.
-    assert out["columns"]["stormdesk"] is None
+    rules, droid = out["columns"]["rules_only"], out["columns"]["stormdesk"]
+    # The first real run (#33): rules-only and Droid on the same rebuilt 43-row dataset.
+    assert rules["runner"] == "rules_only" and rules["dataset"]["rows"] == len(rules["rows"]) == 43
+    assert rules["chalk"]["run_id"] == "71142eed-2864-413d-ac27-da1e3c537e50"
+    assert droid["runner"] == "droid" and droid["model"] == "claude-sonnet-5-5"
+    assert droid["chalk"]["run_id"] == "a91828a0-342b-4030-b046-a926fe5ade9d"
+    assert droid["runners_seen"] == {"droid": 43} and droid["dataset"]["sha256"] == rules["dataset"]["sha256"]
     fakes = [r for r in out["other_runs"] if r["runner"] == "fake"]
     assert len(fakes) == 2 and all("pipeline check" in r["reason"] for r in fakes)
+    older = [r for r in out["other_runs"] if r["runner"] == "rules_only"]
+    assert [r["chalk_run_id"] for r in older] == ["85ec3bf0-3cf2-4cd9-bde2-0fb2b0d38326"]
     assert all("metrics" not in r and "rows" not in r for r in out["other_runs"])  # no numbers from them
 
 

@@ -20,6 +20,7 @@ import os
 import subprocess
 import sys
 import time
+import urllib.request
 from pathlib import Path
 
 import chalkcompute
@@ -93,10 +94,22 @@ def run_and_save(*, name: str, dataset_ref, task, scorers: dict, mode: str, data
     print(f"run {run.id} queued", flush=True)
     run = run.wait(timeout=RUN_TIMEOUT_S, raise_on_failure=False)
     print(f"run {run.id}: {run.status.name}", flush=True)
-    return save_results(evaluation, run)
+    return save_results(evaluation, run, droid_audit=gateway_stats())
 
 
-def save_results(evaluation, run) -> Path:
+def gateway_stats() -> dict | None:
+    """The local gateway's Droid audit (credits and models over every eval session), if a Droid stack is up."""
+    stack_file = STATE / "stack.json"
+    if not stack_file.exists() or json.loads(stack_file.read_text()).get("runner") != "droid":
+        return None
+    stack = json.loads(stack_file.read_text())
+    req = urllib.request.Request(stack["gateway_local"] + "/stats", headers={
+        "Authorization": f"Bearer {(STATE / 'gateway_token').read_text().strip()}"})
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        return json.loads(resp.read())
+
+
+def save_results(evaluation, run, droid_audit: dict | None = None) -> Path:
     """Read a succeeded run's result dataset and write its results file (named by when the run completed)."""
     if run.status != chalkcompute.EvaluationRunStatus.SUCCEEDED or run.result_dataset is None:
         raise SystemExit(f"run {run.id} ended {run.status.name}: {run.error_message} (no results saved)")
@@ -120,7 +133,7 @@ def save_results(evaluation, run) -> Path:
         dataset={"name": meta["name"], "rows": len(rows), "honest_rows": meta["honest_rows"],
                  "seeds": [s["seed"] for s in meta["seeds"]], "scenarios": meta["scenarios"],
                  "detector_misses": meta["detector_misses"], "sha256": dataset_sha},
-        mode=mode, git_sha=(run.metadata or {}).get("git_sha") or None, now=now,
+        mode=mode, git_sha=(run.metadata or {}).get("git_sha") or None, now=now, droid_audit=droid_audit,
     )
     RESULTS.mkdir(exist_ok=True)
     stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime(now))
@@ -139,7 +152,10 @@ def print_summary(summary: dict, path: Path) -> None:
           f"   colluders caught {m['colluders_caught']['caught']}/{m['colluders_caught']['total']}"
           f"   honest flagged {m['honest_flagged']['flagged']}/{m['honest_flagged']['total']}")
     print(f"  rows without a Flag {m['rows_without_flag']}, task errors {m['task_errors']}, "
-          f"Droid fallbacks {m['fallback_from_droid']}")
+          f"Droid fallbacks {m['fallback_from_droid']}, models {summary['models_seen']}, "
+          f"credits (rows) {m['factory_credits']['rows_total']}")
+    if summary.get("droid_audit"):
+        print(f"  Droid audit: {json.dumps(summary['droid_audit'])}")
     print(f"wrote {path.relative_to(EVALS.parent)}")
 
 
