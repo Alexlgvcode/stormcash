@@ -18,6 +18,7 @@ import argparse
 import json
 import sys
 import time
+import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
@@ -36,7 +37,10 @@ def call(base: str, token: str, method: str, path: str, body: dict | None = None
 
 
 def run_row(base: str, token: str, row: dict) -> str:
-    job = call(base, token, "POST", "/runs", {"seed": row["seed"], "candidate_id": row["candidate_id"]})
+    try:
+        job = call(base, token, "POST", "/runs", {"seed": row["seed"], "candidate_id": row["candidate_id"]})
+    except urllib.error.HTTPError as exc:  # 409: the gateway's Droid breaker tripped
+        return f"StormDesk run refused by the gateway ({exc.code}): {exc.read()[:200].decode(errors='replace')}"
     deadline = time.time() + MAX_WAIT_S
     while time.time() < deadline:
         time.sleep(2)

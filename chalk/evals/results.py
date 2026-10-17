@@ -7,8 +7,11 @@ rules-only task), never from configuration, so a fake-runner or fallback run
 can't be passed off as StormDesk:
 
 - `rules_only`: the §13 baseline. `table_column: "rules_only"`.
-- `droid`: every row answered by Droid with no fallback. `table_column: "stormdesk"`.
+- `droid`: every row answered by Droid with no fallback, and every row's Droid session
+  used one and the same model (the one asked for), read from the session files.
+  `table_column: "stormdesk"`.
 - `fake` or `mixed`: saved for the record, `table_column: null`, never shown as StormDesk.
+- A run with task errors (e.g. rows the gateway's breaker refused) is `complete: false`, `table_column: null`.
 """
 
 from __future__ import annotations
@@ -62,12 +65,17 @@ def row_runner(row: dict, flag: dict | None) -> str | None:
     return found.group(1) if found else None
 
 
-def runner_of(runners: Counter, fallbacks: int) -> str:
+def runner_of(runners: Counter, fallbacks: int, droid_models: list | None = None) -> str:
+    """`droid_models`: each Droid row's (models_used, model asked for); all must be the same single model."""
     kinds = set(runners)
     if kinds == {"rules_only"}:
         return "rules_only"
     if kinds == {"droid"} and not fallbacks:
-        return "droid"
+        used = {tuple(u or ()) for u, _ in droid_models or []}
+        asked = {a for _, a in droid_models or []}
+        if len(used) == 1 and len(next(iter(used))) == 1 and (asked == {None} or asked == {next(iter(used))[0]}):
+            return "droid"
+        return "mixed"
     if kinds == {"fake"}:
         return "fake"
     return "mixed"
@@ -84,7 +92,7 @@ def _score(row: dict, name: str) -> float | None:
 
 
 def summarize(rows: list[dict], *, chalk: dict, dataset: dict, mode: str, git_sha: str | None,
-              now: int, scorers: list[str] = SCORERS) -> dict:
+              now: int, scorers: list[str] = SCORERS, droid_audit: dict | None = None) -> dict:
     """The results file for one run. `rows` are the result dataset's rows (dicts); `scorers` are the
     evaluation's scorers (the rules-only evaluation has no citations-valid: it cites nothing)."""
     parsed = []
@@ -94,9 +102,15 @@ def summarize(rows: list[dict], *, chalk: dict, dataset: dict, mode: str, git_sh
 
     runners = Counter(r for r in (row_runner(row, flag) for row, flag in parsed) if r)
     fallbacks = sum(1 for _, flag in parsed if flag and (flag.get("_run") or {}).get("fallback_from_droid"))
-    runner = runner_of(runners, fallbacks)
-    models = sorted({m for _, f in parsed if f and (m := (f.get("_run") or {}).get("model"))})
+    droid_runs = [(f.get("_run") or {}) for _, f in parsed if f and (f.get("_run") or {}).get("runner") == "droid"]
+    runner = runner_of(runners, fallbacks, [(r.get("models_used"), r.get("model")) for r in droid_runs])
+    models = sorted({m for r in droid_runs for m in (r.get("models_used") or [])})
     model = models[0] if len(models) == 1 else (", ".join(models) or None)
+    audit_models = ((droid_audit or {}).get("audit") or {}).get("models_seen")
+    if runner == "droid" and audit_models is not None and audit_models != models:
+        runner = "mixed"  # some session (e.g. a retried attempt) used another model
+    task_errors = sum(1 for r, _ in parsed if r.get("output_error"))
+    complete = task_errors == 0 and not (droid_audit or {}).get("tripped")
     label = f"StormDesk (Droid{', ' + model if model else ''})" if runner == "droid" else LABELS[runner]
 
     def caught(row, flag) -> bool:
@@ -138,8 +152,13 @@ def summarize(rows: list[dict], *, chalk: dict, dataset: dict, mode: str, git_sh
             "held_from_honest_shops": sum(pool_cents(r) for r, f in honest
                                           if f and f["proposed_action"] == "hold_pool_payout"),
         },
+        "factory_credits": {
+            "note": "Factory credits of each row's Droid session (the attempt that answered); droid_audit counts every session",
+            "rows_total": sum((r.get("factory_credits") or 0) for r in droid_runs) if droid_runs else None,
+            "rows_with_usage": sum(1 for r in droid_runs if r.get("factory_credits") is not None),
+        },
         "rows_without_flag": sum(1 for _, f in parsed if f is None),
-        "task_errors": sum(1 for r, _ in parsed if r.get("output_error")),
+        "task_errors": task_errors,
         "fallback_from_droid": fallbacks,
     }
 
@@ -189,6 +208,7 @@ def summarize(rows: list[dict], *, chalk: dict, dataset: dict, mode: str, git_sh
             "evidence_ids": flag["evidence_ids"] if flag else [],
             "exposure_cents": flag["exposure_cents"] if flag else None,
             "runner": row_runner(row, flag), "server_run_id": run.get("run_id"),
+            "models_used": run.get("models_used"), "factory_credits": run.get("factory_credits"),
             "citations_valid": run.get("citations_valid"),
             "error": row.get("output_error") or (None if flag else (row.get("output") or "")[:300]),
             "scores": {name: _score(row, name) for name in SCORERS},
@@ -200,7 +220,8 @@ def summarize(rows: list[dict], *, chalk: dict, dataset: dict, mode: str, git_sh
         "runner": runner,
         "runner_label": label,
         "is_agent_result": runner == "droid",
-        "table_column": {"rules_only": "rules_only", "droid": "stormdesk"}.get(runner),
+        "complete": complete,
+        "table_column": {"rules_only": "rules_only", "droid": "stormdesk"}.get(runner) if complete else None,
         "model": model,
         "mode": mode,
         "timestamp": now,
@@ -209,6 +230,8 @@ def summarize(rows: list[dict], *, chalk: dict, dataset: dict, mode: str, git_sh
         "chalk": chalk,
         "dataset": dataset,
         "runners_seen": dict(runners),
+        "models_seen": models,
+        "droid_audit": droid_audit,
         "scorers": scores,
         "metrics": metrics,
         "per_scenario": per_scenario,
