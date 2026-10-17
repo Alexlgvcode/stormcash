@@ -268,6 +268,35 @@ def test_fake_runner_triages_a_candidate_with_the_rules_only_baseline(deps, doub
         assert scalar(conn, "SELECT count(*) FROM flags") == 1
 
 
+def test_fake_triage_reads_features_back_and_says_from_where(deps, double_spend, monkeypatch):
+    import dataclasses
+
+    from stormcash import chalk_features
+
+    out = run(StormDesk(deps), Job("triage", candidate_id=double_spend["candidate_id"]))
+    with deps.pool.connection() as conn:
+        steps = one(conn, "SELECT transcript FROM stormdesk_runs")["transcript"]["steps"]
+        window_end = scalar(conn, "SELECT window_end FROM candidates")
+    assert [s["tool"] for s in steps][:2] == ["get_candidate", "query_features"]
+    assert steps[1]["ok"] and steps[1]["input"] == {"entity": "merchant", "id": out["flag"]["subject_id"], "as_of": window_end}
+    assert "Postgres fallback" in out["output"]["reasoning"] and "CHALK_DISABLED" in out["output"]["reasoning"]
+
+    asked = []
+
+    def chalk(settings, entity, id, features, as_of):
+        asked.append((entity, id, as_of))
+        return {"source": "chalk", "entity": entity, "id": id, "as_of": as_of, "latency_ms": 212,
+                "features": {"silence_ratio_6h": 0.1176, "pool_funded_cents_6h": 1000}}
+
+    monkeypatch.setattr(chalk_features, "query", chalk)
+    on = dataclasses.replace(deps, settings=dataclasses.replace(deps.settings, chalk_enabled=True))
+    out = run(StormDesk(on), Job("triage", candidate_id=double_spend["candidate_id"]))
+    assert asked == [("merchant", out["flag"]["subject_id"], window_end)]
+    assert "Chalk at the window end: silence_ratio_6h 0.1176, pool_funded_cents_6h 1000 (212 ms)" \
+        in out["output"]["reasoning"]
+    assert out["flag"]["proposed_action"] == "hold_pool_payout"  # reported, not weighed: still the baseline
+
+
 class Scripted:
     """A stand-in agent that returns a fixed output."""
 

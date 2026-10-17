@@ -48,6 +48,12 @@ BUILTIN_TOOLS = frozenset({
     "TaskOutput", "TaskStop", "TodoWrite", "ToolSearch", "WaitForScript", "WebSearch",
 })
 DEFAULT_ACTIONS = {"merchant_silence": "hold_pool_payout", "cap_drain": "freeze_cert", "region_dark": "dispatch_relay"}
+# What the fake runner reads back from query_features for each candidate kind: (entity, Chalk features to quote).
+FEATURE_CHECK = {
+    "merchant_silence": ("merchant", ("silence_ratio_6h", "pool_funded_cents_6h")),
+    "cap_drain": ("cert", ("drain_share_15m", "distinct_merchants_15m")),
+    "region_dark": ("region", ("hours_since_last_upload", "expiring_12h_share")),
+}
 
 
 @dataclass
@@ -172,6 +178,9 @@ class FakeRunner:
     async def _triage(self, job: Job, steps: Steps) -> Flag:
         cand = await self._tool(steps, "get_candidate", candidate_id=job.candidate_id)
         kind, subject, f = cand["kind"], cand["subject_id"], cand["features"]
+        entity, quoted = FEATURE_CHECK[kind]
+        # The same window the detector used, recomputed now (Chalk) or read back from the candidate (fallback).
+        current = await self._tool(steps, "query_features", entity=entity, id=subject, as_of=cand["window_end"])
         evidence: list[str] = []
         exposure = 0
         if kind == "merchant_silence":
@@ -194,10 +203,21 @@ class FakeRunner:
             evidence = [a["alert_id"] for a in region.get("alerts", [])] or region.get("sample_cert_ids", [])
             summary = (f"Fake runner: no uploads from {subject} for {f['hours_since_last_upload']} h with "
                        f"{round(f['expiring_12h_share'] * 100)}% of certificates expiring.")
+        reasoning = ["- Rules-only baseline: every candidate gets its default action.",
+                     "- No agent judgement was made (fake runner).", _features_line(current, quoted)]
         return Flag(kind=kind, severity="review", subject_id=subject, evidence_ids=evidence, exposure_cents=exposure,
-                    summary=summary, reasoning="- Rules-only baseline: every candidate gets its default action.\n"
-                                               "- No agent judgement was made (fake runner).",
+                    summary=summary, reasoning="\n".join(reasoning),
                     proposed_action=DEFAULT_ACTIONS[kind], action_params={}, merchant_notice=None)
+
+
+def _features_line(current: dict, quoted: tuple[str, ...]) -> str:
+    """Say where the features came from; the fake runner reports them but doesn't weigh them."""
+    if current.get("source") == "chalk":
+        values = ", ".join(f"{n} {current['features'].get(n)}" for n in quoted)
+        return f"- Chalk at the window end: {values} ({current.get('latency_ms')} ms)."
+    if current.get("source") == "postgres_fallback":
+        return f"- Features from the Postgres fallback (the detector's frozen values): {current.get('chalk_error')}."
+    return f"- Features unavailable: {current.get('error', 'no answer')}."
 
 
 # Droid runner --------------------------------------------------------------------------------
