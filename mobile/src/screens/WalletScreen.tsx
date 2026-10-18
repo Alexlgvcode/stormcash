@@ -69,7 +69,7 @@ export function WalletScreen() {
         </View>
         <Text maxFontSizeMultiplier={1.15} style={styles.figure} adjustsFontSizeToFit numberOfLines={1}>{wholeDollars(left)}</Text>
         <Text style={styles.sheetSub}>left to spend, of {wholeDollars(cert.cap_cents)}. No internet needed.</Text>
-        <Meter value={state.cumCents} max={cert.cap_cents} color={colors.carbon} track={colors.sheetEdge} />
+        <Meter value={state.cumCents} max={cert.cap_cents} color={colors.sheetFigure} track={colors.sheetEdge} />
         <Status text={status.text} tone={status.tone} />
       </View>
 
@@ -123,10 +123,10 @@ const styles = StyleSheet.create({
     borderBottomWidth: 4, borderBottomColor: colors.sheetEdge, // the stack of copies underneath
   },
   sheetTop: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'baseline', columnGap: 12 },
-  book: { fontFamily: font.bold, fontSize: 17, color: colors.ink },
-  copyNo: { fontFamily: font.regular, fontSize: 15, color: '#6B5A12', fontVariant: ['tabular-nums'] },
-  figure: { fontFamily: font.display, fontSize: 132, lineHeight: 146, color: colors.carbon, fontVariant: ['tabular-nums'] },
-  sheetSub: { fontFamily: font.regular, fontSize: 17, lineHeight: 24, color: colors.ink, marginBottom: 6 },
+  book: { fontFamily: font.bold, fontSize: 17, color: colors.sheetInk },
+  copyNo: { fontFamily: font.regular, fontSize: 15, color: colors.sheetMuted, fontVariant: ['tabular-nums'] },
+  figure: { fontFamily: font.display, fontSize: 132, lineHeight: 146, color: colors.sheetFigure, fontVariant: ['tabular-nums'] },
+  sheetSub: { fontFamily: font.regular, fontSize: 17, lineHeight: 24, color: colors.sheetInk, marginBottom: 6 },
   stub: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, gap: 12 },
   stubShop: { fontFamily: font.bold, fontSize: 18, color: colors.ink },
   stubMeta: { fontFamily: font.regular, fontSize: 15, color: colors.muted, fontVariant: ['tabular-nums'] },

@@ -5,11 +5,13 @@
 import * as Haptics from 'expo-haptics';
 import type { ReactNode } from 'react';
 import {
-  ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View,
+  ActivityIndicator, Appearance, Pressable, ScrollView, StyleSheet, Text, View,
   type ViewStyle,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { getSetting } from '../store/db';
 import { Icon } from './Icon';
+import { Radar } from './Radar';
 
 export const font = {
   // Atkinson Hyperlegible (Braille Institute) for everything you read; Big Shoulders (civic
@@ -23,7 +25,21 @@ export const font = {
   displayBold: 'BigShouldersDisplay_700Bold',
 };
 
-export const colors = {
+// Light: the receipt book by day. Dark: the same book at night on a storm-radar screen.
+// The palette is fixed when the app starts (every StyleSheet reads it once), from the phone's
+// appearance or the demo menu's override; a change applies the next time the app opens.
+export type ThemePref = 'system' | 'dark' | 'light';
+export function themePref(): ThemePref {
+  try {
+    const v = getSetting('theme');
+    return v === 'dark' || v === 'light' ? v : 'system';
+  } catch {
+    return 'system';
+  }
+}
+export const isDark = themePref() === 'dark' || (themePref() === 'system' && Appearance.getColorScheme() === 'dark');
+
+const light = {
   // The receipt book: cool paper, the canary duplicate sheet, carbon ink, graphite, rubber stamps.
   bg: '#F7F8F6', // paper
   card: '#FFFFFF', // a clean sheet
@@ -52,7 +68,48 @@ export const colors = {
   navyRaised: '#2C3138',
   onNavy: '#FFFFFF',
   onNavyMuted: '#B9BEC6',
+  sheetInk: '#1F2328', // text on the canary sheet
+  sheetMuted: '#6B5A12',
+  sheetFigure: '#2B3A9E', // the big figure on the sheet
+  radar: '#1F7A47',
 };
+
+const dark: typeof light = {
+  // The night copy: deep navy desk, the duplicate sheet in dim amber with glowing figures.
+  bg: '#0A0F1A',
+  card: '#131B2A',
+  sheet: '#211C0D',
+  sheetEdge: '#4A3F18',
+  well: '#1D2738',
+  ink: '#E9EDF3',
+  text: '#E9EDF3',
+  carbon: '#9AA8FF',
+  muted: '#9AA4B4',
+  faint: '#5F6A7C',
+  line: '#2A3446',
+  primary: '#4A5CF0',
+  onPrimary: '#FFFFFF',
+  primarySoft: '#1E2648',
+  green: '#3CCB7F',
+  greenSoft: '#12301F',
+  red: '#FF6B57',
+  redSoft: '#3A1612',
+  amber: '#F2B34A',
+  amberSoft: '#33240C',
+  okBg: '#1F7A47',
+  refuseBg: '#C3321F',
+  tool: '#05080F',
+  navy: '#05080F',
+  navyRaised: '#141B28',
+  onNavy: '#FFFFFF',
+  onNavyMuted: '#9AA4B4',
+  sheetInk: '#F3E9C6',
+  sheetMuted: '#C9B56A',
+  sheetFigure: '#FFD54A',
+  radar: '#3CCB7F',
+};
+
+export const colors = isDark ? dark : light;
 
 export const space = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 };
 export const radius = { sm: 4, md: 14, lg: 8, pill: 999 };
@@ -66,6 +123,7 @@ export function Screen({
   const body = <View style={[s.screen, style]}>{children}</View>;
   return (
     <View style={[s.fill, { backgroundColor: bg }]}>
+      {isDark && tone === 'default' ? <Radar /> : null}
       <SafeAreaView style={s.fill} edges={['top', 'bottom']}>
         {scroll ? (
           <ScrollView style={s.fill} contentContainerStyle={s.grow} keyboardShouldPersistTaps="handled">

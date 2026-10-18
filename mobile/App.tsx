@@ -20,6 +20,7 @@ import { RecordsScreen } from './src/screens/RecordsScreen';
 import { ResultScreen } from './src/screens/ResultScreen';
 import { SetupScreen } from './src/screens/SetupScreen';
 import { WalletScreen } from './src/screens/WalletScreen';
+import { isDark } from './src/components/ui';
 
 export default function App() {
   const [keyReady, setKeyReady] = useState(false);
@@ -88,7 +89,7 @@ export default function App() {
     <SafeAreaProvider>
       <NavContext.Provider value={nav}>
         {render()}
-        <StatusBar style={route.name === 'judge' ? 'light' : 'dark'} />
+        <StatusBar style={route.name === 'judge' || isDark ? 'light' : 'dark'} />
       </NavContext.Provider>
     </SafeAreaProvider>
   );
