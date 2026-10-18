@@ -474,8 +474,7 @@ class AuthorGuard:
 def secret_values(settings) -> dict[str, str]:
     """Values that must never appear in a proposed file, by name (the values are never stored or shown)."""
     named = {"FACTORY_API_KEY": settings.factory_api_key, "NESSIE_API_KEY": settings.nessie_api_key,
-             "CHALK_CLIENT_SECRET": settings.chalk_client_secret, "PHOTON_API_KEY": settings.photon_api_key,
-             "DATABASE_URL": settings.database_url}
+             "CHALK_CLIENT_SECRET": settings.chalk_client_secret, "DATABASE_URL": settings.database_url}
     url = settings.database_url or ""
     if "@" in url and ":" in url.split("@")[0]:
         named["DATABASE_URL password"] = url.split("@")[0].rsplit(":", 1)[-1]

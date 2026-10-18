@@ -22,7 +22,6 @@ from psycopg import sql
 
 from stormcash.app import create_app
 from stormcash.config import Settings
-from stormcash.photon.config import PhotonSettings
 from stormcash.protocol import crypto
 
 SERVER_DIR = Path(__file__).resolve().parents[1]
@@ -153,7 +152,7 @@ def fake_nessie() -> FakeNessie:
 @pytest.fixture
 def app_client(clean_db: str, fake_nessie: FakeNessie):
     settings = make_settings(clean_db, nessie_pool_account_id=fake_nessie.pool_id)
-    app = create_app(settings, nessie_transport=fake_nessie.transport(), photon=PhotonSettings(disabled=True))
+    app = create_app(settings, nessie_transport=fake_nessie.transport())
     with TestClient(app) as client:
         yield client
 

@@ -85,7 +85,7 @@
   <rect x="1100" y="370" width="430" height="140" rx="14" fill="#ffffff" stroke="#c8102e" stroke-width="2.5"/>
   <text x="1315" y="408" font-size="22" font-weight="700" fill="#142029" text-anchor="middle">StormDesk agent</text>
   <text x="1315" y="436" font-size="15" fill="#56636e" text-anchor="middle">Factory Droid SDK</text>
-  <text x="1315" y="460" font-size="15" fill="#56636e" text-anchor="middle">11 read-only MCP tools · structured output</text>
+  <text x="1315" y="460" font-size="15" fill="#56636e" text-anchor="middle">10 read-only MCP tools · structured output</text>
   <text x="1315" y="484" font-size="15" fill="#56636e" text-anchor="middle">cites real records · proposes, never acts</text>
   <line x1="972" y1="440" x2="1097" y2="440" stroke="#142029" stroke-width="2.5" marker-end="url(#arrow)"/>
   <text x="984" y="428" font-size="14" fill="#142029">cases &amp;</text>
@@ -98,14 +98,6 @@
   <text x="1200" y="654" font-size="15" fill="#56636e" text-anchor="middle">Evaluations</text>
   <line x1="1200" y1="512" x2="1200" y2="562" stroke="#142029" stroke-width="2.5" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
   <text x="1212" y="543" font-size="14" fill="#142029">query_features</text>
-
-  <!-- Photon -->
-  <rect x="1330" y="565" width="200" height="110" rx="14" fill="#ffffff" stroke="#c8102e" stroke-width="2.5"/>
-  <text x="1430" y="603" font-size="22" font-weight="700" fill="#142029" text-anchor="middle">Photon</text>
-  <text x="1430" y="630" font-size="15" fill="#56636e" text-anchor="middle">Telegram notices</text>
-  <text x="1430" y="654" font-size="15" fill="#56636e" text-anchor="middle">and appeals</text>
-  <line x1="1430" y1="512" x2="1430" y2="562" stroke="#142029" stroke-width="2.5" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
-  <text x="1442" y="543" font-size="14" fill="#142029">appeal replies</text>
 
   <!-- Dashboard -->
   <rect x="1100" y="720" width="430" height="110" rx="14" fill="#ffffff" stroke="#142029" stroke-width="2"/>

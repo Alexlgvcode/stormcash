@@ -63,8 +63,7 @@ def test_tools_are_read_only_and_return_citable_hex(deps, double_spend):
     assert tools.call(deps, "query_features", {"entity": "merchant", "id": cand["subject_id"]})["source"] == \
         "postgres_fallback"
     assert tools.call(deps, "get_nessie_balances", {"entity_id": cand["subject_id"]})["nessie_cents"] == 1500
-    assert tools.call(deps, "get_messages", {"merchant_id": cand["subject_id"]})["messages"] == []
-    assert len(tools.TOOLS) == 11
+    assert len(tools.TOOLS) == 10
     with pytest.raises(tools.ToolError):
         tools.call(deps, "get_case", {"case_id": 999})
 

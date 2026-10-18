@@ -112,8 +112,7 @@ def app(fresh_db):
 
 def test_seed_town_endpoint(app, tmp_path, monkeypatch):
     monkeypatch.setattr(outputs, "OUT_DIR", tmp_path)
-    body = {"seed": 9001, "hours": 3, "residents": 60,
-            "corner_store_contact": {"channel": "telegram", "handle": "@cornerstore"}}
+    body = {"seed": 9001, "hours": 3, "residents": 60}
     assert app.post("/v1/demo/seed-town", json=body).status_code == 401
     started = app.post("/v1/demo/seed-town", json=body, headers={"X-SC-Operator": "test"})
     assert started.status_code == 202 and started.json()["status"] == "running"
@@ -126,8 +125,6 @@ def test_seed_town_endpoint(app, tmp_path, monkeypatch):
     deps = app.app.state.deps
     with deps.pool.connection() as conn:
         assert scalar(conn, "SELECT bool_and(simulated) FROM merchants") is True
-        assert scalar(conn, """SELECT m.display_name FROM merchant_contacts c JOIN merchants m USING (merchant_id)
-                               WHERE c.handle = '@cornerstore'""") == "Corner Store"
 
 
 def test_seed_town_replace_keeps_real_devices(app, tmp_path, monkeypatch):
@@ -140,8 +137,7 @@ def test_seed_town_replace_keeps_real_devices(app, tmp_path, monkeypatch):
                                       "asheville-downtown")
     registry.register_merchant(deps, "Pharmacy", crypto.public_key_bytes(crypto.private_key_from_scalar(8)),
                                "asheville-downtown")
-    body = {"seed": 9002, "hours": 3, "residents": 60,
-            "corner_store_contact": {"channel": "telegram", "handle": "@cornerstore"}}
+    body = {"seed": 9002, "hours": 3, "residents": 60}
 
     def seed(**extra) -> dict:
         app.post("/v1/demo/seed-town", json={**body, **extra}, headers={"X-SC-Operator": "test"})
@@ -158,7 +154,7 @@ def test_seed_town_replace_keeps_real_devices(app, tmp_path, monkeypatch):
     assert seed()["status"] == "done"
     first = snapshot()
     assert seed()["status"] == "failed"  # the same seed twice needs replace
-    status = seed(replace=True, corner_store_contact=None)
+    status = seed(replace=True)
     assert status["status"] == "done", status
     assert status["cleared"]["shops"] == 38
     assert snapshot() == first  # the same town again, nothing left over
@@ -167,6 +163,3 @@ def test_seed_town_replace_keeps_real_devices(app, tmp_path, monkeypatch):
         assert scalar(conn, "SELECT count(*) FROM merchants WHERE NOT simulated") == 1
         assert scalar(conn, "SELECT count(*) FROM certificates WHERE cert_id = %s", (maya_cert.cert_id,)) == 1
         assert ledger.unbalanced_txns(conn) == []
-        # Corner Store keeps its Photon handle without being told again.
-        assert scalar(conn, """SELECT m.display_name FROM merchant_contacts c JOIN merchants m USING (merchant_id)
-                               WHERE c.handle = '@cornerstore'""") == "Corner Store"

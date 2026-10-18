@@ -7,17 +7,10 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { getJSON, type CaseDetail, type CaseSummary, type Health, type RelayPath } from "../api";
 import { caseTitle, casesTakeaway } from "../cases";
 import { RULE_TEXT, TagTable, useVerify, VerifyResult } from "../components/Evidence";
-import { OwnerFreezes } from "../components/OwnerFreeze";
 import { CaseStormDesk } from "../components/StormDesk";
-import { Button, CopyId, Facts, Note, PageHeader, Pill, Section, Source, Strip, Tabs } from "../components/ui";
+import { Button, CopyId, Facts, Note, PageHeader, Pill, Section, Source, Strip } from "../components/ui";
 import { useEvents } from "../events";
 import { clockTime, dollars } from "../format";
-
-const VIEWS = [
-  { id: "cases", label: "Proven fraud" },
-  { id: "freezes", label: "Owner freezes" },
-] as const;
-type CasesView = (typeof VIEWS)[number]["id"];
 
 // What the amount in the headline is, per rule.
 const RULE_VERB: Record<string, string> = {
@@ -342,14 +335,6 @@ function HardCases({ cases, paths }: { cases: CaseSummary[] | null; paths: Map<s
 }
 
 export function CasesTab() {
-  const [view, setView] = useState<CasesView>(() => {
-    try {
-      const saved = localStorage.getItem("sc-cases-view");
-      return saved === "freezes" ? saved : "cases";
-    } catch {
-      return "cases";
-    }
-  });
   const [cases, setCases] = useState<CaseSummary[] | null>(null);
   const [paths, setPaths] = useState<Map<string, RelayPath>>(new Map());
   const load = useCallback(() => {
@@ -361,21 +346,11 @@ export function CasesTab() {
   useEffect(load, [load]);
   useEvents(["case_opened", "town", "upload"], load);
 
-  const pick = (v: CasesView) => {
-    setView(v);
-    try {
-      localStorage.setItem("sc-cases-view", v);
-    } catch {
-      // private window: fine
-    }
-  };
   return (
     <div className="pb-12">
-      <PageHeader title="Cases" subtitle="Double spends proven by signed records, and wallets their owners froze"
-        takeaway={cases ? casesTakeaway(cases) : undefined}>
-        <Tabs tabs={VIEWS} value={view} onChange={pick} />
-      </PageHeader>
-      {view === "cases" ? <HardCases cases={cases} paths={paths} /> : <OwnerFreezes />}
+      <PageHeader title="Cases" subtitle="Double spends proven by signed records"
+        takeaway={cases ? casesTakeaway(cases) : undefined} />
+      <HardCases cases={cases} paths={paths} />
     </div>
   );
 }

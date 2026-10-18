@@ -21,7 +21,7 @@ class Flag(BaseModel):
     reasoning: str  # ≤ 6 bullet points, shown on expand
     proposed_action: Action
     action_params: dict[str, int | str] = Field(default_factory=dict)  # e.g. {"limit_cents": 1000}
-    merchant_notice: str | None = None  # draft text for Photon, if the action affects a merchant
+    merchant_notice: str | None = None  # draft text for the shop, shown to the operator, if a merchant is affected
 
 
 class CaseFile(BaseModel):
@@ -32,13 +32,6 @@ class CaseFile(BaseModel):
     recovery_plan: list[str]
     evidence_ids: list[str]
     summary_md: str
-
-
-class AppealReply(BaseModel):
-    reply: str  # sent to the merchant
-    claim_consistent_with_logs: bool
-    evidence_ids: list[str]
-    escalate: bool
 
 
 class Review(BaseModel):  # the reviewer's output (§14.7b); the docstring is part of the schema Droid sees

@@ -133,12 +133,10 @@ def test_reset_without_a_pool_account_keeps_pool_money_ledger_only(clean_db, fak
     from fastapi.testclient import TestClient
 
     from stormcash.app import create_app
-    from stormcash.photon.config import PhotonSettings
 
     from .conftest import make_settings
 
-    app = create_app(make_settings(clean_db), nessie_transport=fake_nessie.transport(),
-                     photon=PhotonSettings(disabled=True))
+    app = create_app(make_settings(clean_db), nessie_transport=fake_nessie.transport())
     with TestClient(app) as client:
         World(client)
         out = client.post("/v1/demo/reset", headers=OPERATOR).json()

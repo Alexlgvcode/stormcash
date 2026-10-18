@@ -8,8 +8,6 @@ row (§0 rule 3):
   its retry, fake-runner fallback (Droid couldn't run), plain fake runner, failed.
 - Totals per job count Droid's own runs only. Fake-runner runs, fallbacks
   included, are counted next to them and never in a success rate.
-- Appeal conversations (§17.2): respond runs that are turns of one Droid
-  session per appeal thread, counted by session (started, resumed, restarted).
 - Guardrail events are the runs where one actually fired. A guardrail whose
   events older runs didn't record (structured-output retries that then
   succeeded, permission-handler denials) has a null count and says how many
@@ -30,9 +28,12 @@ from ..stormdesk.prompt import PROMPT_VERSION
 
 router = APIRouter()
 
-JOB_ORDER = ("investigate", "triage", "respond", "review", "author")
+JOB_ORDER = ("investigate", "triage", "review", "author")  # a stored job not listed here is shown after these
 # An author run (§14.7d) works through its sandbox read tools and the gated built-ins: those are its tool calls.
 AUTHOR_TOOLS = frozenset(sandbox.LAB_TOOL_NAMES) | sandbox.WRITE_TOOLS
+# Tools StormDesk had when older runs were stored (get_messages read the Photon thread, removed in spec v4.24):
+# still counted as its own read-only tools on those runs, so their stored numbers don't change.
+RETIRED_TOOLS = frozenset({"get_messages"})
 # What DroidRunner stores when the structured output failed on both attempts (§14.2).
 STRUCTURED_OUTPUT_ERRORS = ("error_structured_output", "output did not match")
 REVIEW_VERDICT = {"agree": "agrees", "disagree": "disagrees", "insufficient_evidence": "insufficient evidence"}
@@ -131,8 +132,6 @@ def verdict(row: dict) -> str | None:
         return "dismissed" if kind == "none" else f"{kind} → {out.get('proposed_action')}"
     if row["job"] == "investigate":
         return "rule re-verified" if out.get("verified_independently") else "rule not re-verified"
-    if row["job"] == "respond":
-        return "escalated to a person" if out.get("escalate") else "answered"
     if row["job"] == "review":  # the second-opinion Droid's Review (§14.7b)
         return REVIEW_VERDICT.get(out.get("verdict"), out.get("verdict"))
     if row["job"] == "author":  # a proposed detector (§14.7d): what happened to it
@@ -150,37 +149,11 @@ def subject(row: dict) -> str:
         parts = [f"candidate #{row['candidate_id']}", row.get("candidate_kind"), row.get("subject_name")]
         return " · ".join(p for p in parts if p)
     if row.get("merchant_id"):
-        name = row.get("subject_name") or f"merchant {row['merchant_id'][:8]}"
-        turn = appeal_turn(row)
-        return f"{name} · appeal turn {turn['turn']}" if turn else name
+        return row.get("subject_name") or f"merchant {row['merchant_id'][:8]}"
     if row["job"] == "author":
         return f"detector for {(row.get('meta') or {}).get('kind') or 'a gap'}"
     reviewed = reviewed_run_id(row)
     return f"run #{reviewed}" if reviewed is not None else "—"
-
-
-def appeal_turn(row: dict) -> dict | None:
-    """A respond run that is a turn of its appeal thread's Droid session (§17.2): {session, turn, session_id}."""
-    appeal = (row.get("meta") or {}).get("appeal")
-    if row["job"] != "respond" or row["runner"] != "droid" or not isinstance(appeal, dict) \
-            or appeal.get("mode") != "session" or not appeal.get("turn"):
-        return None
-    return {"session": appeal.get("session"), "turn": appeal["turn"], "session_id": row.get("session_id"),
-            "resume_error": appeal.get("resume_error")}
-
-
-def appeal_sessions(runs: list[dict]) -> dict:
-    """Droid's appeal conversations: how many sessions, how many turns, how many turns resumed a session and how
-    many started over from the stored thread because the session couldn't be resumed."""
-    turns = [r["appeal"] for r in runs if r.get("appeal")]
-    per_session = Counter(t["session_id"] for t in turns)
-    return {
-        "sessions": len(per_session),
-        "turns": len(turns),
-        "resumed": sum(1 for t in turns if t["session"] == "resumed"),
-        "restarted": sum(1 for t in turns if t["session"] == "restarted"),
-        "longest": max(per_session.values(), default=0),
-    }
 
 
 def reviewed_run_id(row: dict) -> int | None:
@@ -194,7 +167,7 @@ def run_view(row: dict, now: float) -> dict:
     meta = row.get("meta") or {}
     result = outcome(row, now)
     steps = row.get("steps") or []
-    names = AUTHOR_TOOLS if row["job"] == "author" else tools.TOOL_NAMES
+    names = AUTHOR_TOOLS if row["job"] == "author" else frozenset(tools.TOOL_NAMES) | RETIRED_TOOLS
     ours = [s for s in steps if s[0] in names]
     other = Counter(s[0] for s in steps if s[0] not in names)
     usage = meta.get("usage") if row["runner"] == "droid" else meta.get("fallback_usage")
@@ -225,7 +198,6 @@ def run_view(row: dict, now: float) -> dict:
         "permission_denials": len(denials) if denials is not None else None,
         "fallback_reason": meta.get("fallback_from_droid"),
         "reviewed_run_id": reviewed_run_id(row),
-        "appeal": appeal_turn(row),
         "session_id": row.get("session_id"),
         "error": row.get("error"),
         "started_at": row["started_at"],
@@ -301,7 +273,7 @@ def guardrails(runs: list[dict]) -> list[dict]:
          "about": "Droid couldn't run (e.g. out of credits): the labelled fake runner answered instead.",
          **counted(fallbacks, len(runs))},
         {"key": "permission_denial", "label": "Permission-handler denials",
-         "about": "A tool request outside StormDesk's 11 read-only tools, refused by the permission handler.",
+         "about": "A tool request outside StormDesk's 10 read-only tools, refused by the permission handler.",
          **(counted(denials, len(recorded_denials)) if recorded_denials
             else {"count": None, "events": [], "recorded_runs": 0})},
     ]
@@ -322,7 +294,6 @@ def console(rows: list[dict], now: float, limit: int) -> dict:
         "as_of": int(now),
         "run_count": len(runs),
         "review_verdicts": {k: verdicts[k] for k in REVIEW_VERDICT if verdicts[k]},
-        "appeal_sessions": appeal_sessions(runs),
         "totals": totals(runs),
         "by_job": [{"job": job, **totals([r for r in runs if r["job"] == job])} for job in jobs],
         "guardrails": guardrails(runs),
