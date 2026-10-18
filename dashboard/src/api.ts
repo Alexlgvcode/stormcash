@@ -145,19 +145,64 @@ export interface Alert {
   event: string;
   severity: string | null;
   source: "live" | "replayed";
+  onset?: number | null;
+  expires?: number | null;
 }
 
 export interface TownStats {
   seed: number;
-  double_spends: { attempts: number; share_refused_offline: number | null; share_caught_at_settlement: number | null };
+  summary?: {
+    hours?: number;
+    shops?: number;
+    residents?: number;
+    payments?: number;
+    accepted?: number;
+    settled?: number;
+    refused?: Record<string, number>;
+    uploads?: number;
+    contacts?: number;
+    median_minutes_to_server?: number;
+  };
+  double_spends: {
+    attempts: number;
+    share_refused_offline: number | null;
+    share_caught_at_settlement: number | null;
+    refused_offline?: number;
+    accepted_offline?: number;
+    caught_at_settlement?: number;
+    not_caught_by_end?: number;
+  };
+  cheaters?: number;
   mean_loss_per_cheater_cents: number | null;
   median_hours_to_settlement: number | null;
+  hops_histogram?: Record<string, number>;
+  cases?: Record<string, number>;
+}
+
+/** GET /v1/town's latest 200 payments, newest first (by the phone's clock). */
+export interface TownPayment {
+  tag_hash: string;
+  merchant_id: string;
+  device_ts: number;
+  status: string;
+  hops: number | null;
+  amount_cents: number;
+}
+
+export interface TownUpload {
+  upload_id: number;
+  region_id: string | null;
+  item_count: number;
+  simulated: boolean;
+  at: number;
 }
 
 export interface Town {
   grid: { w: number; h: number };
   regions: Region[];
   merchants: TownMerchant[];
+  recent_payments: TownPayment[];
+  uploads: TownUpload[];
   alerts: Alert[];
   dark_regions: string[];
   town_stats: TownStats | null;

@@ -1,21 +1,31 @@
-// One page, five tabs, persistent top navigation (spec §18, issue #93). The tab lives
-// in the URL hash so a reload lands on the same tab; it opens on Accounts.
+// One page, five workspaces, a persistent status bar (spec §18). The tab lives in
+// the URL hash ("#cases", or "#stormdesk/evals" for a workspace's view) so a
+// reload lands in the same place. #124's hashes (#accounts, #droid, #evals) still work.
 import { useEffect, useState } from "react";
 import { TopNav } from "./components/TopNav";
 import { EventsProvider } from "./events";
 import { ProofPage } from "./proof/ProofPage";
-import { AccountsTab } from "./tabs/Accounts";
+import { StatusProvider } from "./status";
 import { CasesTab } from "./tabs/Cases";
-import { DroidTab } from "./tabs/Droid";
-import { EvalsTab } from "./tabs/Evals";
+import { LedgerTab } from "./tabs/Ledger";
+import { OverviewTab } from "./tabs/Overview";
+import { StormDeskTab } from "./tabs/StormDeskTab";
 import { TownTab } from "./tabs/Town";
 
-const TABS = ["accounts", "cases", "town", "evals", "droid"] as const;
+const TABS = ["overview", "town", "cases", "ledger", "stormdesk"] as const;
 type TabId = (typeof TABS)[number];
 
-function tabFromHash(): TabId {
-  const id = location.hash.replace("#", "");
-  return TABS.includes(id as TabId) ? (id as TabId) : "accounts";
+// #124's tabs, now views inside a workspace.
+const LEGACY: Record<string, [TabId, string]> = {
+  accounts: ["ledger", "balances"],
+  droid: ["stormdesk", "droid"],
+  evals: ["stormdesk", "evals"],
+};
+
+function route(): [TabId, string | null] {
+  const [id, sub] = location.hash.replace("#", "").split("/");
+  if (LEGACY[id]) return LEGACY[id];
+  return TABS.includes(id as TabId) ? [id as TabId, sub ?? null] : ["overview", null];
 }
 
 export default function App() {
@@ -32,26 +42,31 @@ export default function App() {
 }
 
 function Dashboard() {
-  const [tab, setTab] = useState<TabId>(tabFromHash);
+  const [[tab, sub], setRoute] = useState(route);
 
   useEffect(() => {
-    const onHash = () => setTab(tabFromHash());
+    const onHash = () => {
+      setRoute(route());
+      scrollTo({ top: 0 });
+    };
     addEventListener("hashchange", onHash);
     return () => removeEventListener("hashchange", onHash);
   }, []);
 
   return (
     <EventsProvider>
-      <div className="min-h-screen bg-page text-ui text-ink">
-        <TopNav tab={tab} />
-        <main className="mx-auto min-w-0 max-w-[1280px] px-10 pt-8">
-          {tab === "accounts" && <AccountsTab />}
-          {tab === "cases" && <CasesTab />}
-          {tab === "town" && <TownTab />}
-          {tab === "evals" && <EvalsTab />}
-          {tab === "droid" && <DroidTab />}
-        </main>
-      </div>
+      <StatusProvider>
+        <div className="min-h-screen bg-page text-ui text-ink">
+          <TopNav tab={tab} />
+          <main className="mx-auto min-w-0 max-w-[1600px] px-4 pt-5 pb-24 sm:px-6 sm:pt-6 lg:px-8 lg:pb-12">
+            {tab === "overview" && <OverviewTab />}
+            {tab === "town" && <TownTab />}
+            {tab === "cases" && <CasesTab />}
+            {tab === "ledger" && <LedgerTab key={sub ?? ""} initial={sub} />}
+            {tab === "stormdesk" && <StormDeskTab key={sub ?? ""} initial={sub} />}
+          </main>
+        </div>
+      </StatusProvider>
     </EventsProvider>
   );
 }

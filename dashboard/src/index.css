@@ -1,51 +1,62 @@
 @import "tailwindcss";
 
-/* Design tokens (issue #93): the bank style of Alex's "Capital One" mockup. A
-   white page, deep navy headlines in a light weight, bank blue for links and the
-   one primary action, a soft blue tint, pill buttons, chips and segmented tabs,
-   and account rows with big balances. No logo or brand red. Sizes stay large for
-   judges about 1 m away (§18); secondary text is never lighter than #545969. */
+/* Design tokens: an operations command center. Deep navy page, a slightly lighter
+   surface for panels, off-white text. Three state colors and nothing else:
+   teal = verified / settled, amber = pending / offline, coral = conflict / frozen.
+   Light blue is only for links, selection and focus. Every text color here is at
+   least 4.5:1 on both the page and the surface. */
 @theme {
   --font-sans: "Nunito Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
 
-  --color-page: #ffffff;
-  --color-rule: #e5e5e5;
-  --color-ink: #2a2a2a;
-  --color-heading: #0b3b5c;
-  --color-secondary: #545969;
-  --color-nav: #545969;
-  --color-muted: #545969;
-  --color-accent: #0b5d8c;
-  --color-accent-tint: #e6f0f6;
+  --color-page: #101b2b;
+  --color-surface: #172638;
+  --color-raised: #1e3047;
+  --color-rule: #2a3c52;
+  --color-ink: #f7f9fb;
+  --color-heading: #f7f9fb;
+  --color-secondary: #a3b2c4;
+  --color-nav: #a3b2c4;
+  --color-muted: #a3b2c4;
+  --color-accent: #8cbcf0;
+  --color-accent-tint: #1f3550;
+  --color-on-light: #101b2b; /* text on an off-white button */
 
-  --color-success: #1e6b35;
-  --color-success-bg: #e3f4e8;
-  --color-danger: #b0261b;
-  --color-danger-bg: #fbe7e5;
-  --color-danger-tint: #fdf3f2; /* a conflicting row in a table */
-  --color-warning: #9a5300;
-  --color-warning-bg: #fff2de;
-  --color-neutral: #545969;
-  --color-neutral-bg: #eeeeee;
+  --color-success: #2ccbb8; /* teal text; marks use --color-teal */
+  --color-success-bg: #0f3438;
+  --color-teal: #13b8a6;
+  --color-danger: #f08a84; /* coral text; marks use --color-coral */
+  --color-danger-bg: #3b2230;
+  --color-danger-tint: #2a1d29; /* a conflicting row in a table */
+  --color-coral: #dc5b55;
+  --color-warning: #f0b45a;
+  --color-warning-bg: #372c1f;
+  --color-amber: #e8a23a;
+  --color-neutral: #c3cedb;
+  --color-neutral-bg: #23364c;
 
-  --text-eyebrow: 13px;
-  --text-eyebrow--line-height: 18px;
-  --text-eyebrow--letter-spacing: 0.06em;
+  --text-eyebrow: 12px;
+  --text-eyebrow--line-height: 16px;
+  --text-eyebrow--letter-spacing: 0.08em;
   --text-th: 13px;
   --text-th--line-height: 18px;
   --text-ui: 15px;
   --text-ui--line-height: 22px;
-  --text-section: 20px;
-  --text-section--line-height: 28px;
-  --text-title: 38px;
-  --text-title--line-height: 44px;
+  --text-section: 18px;
+  --text-section--line-height: 26px;
+  --text-title: 28px;
+  --text-title--line-height: 34px;
 
   --radius-pill: 999px;
-  --radius-button: 999px;
+  --radius-button: 8px;
 }
 
 :root {
-  color-scheme: light;
+  color-scheme: dark;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
@@ -53,4 +64,28 @@ body {
   background: var(--color-page);
   color: var(--color-ink);
   font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  overflow-x: hidden;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+input[type="checkbox"],
+input[type="range"] {
+  accent-color: var(--color-accent);
+}
+
+/* No decorative motion for anyone who asked for less. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

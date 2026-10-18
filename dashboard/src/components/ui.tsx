@@ -1,7 +1,9 @@
-// The dashboard's shared building blocks (issue #93), in the bank style of Alex's
-// "Capital One" mockup: a light navy headline, segmented pill tabs, sections (a
-// light heading over a rule), account-style rows and tables, chips and pill buttons.
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, TdHTMLAttributes, ThHTMLAttributes } from "react";
+// The dashboard's shared building blocks, in the command-center style: a navy
+// page, panels one step lighter, hairline rules, segmented tabs, state chips in
+// teal / amber / coral, tabular numerals and monospace ids. Built on #124's set,
+// re-themed; the names and props are unchanged so every tab keeps working.
+import { createContext, useContext, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode,
+  type TdHTMLAttributes, type ThHTMLAttributes } from "react";
 import { Icon, type IconName } from "./Icon";
 
 export type Tone = "success" | "danger" | "warning" | "neutral" | "agents";
@@ -22,24 +24,47 @@ export function Pill({ tone, title, children }: { tone: Tone; title?: string; ch
   );
 }
 
-/** A large title with a short grey subtitle on the same baseline, the tab's one-line takeaway, then its tabs. */
+/** "simulated" / "replayed" / "real": where a number comes from, always next to it (§0 honest copy). */
+export function Source({ kind }: { kind: "real" | "simulated" | "replayed" | "derived" }) {
+  const cls = {
+    real: "border-teal/60 text-success",
+    simulated: "border-rule text-secondary",
+    replayed: "border-amber/60 text-warning",
+    derived: "border-accent/50 text-accent",
+  }[kind];
+  return (
+    <span className={`inline-flex items-center whitespace-nowrap rounded border px-1.5 text-[11px] leading-[18px] font-semibold uppercase tracking-wide ${cls}`}>
+      {kind}
+    </span>
+  );
+}
+
+/** Inside a workspace (StormDesk's Droid and Evals views), a tab's header drops to a section heading. */
+export const Embedded = createContext(false);
+
+/** A title with a short grey subtitle, the tab's one-line takeaway, then its tabs. */
 export function PageHeader({ title, subtitle, takeaway, children }: {
   title: string;
   subtitle?: string;
   takeaway?: ReactNode;
   children?: ReactNode;
 }) {
+  const embedded = useContext(Embedded);
   return (
-    <header className="mb-8">
-      <h1 className="text-title font-light text-heading">{title}</h1>
-      {subtitle && <p className="mt-1.5 text-ui text-secondary">{subtitle}</p>}
-      {takeaway && <p className="mt-4 max-w-[90ch] text-[18px] leading-7 text-ink">{takeaway}</p>}
-      {children && <div className="mt-6">{children}</div>}
+    <header className={embedded ? "mb-6" : "mb-6 sm:mb-8"}>
+      {embedded ? (
+        <h2 className="text-section font-semibold text-heading">{title}</h2>
+      ) : (
+        <h1 className="text-[24px] leading-8 font-semibold text-heading sm:text-title">{title}</h1>
+      )}
+      {subtitle && <p className="mt-1 text-ui text-secondary">{subtitle}</p>}
+      {takeaway && <p className="mt-3 max-w-[90ch] text-[16px] leading-6 text-ink">{takeaway}</p>}
+      {children && <div className="mt-5">{children}</div>}
     </header>
   );
 }
 
-/** Segmented pill tabs; the selected one is filled navy. */
+/** Segmented tabs; the selected one is off-white on navy. ≥44px tall on touch screens. */
 export function Tabs<T extends string>({
   tabs,
   value,
@@ -50,15 +75,15 @@ export function Tabs<T extends string>({
   onChange: (id: T) => void;
 }) {
   return (
-    <div role="tablist" className="flex flex-wrap gap-2">
+    <div role="tablist" className="inline-flex max-w-full flex-wrap gap-1 rounded-[10px] border border-rule bg-surface p-1">
       {tabs.map((t) => (
         <button
           key={t.id}
           role="tab"
           aria-selected={value === t.id}
           onClick={() => onChange(t.id)}
-          className={`rounded-full px-4 py-1.5 text-ui ${
-            value === t.id ? "bg-heading font-semibold text-white" : "bg-neutral-bg text-secondary hover:bg-accent-tint hover:text-heading"
+          className={`min-h-9 rounded-[7px] px-3.5 text-ui pointer-coarse:min-h-11 ${
+            value === t.id ? "bg-ink font-semibold text-on-light" : "text-secondary hover:bg-raised hover:text-heading"
           }`}
         >
           {t.label}
@@ -68,15 +93,35 @@ export function Tabs<T extends string>({
   );
 }
 
-/** A light navy heading over a rule. */
+/** A heading over a rule. */
 export function Section({ title, right, children }: { title: string; right?: ReactNode; children: ReactNode }) {
   return (
-    <section>
+    <section className="min-w-0">
       <div className="flex flex-wrap items-end justify-between gap-3 border-b border-rule pb-2">
-        <h2 className="text-section font-light text-heading">{title}</h2>
+        <h2 className="text-section font-semibold text-heading">{title}</h2>
         {right}
       </div>
       <div className="mt-1">{children}</div>
+    </section>
+  );
+}
+
+/** A surface panel with an eyebrow title: for the few places where grouping needs a boundary. */
+export function Panel({ title, right, className = "", children }: {
+  title?: ReactNode;
+  right?: ReactNode;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className={`min-w-0 rounded-[10px] border border-rule bg-surface ${className}`}>
+      {(title || right) && (
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-rule px-4 py-2.5">
+          {title && <div className="text-eyebrow font-semibold uppercase text-secondary">{title}</div>}
+          {right}
+        </div>
+      )}
+      <div className="px-4 py-3">{children}</div>
     </section>
   );
 }
@@ -87,8 +132,9 @@ export function Eyebrow({ children }: { children: ReactNode }) {
 
 export function Table({ children }: { children: ReactNode }) {
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full border-collapse text-left text-ui">{children}</table>
+    <div className="max-w-full overflow-x-auto">
+      {/* Narrow screens: smaller type, tighter gutters, and long words wrap, so tables fit instead of scrolling. */}
+      <table className="w-full border-collapse text-left text-ui tabular-nums max-sm:text-th max-sm:[&_td]:pr-2.5 max-sm:[&_td]:break-words max-sm:[&_td]:whitespace-normal max-sm:[&_th]:pr-2.5">{children}</table>
     </div>
   );
 }
@@ -97,7 +143,7 @@ export function Th({ num, className = "", ...rest }: ThHTMLAttributes<HTMLTableC
   return (
     <th
       {...rest}
-      className={`border-b border-rule py-2.5 pr-6 text-th font-semibold text-secondary last:pr-0 ${num ? "text-right" : ""} ${className}`}
+      className={`border-b border-rule py-2.5 pr-5 text-th font-semibold text-secondary last:pr-0 ${num ? "text-right" : ""} ${className}`}
     />
   );
 }
@@ -112,7 +158,7 @@ export function Td({
   return (
     <td
       {...rest}
-      className={`py-3.5 pr-6 align-top last:pr-0 ${rule ? "border-b border-rule" : ""} ${
+      className={`py-3 pr-5 align-top last:pr-0 ${rule ? "border-b border-rule" : ""} ${
         num ? "whitespace-nowrap text-right tabular-nums" : ""
       } ${className}`}
     />
@@ -147,21 +193,21 @@ export function Button({
   return (
     <button
       {...rest}
-      className={`whitespace-nowrap rounded-button border-[1.5px] border-accent font-semibold disabled:opacity-50 ${
-        small ? "px-3 py-1 text-th" : "px-[18px] py-2 text-ui"
-      } ${primary ? "bg-accent text-white hover:bg-accent/90" : "bg-page text-accent hover:bg-accent-tint"} ${className}`}
+      className={`whitespace-nowrap rounded-button border font-semibold disabled:opacity-50 pointer-coarse:min-h-11 ${
+        small ? "min-h-8 px-3 text-th" : "min-h-10 px-4 text-ui"
+      } ${primary ? "border-ink bg-ink text-on-light hover:bg-ink/90" : "border-rule bg-surface text-heading hover:bg-raised"} ${className}`}
     />
   );
 }
 
-/** Facts in a row: a small label over a navy value; `big` for the few numbers a judge should read first. */
+/** Facts in a row: a small label over a value; `big` for the few numbers to read first. */
 export function Strip({ items, big = false }: { items: { label: string; value: ReactNode; sub?: ReactNode }[]; big?: boolean }) {
   return (
-    <div className="flex flex-wrap gap-x-12 gap-y-4 py-1">
+    <div className="flex flex-wrap gap-x-10 gap-y-4 py-1">
       {items.map((it) => (
         <div key={it.label} className="min-w-0">
           <div className="text-th text-secondary">{it.label}</div>
-          <div className={big ? "text-[30px] leading-10 font-light text-heading" : "text-[18px] leading-7 font-semibold text-heading"}>
+          <div className={big ? "text-[28px] leading-9 font-semibold text-heading tabular-nums" : "text-[17px] leading-7 font-semibold text-heading tabular-nums"}>
             {it.value}
           </div>
           {it.sub && <div className="text-th text-secondary">{it.sub}</div>}
@@ -176,7 +222,7 @@ export function Facts({ rows }: { rows: [string, ReactNode][] }) {
   return (
     <dl>
       {rows.map(([label, value]) => (
-        <div key={label} className="grid grid-cols-[minmax(8rem,auto)_1fr] gap-6 border-b border-rule py-2.5">
+        <div key={label} className="grid grid-cols-1 gap-x-6 gap-y-0.5 border-b border-rule py-2.5 sm:grid-cols-[minmax(8rem,auto)_1fr]">
           <dt className="text-secondary">{label}</dt>
           <dd className="min-w-0 break-words">{value}</dd>
         </div>
@@ -190,10 +236,53 @@ export function TextInput(props: InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
       {...props}
-      className={`rounded-full border-[1.5px] border-rule px-4 py-1.5 text-ui text-ink placeholder:text-secondary focus:border-accent focus:outline-none ${
+      className={`min-h-10 rounded-button border border-rule bg-surface px-3 text-ui text-ink placeholder:text-secondary focus:border-accent focus:outline-none pointer-coarse:min-h-11 ${
         props.className ?? ""
       }`}
     />
+  );
+}
+
+/** A select in the house style. */
+export function Select({ value, onChange, options, label }: {
+  value: string;
+  onChange: (v: string) => void;
+  options: readonly { id: string; label: string }[];
+  label: string;
+}) {
+  return (
+    <label className="flex min-w-0 items-center gap-2 text-th text-secondary">
+      <span className="whitespace-nowrap">{label}</span>
+      <select value={value} onChange={(e) => onChange(e.target.value)}
+        className="min-h-10 min-w-0 rounded-button border border-rule bg-surface px-2 text-ui text-ink focus:border-accent focus:outline-none pointer-coarse:min-h-11">
+        {options.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+      </select>
+    </label>
+  );
+}
+
+/** A long id, truncated, in monospace; press to copy the whole thing. */
+export function CopyId({ value, chars = 10, className = "" }: { value: string | null | undefined; chars?: number; className?: string }) {
+  const [copied, setCopied] = useState(false);
+  if (!value) return <span className="text-secondary">—</span>;
+  const shown = value.length > chars + 1 ? `${value.slice(0, chars)}…` : value;
+  return (
+    <button
+      type="button"
+      title={`${value}\n(click to copy)`}
+      aria-label={`Copy ${value}`}
+      onClick={(e) => {
+        e.stopPropagation();
+        navigator.clipboard?.writeText(value).then(() => {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1200);
+        }).catch(() => undefined);
+      }}
+      className={`inline-flex max-w-full items-center gap-1 rounded px-1 -mx-1 font-mono text-th text-ink hover:bg-raised pointer-coarse:min-h-11 ${className}`}
+    >
+      <span className="truncate">{shown}</span>
+      <span className="text-[11px] font-sans text-secondary">{copied ? "copied" : ""}</span>
+    </button>
   );
 }
 

@@ -49,7 +49,7 @@ function MetricsTable({ run }: { run: AuthorRun }) {
           <Th>Detector</Th>
           <Th num>Precision</Th>
           <Th num>Recall</Th>
-          <Th num>TP / FP / FN / TN</Th>
+          <Th num className="max-sm:hidden">TP / FP / FN / TN</Th>
         </tr>
       </thead>
       <tbody>
@@ -60,17 +60,17 @@ function MetricsTable({ run }: { run: AuthorRun }) {
           return [
             <tr key={`${split}-p`}>
               <Td rule={false} className="text-ink">{label}</Td>
-              <Td rule={false} className="font-mono text-th font-medium text-heading">{name}</Td>
+              <Td rule={false} className="break-all font-mono text-th font-medium text-heading">{name}</Td>
               <Td rule={false} num className="font-medium text-heading">{num(m.proposed.precision)}</Td>
               <Td rule={false} num className="font-medium text-heading">{num(m.proposed.recall)}</Td>
-              <Td rule={false} num>{counts(m.proposed)}</Td>
+              <Td rule={false} num className="max-sm:hidden">{counts(m.proposed)}</Td>
             </tr>,
             <tr key={`${split}-r`} className="text-secondary">
               <Td />
               <Td>rules only</Td>
               <Td num>{num(m.rules_only.precision)}</Td>
               <Td num>{num(m.rules_only.recall)}</Td>
-              <Td num>{counts(m.rules_only)}</Td>
+              <Td num className="max-sm:hidden">{counts(m.rules_only)}</Td>
             </tr>,
           ];
         })}
@@ -152,7 +152,7 @@ function ResultCard({ run }: { run: AuthorRun }) {
           {Object.entries(t.verified.files).map(([path, text]) => (
             <div key={path} className="mt-2">
               <div className="font-mono text-th text-secondary">{path}</div>
-              <pre className="mt-1 max-h-80 overflow-auto border-y border-rule py-2 text-th text-ink">{text}</pre>
+              <pre className="mt-1 max-h-80 overflow-auto whitespace-pre-wrap break-words border-y border-rule py-2 text-th text-ink">{text}</pre>
             </div>
           ))}
         </details>

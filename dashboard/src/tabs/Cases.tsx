@@ -8,14 +8,13 @@ import { getJSON, type CaseDetail, type CaseSummary, type Health, type RelayPath
 import { caseTitle, casesTakeaway } from "../cases";
 import { RULE_TEXT, TagTable, useVerify, VerifyResult } from "../components/Evidence";
 import { OwnerFreezes } from "../components/OwnerFreeze";
-import { CaseStormDesk, FlagsView } from "../components/StormDesk";
-import { Button, Facts, Note, PageHeader, Pill, Section, Strip, Tabs } from "../components/ui";
+import { CaseStormDesk } from "../components/StormDesk";
+import { Button, CopyId, Facts, Note, PageHeader, Pill, Section, Source, Strip, Tabs } from "../components/ui";
 import { useEvents } from "../events";
 import { clockTime, dollars } from "../format";
 
 const VIEWS = [
   { id: "cases", label: "Proven fraud" },
-  { id: "flags", label: "Review queue" },
   { id: "freezes", label: "Owner freezes" },
 ] as const;
 type CasesView = (typeof VIEWS)[number]["id"];
@@ -133,91 +132,122 @@ function CaseView({ row, paths }: { row: CaseSummary; paths: Map<string, RelayPa
   const events = timeline(c, cert, pa, pb);
 
   return (
-    <div className="min-w-0 space-y-10">
-      <div className="space-y-4">
-        <div>
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-            <h2 className="text-title font-light text-heading">
-              {amount !== undefined && RULE_VERB[c.rule] ? (
-                <><span className="tabular-nums">{dollars(amount)}</span> {RULE_VERB[c.rule]}</>
-              ) : text.title}
-            </h2>
-            <Pill tone="danger">{detectedText(c)}</Pill>
-            {row.simulated && <Pill tone="neutral">simulated</Pill>}
-          </div>
-          <p className="mt-1.5 text-secondary">
-            Case #{c.case_id} · {text.title} · proven by signed records, not a score
-          </p>
-          <p className="mt-3 max-w-[80ch] text-ink">{text.why}</p>
-          {canVerify && (
-            <div className="mt-5 flex flex-wrap gap-2.5">
-              <Button primary disabled={busy} onClick={verify}>
-                {busy ? "Verifying…" : "Verify it yourself"}
-              </Button>
-              <Button onClick={() => setShowQR((v) => !v)}>{showQR ? "Hide Proof QR" : "Proof QR"}</Button>
-            </div>
-          )}
+    <div className="min-w-0 space-y-8">
+      <header>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <h2 className="text-[22px] leading-8 font-semibold text-heading sm:text-title">
+            {amount !== undefined && RULE_VERB[c.rule] ? (
+              <><span className="tabular-nums">{dollars(amount)}</span> {RULE_VERB[c.rule]}</>
+            ) : text.title}
+          </h2>
+          <Pill tone="danger">{detectedText(c)}</Pill>
+          <Source kind={row.simulated ? "simulated" : "real"} />
         </div>
+        <p className="mt-1 text-secondary">Case #{c.case_id} · {text.title} · opened {clockTime(c.created_at)}</p>
         <Strip
           items={[
             { label: "Rule", value: text.title },
             { label: "Detected", value: c.detected_where === "offline" ? `Offline${refusedAt ? `, ${refusedAt.merchant}` : ""}` : "At settlement" },
-            { label: "Exposure", value: <span className="tabular-nums">{dollars(c.exposure_cents)}</span> },
+            { label: "Exposure", value: dollars(c.exposure_cents), sub: "the guarantee pool stands behind it" },
             ...(cert ? [{ label: "Wallet limit", value: dollars(Number(cert.fields.cap_cents)) }] : []),
           ]}
         />
-        {showQR && <ProofQR caseId={c.case_id} />}
-        <VerifyResult checks={checks} error={error} />
+      </header>
+
+      <div className="grid gap-6 2xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+        {/* Left: the proof. Signed records and the checks anyone can re-run. No model involved. */}
+        <section aria-labelledby="proof-h" className="min-w-0 rounded-[10px] border border-teal/40 bg-surface">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-rule px-4 py-2.5">
+            <h3 id="proof-h" className="flex items-center gap-2 text-ui font-semibold text-heading">
+              <span className="rounded border border-teal/60 px-1.5 text-[11px] leading-[18px] font-semibold uppercase tracking-wide text-success">Cryptographic proof</span>
+              Signed by the wallet, certified by the bank's server
+            </h3>
+          </div>
+          <div className="space-y-4 px-4 py-4">
+            <p className="max-w-[80ch] text-ink">{text.why}</p>
+            {a && (
+              <TagTable
+                rule={c.rule === "MERCHANT_KNEW" ? "" : c.rule}
+                a={a}
+                b={b}
+                titleA={b ? `Payment A${shopA ? ` · ${shopA}` : ""}` : "Settled payment"}
+                titleB={`Payment B${shopB ? ` · ${shopB}` : ""}`}
+                checks={checks}
+              />
+            )}
+            {canVerify && (
+              <div className="flex flex-wrap items-center gap-2.5">
+                <Button primary disabled={busy} onClick={verify}>
+                  {busy ? "Verifying…" : checks ? "Verify again" : "Verify it yourself"}
+                </Button>
+                <Button onClick={() => setShowQR((v) => !v)} aria-expanded={showQR}>{showQR ? "Hide Proof QR" : "Proof QR"}</Button>
+                <span className="text-th text-secondary">Runs in this browser with WebCrypto. Nothing is sent anywhere.</span>
+              </div>
+            )}
+            {showQR && <ProofQR caseId={c.case_id} />}
+            <VerifyResult checks={checks} error={error} />
+            {accept && (
+              <div>
+                <h4 className="border-b border-rule pb-1.5 font-semibold text-heading">The merchant's own signed log</h4>
+                <p className="py-2 text-ink">ACCEPT entry #{String(accept.fields.seq)} for payment B lists what the shop already held:</p>
+                <ul className="border-t border-rule">
+                  {(accept.fields.held_ids as string[]).map((h) => {
+                    const isA = h === a?.digest;
+                    return (
+                      <li key={h} className={`flex justify-between gap-4 border-b border-rule px-3 py-2 font-mono text-th ${
+                        isA ? "bg-danger-tint font-semibold text-danger" : "text-secondary"}`}>
+                        <span className="truncate">{h.slice(0, 24)}…</span>
+                        {isA && <span className="font-sans">payment A</span>}
+                      </li>
+                    );
+                  })}
+                </ul>
+                <p className="truncate py-2 font-mono text-th text-secondary">signature {String(accept.json.sig).slice(0, 32)}…</p>
+              </div>
+            )}
+            {c.rule === "LOG_TAMPER" && (
+              <div>
+                <h4 className="border-b border-rule pb-1.5 font-semibold text-heading">{`${String(c.evidence.kind)} at entry #${String(c.evidence.seq)}`}</h4>
+                <ul>
+                  {detail.log_entries.map((e) => (
+                    <li key={e.digest} className="border-b border-rule py-2 font-mono text-th text-ink">
+                      #{String(e.fields.seq)} {String(e.fields.kind)} entry {e.digest.slice(0, 16)}… after{" "}
+                      {String(e.fields.prev_hash).slice(0, 16)}…
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* Right: what the agent made of it. Advisory; the proof stands without it. */}
+        <section aria-labelledby="ai-h" className="min-w-0 self-start rounded-[10px] border border-dashed border-accent/40">
+          <div className="border-b border-rule px-4 py-2.5">
+            <h3 id="ai-h" className="flex flex-wrap items-center gap-2 text-ui font-semibold text-heading">
+              <span className="rounded border border-accent/50 px-1.5 text-[11px] leading-[18px] font-semibold uppercase tracking-wide text-accent">AI interpretation</span>
+              StormDesk's reading
+            </h3>
+            <p className="mt-1 text-th text-secondary">
+              Advisory only. It can't change the proof, move money or close the case; anything it proposes waits for a person.
+            </p>
+          </div>
+          <div className="space-y-6 px-4 py-3">
+            <CaseStormDesk caseId={c.case_id} onFiled={reload} />
+            <div ref={caseFile}>
+              <Section title="Case file">
+                {c.case_file_md ? (
+                  <p className="max-w-[90ch] whitespace-pre-wrap py-2.5 text-ink">{c.case_file_md}</p>
+                ) : (
+                  <p className="py-2.5 text-secondary">No case file yet.</p>
+                )}
+              </Section>
+            </div>
+          </div>
+        </section>
       </div>
 
-      {a && (
-        <Section title="Conflicting signatures">
-          <TagTable
-            rule={c.rule === "MERCHANT_KNEW" ? "" : c.rule}
-            a={a}
-            b={b}
-            titleA={b ? `Payment A${shopA ? ` · ${shopA}` : ""}` : "Settled payment"}
-            titleB={`Payment B${shopB ? ` · ${shopB}` : ""}`}
-            checks={checks}
-          />
-        </Section>
-      )}
-
-      {accept && (
-        <Section title="The merchant's own signed log">
-          <p className="py-2.5 text-ink">
-            ACCEPT entry #{String(accept.fields.seq)} for payment B lists what the shop already held:
-          </p>
-          <ul className="border-t border-rule">
-            {(accept.fields.held_ids as string[]).map((h) => {
-              const isA = h === a?.digest;
-              return (
-                <li key={h} className={`flex justify-between gap-4 border-b border-rule px-3 py-2 font-mono text-th ${
-                  isA ? "bg-danger-tint font-semibold text-danger" : "text-secondary"}`}>
-                  <span className="truncate">{h.slice(0, 24)}…</span>
-                  {isA && <span className="font-sans">payment A</span>}
-                </li>
-              );
-            })}
-          </ul>
-          <p className="truncate py-2 font-mono text-th text-secondary">signature {String(accept.json.sig).slice(0, 32)}…</p>
-        </Section>
-      )}
-
-      {c.rule === "LOG_TAMPER" && (
-        <Section title={`${String(c.evidence.kind)} at entry #${String(c.evidence.seq)}`}>
-          <ul>
-            {detail.log_entries.map((e) => (
-              <li key={e.digest} className="border-b border-rule py-2 font-mono text-th text-ink">
-                #{String(e.fields.seq)} {String(e.fields.kind)} entry {e.digest.slice(0, 16)}… after{" "}
-                {String(e.fields.prev_hash).slice(0, 16)}…
-              </li>
-            ))}
-          </ul>
-        </Section>
-      )}
-
-      <div className="grid gap-10 lg:grid-cols-2">
+      <div className="grid gap-8 xl:grid-cols-2">
         <Section title="Timeline">
           <ol>
             {events.map(([t, what], i) => (
@@ -230,40 +260,21 @@ function CaseView({ row, paths }: { row: CaseSummary; paths: Map<string, RelayPa
         </Section>
         <Section title="Payment details">
           <Facts
-            rows={[
-              ...([["Payment A", row.payment_a], ["Payment B", row.payment_b]] as const)
-                .filter(([, p]) => p)
-                .map(([label, p]) => [label, `${dollars(p!.amount_cents)} at ${p!.merchant ?? "a shop"}, ${
-                  PAYMENT_STATUS[p!.status ?? ""] ?? p!.status ?? "not paid"}`] as [string, string]),
-              ["Case file", (
-                <button onClick={() => caseFile.current?.scrollIntoView({ behavior: "smooth" })} className="text-accent hover:underline">
-                  StormDesk report
-                </button>
-              )],
-            ]}
+            rows={([["Payment A", row.payment_a], ["Payment B", row.payment_b]] as const)
+              .filter(([, p]) => p)
+              .map(([label, p]) => [label, `${dollars(p!.amount_cents)} at ${p!.merchant ?? "a shop"}, ${
+                PAYMENT_STATUS[p!.status ?? ""] ?? p!.status ?? "not paid"}`] as [string, string])}
           />
           {(cert || c.cert_id) && (
-            <details className="mt-3">
-              <summary className="cursor-pointer py-1 text-accent">Technical details</summary>
+            <details className="mt-2">
+              <summary className="cursor-pointer py-2 text-accent">Technical details</summary>
               <Facts rows={[
-                ...(cert ? [["Escrow account", <span className="font-mono text-th">{String(cert.fields.escrow_ref)}</span>] as [string, ReactNode]] : []),
+                ...(cert ? [["Escrow account", <CopyId value={String(cert.fields.escrow_ref)} chars={14} />] as [string, ReactNode]] : []),
                 ...(cert ? [["Certificate version", String(cert.fields.cert_ver)] as [string, ReactNode]] : []),
-                ...(c.cert_id ? [["Certificate id", <span className="font-mono text-th">{c.cert_id}</span>] as [string, ReactNode]] : []),
+                ...(c.cert_id ? [["Certificate id", <CopyId value={c.cert_id} chars={14} />] as [string, ReactNode]] : []),
                 ...(rulesFired.length ? [["Rules fired", <span className="font-mono text-th">{rulesFired.join(", ")}</span>] as [string, ReactNode]] : []),
               ]} />
             </details>
-          )}
-        </Section>
-      </div>
-
-      <CaseStormDesk caseId={c.case_id} onFiled={reload} />
-
-      <div ref={caseFile}>
-        <Section title="Case file (StormDesk)">
-          {c.case_file_md ? (
-            <p className="max-w-[90ch] whitespace-pre-wrap py-2.5 text-ink">{c.case_file_md}</p>
-          ) : (
-            <p className="py-2.5 text-secondary">No case file yet.</p>
           )}
         </Section>
       </div>
@@ -275,13 +286,13 @@ function CaseButton({ c, on, onPick }: { c: CaseSummary; on: boolean; onPick: ()
   return (
     <li>
       <button onClick={onPick} aria-current={on ? "true" : undefined}
-        className={`w-full border-b border-rule px-3 py-2.5 text-left ${on ? "bg-accent-tint" : "hover:bg-accent-tint/50"}`}>
+        className={`min-h-11 w-full border-b border-l-2 border-b-rule px-3 py-2.5 text-left ${on ? "border-l-accent bg-accent-tint" : "border-l-transparent hover:bg-surface"}`}>
         <div className={`font-medium ${on ? "text-accent" : "text-heading"}`}>{caseTitle(c)}</div>
         <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-th text-secondary">
           <span>{clockTime(c.created_at)}</span>
           <span>· {c.detected_where === "offline" ? "found offline" : "at settlement"}</span>
           <span>· #{c.case_id}</span>
-          {c.simulated && <Pill tone="neutral">simulated</Pill>}
+          <Source kind={c.simulated ? "simulated" : "real"} />
         </div>
       </button>
     </li>
@@ -300,8 +311,8 @@ function HardCases({ cases, paths }: { cases: CaseSummary[] | null; paths: Map<s
   const open = townOpen ?? real.length === 0; // with nothing from the phones, show the town's cases
   const current = cases.find((c) => c.case_id === selected) ?? real[0] ?? town[0];
   return (
-    <div className="grid gap-10 lg:grid-cols-[20rem_minmax(0,1fr)]">
-      <div className="max-h-[calc(100vh-12rem)] self-start overflow-y-auto lg:sticky lg:top-6">
+    <div className="grid gap-8 lg:grid-cols-[18rem_minmax(0,1fr)] xl:grid-cols-[20rem_minmax(0,1fr)]">
+      <div className="max-h-[40vh] self-start overflow-y-auto rounded-[10px] border border-rule bg-surface/50 p-2 lg:sticky lg:top-20 lg:max-h-[calc(100vh-7rem)] lg:border-0 lg:bg-transparent lg:p-0">
         <div className="border-b border-rule pb-1.5 text-eyebrow font-semibold uppercase text-secondary">Your phones</div>
         {real.length === 0 ? (
           <p className="border-b border-rule px-3 py-2.5 text-secondary">No proven cases from your phones yet.</p>
@@ -334,7 +345,7 @@ export function CasesTab() {
   const [view, setView] = useState<CasesView>(() => {
     try {
       const saved = localStorage.getItem("sc-cases-view");
-      return saved === "flags" || saved === "freezes" ? saved : "cases";
+      return saved === "freezes" ? saved : "cases";
     } catch {
       return "cases";
     }
@@ -360,11 +371,11 @@ export function CasesTab() {
   };
   return (
     <div className="pb-12">
-      <PageHeader title="Cases" subtitle="Proven fraud and the agent's review queue"
+      <PageHeader title="Cases" subtitle="Double spends proven by signed records, and wallets their owners froze"
         takeaway={cases ? casesTakeaway(cases) : undefined}>
         <Tabs tabs={VIEWS} value={view} onChange={pick} />
       </PageHeader>
-      {view === "cases" ? <HardCases cases={cases} paths={paths} /> : view === "flags" ? <FlagsView /> : <OwnerFreezes />}
+      {view === "cases" ? <HardCases cases={cases} paths={paths} /> : <OwnerFreezes />}
     </div>
   );
 }

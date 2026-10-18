@@ -82,7 +82,7 @@ export function ProofPage({ caseId }: { caseId: number }) {
     <main className="mx-auto max-w-xl space-y-8 px-4 py-6">
       <header>
         <Eyebrow>Case #{proof.case_id}</Eyebrow>
-        <h1 className="mt-1 text-[28px] leading-tight font-light text-heading">{text.title}</h1>
+        <h1 className="mt-1 text-[28px] leading-tight font-semibold text-heading">{text.title}</h1>
         <p className="mt-2 text-ink">{text.why}</p>
       </header>
 

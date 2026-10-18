@@ -1,6 +1,14 @@
 # dashboard/
 
-React + Vite + TypeScript + Tailwind dashboard (WS3, reviewer B): Accounts, Cases, Town, Evals and Droid tabs, plus the public `/proof/:caseId` page.
+React + Vite + TypeScript + Tailwind dashboard (WS3, reviewer B): an operations command center in five workspaces, plus the public `/proof/:caseId` page.
+
+- **Overview** (`#overview`): the mode (Storm / Normal, derived from Nessie's own escrow top-ups and refunds, since no GET reports it), connectivity, ledger and reconciliation status, weather, and where the money is, state by state, for the real phones (Nessie) and the simulated town (ledger only) side by side, never summed.
+- **Network** (`#town`): the seeded town and the real shops as a network of shops linked by relay paths. Select a shop or an area for its panel (a bottom sheet below 1024 px). What-if sliders and the relay table are still there.
+- **Cases** (`#cases`): the cryptographic proof (shared certificate, conflicting counter or link, both signatures, Verify it yourself, Proof QR) kept apart from StormDesk's AI reading of it. Owner freezes.
+- **Ledger** (`#ledger`): the transaction explorer (filters, copyable tag ids), and #124's Balances, Reconciliation and Nessie log.
+- **StormDesk** (`#stormdesk`): detection → case → agent → reviewer → human decision → audit with real counts, then the review queue (the human decision block), agent runs with cost and latency, and evals.
+
+#124's hashes (`#accounts`, `#droid`, `#evals`) still land in the right place. The design tokens are in `src/index.css`: navy page, teal = verified / settled, amber = pending / offline, coral = conflict / frozen. Anything simulated or replayed carries a label.
 
 - **Spec:** §18
 - **Done when:** the full core demo runs with only dashboard clicks + phones, and every tab survives a page reload.
