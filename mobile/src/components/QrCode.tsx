@@ -2,9 +2,9 @@
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 
-export function QrCode({ value }: { value: string }) {
+export function QrCode({ value, size: fixed }: { value: string; size?: number }) {
   const { width } = useWindowDimensions();
-  const size = Math.min(width - 40 - 32, 380);
+  const size = fixed ?? Math.min(width - 40 - 32, 380);
   return (
     <View style={styles.sheet}>
       <QRCode value={value} size={size} ecl="L" quietZone={0} color="#1F2328" backgroundColor="#FFFFFF" />

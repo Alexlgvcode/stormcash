@@ -32,9 +32,9 @@ export type ThemePref = 'system' | 'dark' | 'light';
 export function themePref(): ThemePref {
   try {
     const v = getSetting('theme');
-    return v === 'dark' || v === 'light' ? v : 'system';
+    return v === 'dark' || v === 'system' ? v : 'light'; // light unless the demo menu says otherwise
   } catch {
-    return 'system';
+    return 'light';
   }
 }
 export const isDark = themePref() === 'dark' || (themePref() === 'system' && Appearance.getColorScheme() === 'dark');
@@ -43,8 +43,8 @@ const light = {
   // The receipt book: cool paper, the canary duplicate sheet, carbon ink, graphite, rubber stamps.
   bg: '#F7F8F6', // paper
   card: '#FFFFFF', // a clean sheet
-  sheet: '#FFE873', // the canary duplicate copy
-  sheetEdge: '#E9CF4E',
+  sheet: '#FFF2B3', // the canary duplicate copy
+  sheetEdge: '#EBD983',
   well: '#ECEEEB', // pressed paper: secondary buttons, keys, chips
   ink: '#1F2328', // graphite: text
   text: '#1F2328',
@@ -52,9 +52,9 @@ const light = {
   muted: '#646B75', // pencil: secondary notes
   faint: '#9AA0A8',
   line: '#D9DCE1', // ruled form lines (form fields only)
-  primary: '#1F2328',
+  primary: '#2E3A52',
   onPrimary: '#FFFFFF',
-  primarySoft: '#E6E8EB',
+  primarySoft: '#E8EBF2',
   green: '#1F7A47', // the VERIFIED stamp
   greenSoft: '#E3F1E8',
   red: '#C3321F', // the REFUSED stamp

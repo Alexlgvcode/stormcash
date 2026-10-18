@@ -13,7 +13,7 @@ import type { CheckResult, Pay, ReasonToken } from '../protocol';
 const RULE_COPY: Record<string, string> = {
   SAME_COUNTER: 'same counter', BROKEN_LINK: 'broken link', TOTAL_BACKWARDS: 'total went backwards',
 };
-function refusalCopy(reason: ReasonToken, rule: string | null): string {
+export function refusalCopy(reason: ReasonToken, rule: string | null): string {
   switch (reason) {
     case 'BAD_CERT_SIG': return 'Certificate not issued by StormCash';
     case 'EXPIRED': return 'Certificate expired';

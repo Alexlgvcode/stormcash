@@ -7,6 +7,7 @@ export type Route =
   | { name: 'home' }
   | { name: 'pay' }
   | { name: 'charge' }
+  | { name: 'register' } // the shop's sales summary (iPad's home is Checkout)
   | { name: 'result'; result: CheckResult; pay: Pay | null; capCents: number }
   | { name: 'records' }
   | { name: 'qrsync' }
