@@ -80,7 +80,7 @@ export function WalletScreen() {
           <MoneyRow label="Left to spend" value={wholeDollars(left)} strong />
         </View>
       </Group>
-      <Muted>A payment counts the moment you sign it. Capital One pays the shop when its records reach the bank. A payment no shop received is never charged.</Muted>
+      <Muted>Counts when you sign. Charged only once the shop's record reaches the bank.</Muted>
     </View>
   );
 

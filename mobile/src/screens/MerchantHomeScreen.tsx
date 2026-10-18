@@ -36,13 +36,13 @@ export function MerchantHomeScreen() {
         <View style={{ paddingHorizontal: 18, paddingVertical: 4 }}>
           <MoneyRow
             label="Accepted offline"
-            note={`${acceptedCount} ${acceptedCount === 1 ? 'payment' : 'payments'} checked on this phone`}
+            note={`${acceptedCount} ${acceptedCount === 1 ? 'payment' : 'payments'}`}
             value={wholeDollars(totals.acceptedCents)}
             strong
           />
-          <MoneyRow label="Received by the bank server" note="Uploaded; Capital One pays from the customer's escrow" value={wholeDollars(totals.uploadedCents)} tone="green" />
-          <MoneyRow label="Waiting to upload" note="Goes with the next phone that finds a signal" value={wholeDollars(totals.waitingCents)} tone={totals.waitingCents ? 'amber' : undefined} />
-          {totals.refused ? <MoneyRow label="Refused" note="Not accepted; evidence kept" value={String(totals.refused)} tone="red" /> : null}
+          <MoneyRow label="Received by the bank server" note="Uploaded for settlement" value={wholeDollars(totals.uploadedCents)} tone="green" />
+          <MoneyRow label="Waiting to upload" note="Uploads when a phone finds signal" value={wholeDollars(totals.waitingCents)} tone={totals.waitingCents ? 'amber' : undefined} />
+          {totals.refused ? <MoneyRow label="Refused" note="Evidence kept" value={String(totals.refused)} tone="red" /> : null}
         </View>
       </Group>
     </View>

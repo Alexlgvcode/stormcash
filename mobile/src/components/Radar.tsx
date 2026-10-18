@@ -1,4 +1,5 @@
-// Dark mode's backdrop: a faint storm radar sweeping behind the screen. Decorative only:
+// Dark mode's backdrop: a faint storm radar sweeping behind the screen (rings and a sweep only:
+// no blips, since it shows no real devices). Decorative only:
 // no touches, hidden from VoiceOver, and still when the user asks for reduced motion.
 import { useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Animated, Easing, StyleSheet, useWindowDimensions, View } from 'react-native';
@@ -8,7 +9,6 @@ import { colors } from './ui';
 const SWEEP_MS = 6000; // one turn
 const SLICES = 14; // the fading tail behind the sweep line, 4° each
 const SLICE_DEG = 4;
-const BLIPS: [number, number][] = [[0.32, -0.18], [-0.22, 0.27], [0.12, 0.41]]; // fractions of the radius
 
 const rad = (deg: number) => ((deg - 90) * Math.PI) / 180; // 0° points up
 
@@ -52,13 +52,10 @@ export function Radar() {
     >
       <Svg width={size} height={size}>
         {[0.25, 0.5, 0.75, 1].map((f) => (
-          <Circle key={f} cx={r} cy={r} r={r * f - 1} stroke={c} strokeOpacity={0.14} strokeWidth={1} fill="none" />
+          <Circle key={f} cx={r} cy={r} r={r * f - 1} stroke={c} strokeOpacity={0.09} strokeWidth={1} fill="none" />
         ))}
-        <Line x1={r} y1={0} x2={r} y2={size} stroke={c} strokeOpacity={0.08} strokeWidth={1} />
-        <Line x1={0} y1={r} x2={size} y2={r} stroke={c} strokeOpacity={0.08} strokeWidth={1} />
-        {BLIPS.map(([x, y]) => (
-          <Circle key={`${x},${y}`} cx={r + x * r} cy={r + y * r} r={4} fill={c} fillOpacity={0.35} />
-        ))}
+        <Line x1={r} y1={0} x2={r} y2={size} stroke={c} strokeOpacity={0.05} strokeWidth={1} />
+        <Line x1={0} y1={r} x2={size} y2={r} stroke={c} strokeOpacity={0.05} strokeWidth={1} />
       </Svg>
       <Animated.View style={[StyleSheet.absoluteFill, { transform: [{ rotate }] }]}>
         <Svg width={size} height={size}>
@@ -67,10 +64,10 @@ export function Radar() {
               key={i}
               d={wedge(r, -(i + 1) * SLICE_DEG, -i * SLICE_DEG)}
               fill={c}
-              fillOpacity={0.16 * (1 - i / SLICES)}
+              fillOpacity={0.09 * (1 - i / SLICES)}
             />
           ))}
-          <Line x1={r} y1={r} x2={r} y2={0} stroke={c} strokeOpacity={0.45} strokeWidth={1.5} />
+          <Line x1={r} y1={r} x2={r} y2={0} stroke={c} strokeOpacity={0.25} strokeWidth={1} />
         </Svg>
       </Animated.View>
     </View>
