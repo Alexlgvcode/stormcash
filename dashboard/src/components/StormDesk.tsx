@@ -421,20 +421,7 @@ function FlagView({ flagId, onChanged }: { flagId: number; onChanged: () => void
               <Pill tone="agents">Agents disagree · a person decides</Pill>
             </span>
           )}
-          <div className="ml-auto flex items-center gap-2">
-            {actionable ? (
-              <>
-                <Button disabled={busy} onClick={() => decide("reject")}>
-                  Reject
-                </Button>
-                <Button primary disabled={busy} onClick={() => decide("approve")}>
-                  Approve
-                </Button>
-              </>
-            ) : (
-              <Pill tone={status.tone}>{status.text}</Pill>
-            )}
-          </div>
+          {!actionable && <span className="ml-auto"><Pill tone={status.tone}>{status.text}</Pill></span>}
         </div>
         <p className="mt-3 max-w-[80ch] text-ink">
           {flag.subject_name ?? flag.subject_id}: {flag.summary}
@@ -444,11 +431,32 @@ function FlagView({ flagId, onChanged }: { flagId: number; onChanged: () => void
           {flag.exposure_cents > 0 && ` · Exposure ${dollars(flag.exposure_cents)}`}
         </p>
         {actionable ? (
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            <span className="text-secondary">Signed by</span>
-            <TextInput value={operator} onChange={(e) => setOperator(e.target.value)} placeholder="Operator name" />
-            <TextInput value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (optional)" className="min-w-64" />
-          </div>
+          <section aria-labelledby={`decide-${flag.flag_id}`} className="mt-5 rounded-[10px] border-2 border-ink/80 bg-surface">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-rule px-4 py-2.5">
+              <h3 id={`decide-${flag.flag_id}`} className="flex items-center gap-2 font-semibold text-heading">
+                <span className="rounded border border-ink/70 px-1.5 text-[11px] leading-[18px] font-semibold uppercase tracking-wide">Human decision</span>
+                Nothing runs until a person approves
+              </h3>
+              <span className="text-th text-secondary">StormDesk proposed it; the reviewer can't act</span>
+            </div>
+            <div className="space-y-3 px-4 py-3">
+              <p className="text-ink">
+                Approve runs exactly this, and nothing else:{" "}
+                <span className="font-semibold text-heading">{ACTION_TITLE[flag.proposed_action] ?? flag.proposed_action}</span>
+                {" "}on {flag.subject_name ?? flag.subject_id}. Reject runs nothing. Either way it's recorded with your name.
+              </p>
+              <div className="flex flex-wrap items-center gap-3">
+                <TextInput value={operator} onChange={(e) => setOperator(e.target.value)} placeholder="Your name (signs the decision)"
+                  aria-label="Operator name" className="w-full sm:w-60" />
+                <TextInput value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (optional)" aria-label="Note"
+                  className="w-full sm:w-auto sm:min-w-64 sm:flex-1" />
+              </div>
+              <div className="flex flex-wrap gap-2.5">
+                <Button primary disabled={busy} onClick={() => decide("approve")}>Approve and run</Button>
+                <Button disabled={busy} onClick={() => decide("reject")}>Reject</Button>
+              </div>
+            </div>
+          </section>
         ) : (
           flag.status === "invalid" && (
             <p className="mt-3 text-secondary">Not actionable: a cited id doesn't exist or there was no valid output.</p>
@@ -527,12 +535,12 @@ export function FlagsView() {
     <div className="space-y-10">
       <div className="max-h-[22rem] overflow-y-auto">
         <Table>
-          <thead className="sticky top-0 bg-page">
+          <thead className="sticky top-0 bg-surface">
             <tr>
               <Th className="pl-3">Subject</Th>
-              <Th>Signal</Th>
+              <Th className="max-sm:hidden">Signal</Th>
               <Th num>Exposure</Th>
-              <Th>Second opinion</Th>
+              <Th className="max-md:hidden">Second opinion</Th>
               <Th>Status</Th>
             </tr>
           </thead>
@@ -542,11 +550,11 @@ export function FlagsView() {
               const on = selected === f.flag_id;
               return (
                 <tr key={f.flag_id} onClick={() => setSelected(f.flag_id)} aria-selected={on}
-                  className={`cursor-pointer ${on ? "bg-accent-tint" : "hover:bg-accent-tint/50"}`}>
+                  className={`cursor-pointer ${on ? "bg-accent-tint" : "hover:bg-surface"}`}>
                   <Td className={`pl-3 ${on ? "font-semibold text-heading" : "text-heading"}`}>{f.subject_name ?? f.subject_id}</Td>
-                  <Td>{KIND_TITLE[f.kind] ?? f.kind}</Td>
+                  <Td className="max-sm:hidden">{KIND_TITLE[f.kind] ?? f.kind}</Td>
                   <Td num>{f.exposure_cents > 0 ? dollars(f.exposure_cents) : <span className="text-secondary">—</span>}</Td>
-                  <Td className="text-secondary">{secondOpinion(f)}</Td>
+                  <Td className="text-secondary max-md:hidden">{secondOpinion(f)}</Td>
                   <Td className="pr-3">
                     <span className="flex flex-wrap gap-1.5">
                       <Pill tone={status.tone}>{status.text}</Pill>

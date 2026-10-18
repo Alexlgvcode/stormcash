@@ -6,7 +6,7 @@ import type { SignedObj } from "../api";
 import { conflictSentence, plainChecks } from "../cases";
 import { dollars } from "../format";
 import { conflictingFields, runChecks, type Check, type VerifyInput } from "../verify";
-import { Table, Td, Th } from "./ui";
+import { CopyId, Td } from "./ui";
 
 export const RULE_TEXT: Record<string, { title: string; why: string }> = {
   SAME_COUNTER: {
@@ -42,16 +42,17 @@ const RAW: [string, string, (v: unknown) => string][] = [
 
 /** ✓ Valid / ✗ Invalid once the browser checked it (runChecks order: certificate, then A's two, then B's two). */
 function validity(checks: Check[] | null, side: 0 | 1): ReactNode {
-  if (!checks) return <span className="text-secondary">Press Verify it yourself</span>;
+  if (!checks) return <span className="text-th text-secondary">not checked yet</span>;
   const own = checks.slice(2 + side * 2, 4 + side * 2);
   const ok = own.length === 2 && own.every((c) => c.ok);
   return ok ? <span className="font-medium text-success">✓ Valid</span> : <span className="font-medium text-danger">✗ Invalid</span>;
 }
 
 /**
- * The two payments in plain words: what conflicts as one sentence, then
- * payment number, amount, running total and signature validity. The raw signed
- * fields, signatures and tag ids sit under "Technical details".
+ * The two payments side by side: the certificate they share, then payment
+ * number, amount, running total, the link back to the previous payment and each
+ * signature. What conflicts is one sentence above and tinted coral in the
+ * table. Raw fields sit under "Technical details". Ids are truncated; press one to copy it.
  */
 export function TagTable({ rule, a, b, titleA = "Payment A", titleB = "Payment B", checks = null }: {
   rule: string;
@@ -64,71 +65,77 @@ export function TagTable({ rule, a, b, titleA = "Payment A", titleB = "Payment B
   const red = b ? conflictingFields(rule) : { a: ["cum_cents"], b: [] };
   const sentence = conflictSentence(rule, a.fields, b?.fields);
   const tags = [a, b].filter((t): t is SignedObj => !!t);
+  const sameCert = !!b && a.fields.cert_id === b.fields.cert_id;
+  const samePrev = !!b && a.fields.prev_hash === b.fields.prev_hash;
   const plain: [string, string, (t: SignedObj) => ReactNode][] = [
+    ["cert_id", "Certificate", (t) => <CopyId value={String(t.fields.cert_id)} chars={12} />],
     ["counter", "Payment number", (t) => String(t.fields.counter)],
     ["amount_cents", "Amount", (t) => dollars(Number(t.fields.amount_cents))],
     ["cum_cents", "Running total", (t) => dollars(Number(t.fields.cum_cents))],
+    ["prev_hash", "Points back to", (t) => <CopyId value={String(t.fields.prev_hash)} chars={12} />],
+    ["sig", "Signature", (t) => <CopyId value={String(t.json.sig)} chars={12} />],
   ];
+  const note: Record<string, ReactNode> = {
+    cert_id: sameCert ? <span className="text-th text-success">same certificate, same wallet</span> : null,
+    prev_hash: samePrev ? <span className="text-th text-secondary">both continue from the same payment</span> : null,
+  };
   return (
-    <div>
-      {sentence && <p className="border-b border-rule bg-danger-tint px-3 py-2.5 font-medium text-danger">{sentence}</p>}
-      <Table>
-        <thead>
-          <tr>
-            <Th className="pl-3">Field</Th>
-            <Th>{titleA}</Th>
-            {b && <Th>{titleB}</Th>}
-          </tr>
-        </thead>
-        <tbody>
-          {plain.map(([key, label, show]) => {
-            const inA = red.a.includes(key);
-            const inB = red.b.includes(key);
-            return (
-              <tr key={key} className={inA || inB ? "bg-danger-tint" : undefined}>
-                <Td className="pl-3 text-secondary">{label}</Td>
-                {tags.map((t, i) => (
-                  <Td key={t.digest} className={`tabular-nums ${(i === 0 ? inA : inB) ? "font-semibold text-danger" : ""}`}>
-                    {show(t)}
-                  </Td>
-                ))}
-              </tr>
-            );
-          })}
-          <tr>
-            <Td className="pl-3 text-secondary">Signature</Td>
-            {tags.map((t, i) => <Td key={t.digest}>{validity(checks, i as 0 | 1)}</Td>)}
-          </tr>
-        </tbody>
-      </Table>
-      <details className="mt-3">
-        <summary className="cursor-pointer py-1 text-accent">Technical details</summary>
-        <Table>
+    <div className="min-w-0">
+      {sentence && <p className="rounded-t-[8px] border border-coral/50 bg-danger-tint px-3 py-2.5 font-semibold text-danger">{sentence}</p>}
+      <div className={`overflow-hidden border border-rule ${sentence ? "rounded-b-[8px] border-t-0" : "rounded-[8px]"}`}>
+        <table className="w-full table-fixed border-collapse text-left text-ui tabular-nums">
+          <thead className="bg-surface">
+            <tr className="text-th text-secondary">
+              <th className="w-[30%] border-b border-rule px-3 py-2 font-semibold sm:w-[26%]">Signed field</th>
+              <th className="border-b border-l border-rule px-3 py-2 font-semibold"><span className="block truncate">{titleA}</span></th>
+              {b && <th className="border-b border-l border-rule px-3 py-2 font-semibold"><span className="block truncate">{titleB}</span></th>}
+            </tr>
+          </thead>
+          <tbody>
+            {plain.map(([key, label, show]) => {
+              const inA = red.a.includes(key);
+              const inB = red.b.includes(key);
+              return (
+                <tr key={key} className={inA || inB ? "bg-danger-tint" : undefined}>
+                  <td className="border-b border-rule px-3 py-2 align-top text-secondary">
+                    {label}
+                    {note[key] && <span className="mt-0.5 block">{note[key]}</span>}
+                  </td>
+                  {tags.map((t, i) => (
+                    <td key={t.digest} className={`min-w-0 border-b border-l border-rule px-3 py-2 align-top ${(i === 0 ? inA : inB) ? "font-semibold text-danger [&_button]:text-danger" : ""}`}>
+                      {show(t)}
+                    </td>
+                  ))}
+                </tr>
+              );
+            })}
+            <tr>
+              <td className="px-3 py-2 text-secondary">Signature check</td>
+              {tags.map((t, i) => <td key={t.digest} className="border-l border-rule px-3 py-2">{validity(checks, i as 0 | 1)}</td>)}
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <details className="mt-2">
+        <summary className="cursor-pointer py-2 text-accent">Technical details</summary>
+        <table className="w-full table-fixed border-collapse text-left text-th">
           <tbody>
             {RAW.map(([key, label, show]) => (
               <tr key={key}>
-                <Td className="pl-3 font-mono text-th text-secondary">{label}</Td>
+                <Td className="break-all pl-3 font-mono text-th text-secondary">{label}</Td>
                 {tags.map((t, i) => (
-                  <Td key={t.digest} className={`font-mono text-th ${(i === 0 ? red.a : red.b).includes(key) ? "font-semibold text-danger" : ""}`}>
+                  <Td key={t.digest} className={`break-all font-mono text-th ${(i === 0 ? red.a : red.b).includes(key) ? "font-semibold text-danger" : ""}`}>
                     {show(t.fields[key])}
                   </Td>
                 ))}
               </tr>
             ))}
             <tr>
-              <Td className="pl-3 font-mono text-th text-secondary">sig</Td>
-              {tags.map((t) => (
-                <Td key={t.digest} className="max-w-0 truncate font-mono text-th" title={String(t.json.sig)}>
-                  {String(t.json.sig).slice(0, 24)}…
-                </Td>
-              ))}
-            </tr>
-            <tr>
-              <Td className="pl-3 font-mono text-th text-secondary">tag id</Td>
-              {tags.map((t) => <Td key={t.digest} className="font-mono text-th">{short(t.digest)}</Td>)}
+              <Td className="break-all pl-3 font-mono text-th text-secondary">tag id</Td>
+              {tags.map((t) => <Td key={t.digest}><CopyId value={t.digest} chars={12} /></Td>)}
             </tr>
           </tbody>
-        </Table>
+        </table>
       </details>
     </div>
   );

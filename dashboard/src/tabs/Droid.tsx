@@ -119,13 +119,13 @@ function LiveNow({ live, onSelect }: { live: LiveRun[]; onSelect: (id: number) =
 function RunsTable({ runs, selected, onSelect }: { runs: ConsoleRun[]; selected: number | null; onSelect: (id: number) => void }) {
   return (
     <Table>
-      <thead className="sticky top-0 bg-page">
+      <thead className="sticky top-0 bg-surface">
         <tr>
           <Th className="pl-3">Time</Th>
-          <Th>Job</Th>
+          <Th className="max-sm:hidden">Job</Th>
           <Th>Subject</Th>
-          <Th num>Credits</Th>
-          <Th num>Time</Th>
+          <Th num className="max-sm:hidden">Credits</Th>
+          <Th num className="max-md:hidden">Time</Th>
           <Th>Outcome</Th>
         </tr>
       </thead>
@@ -134,17 +134,17 @@ function RunsTable({ runs, selected, onSelect }: { runs: ConsoleRun[]; selected:
           const on = selected === r.run_id;
           return (
             <tr key={r.run_id} onClick={() => onSelect(r.run_id)} aria-selected={on}
-              className={`cursor-pointer ${on ? "bg-accent-tint" : "hover:bg-accent-tint/50"}`}>
+              className={`cursor-pointer ${on ? "bg-accent-tint" : "hover:bg-surface"}`}>
               <Td className="whitespace-nowrap pl-3">
                 <div className="tabular-nums text-secondary">{startedText(r.started_at)}</div>
                 <div className="text-th text-secondary">#{r.run_id}</div>
               </Td>
-              <Td className={`whitespace-nowrap ${on ? "font-semibold text-accent" : "font-medium text-heading"}`}>
+              <Td className={`max-sm:hidden sm:whitespace-nowrap ${on ? "font-semibold text-accent" : "font-medium text-heading"}`}>
                 {JOB_LABEL[r.job] ?? r.job}
               </Td>
               <Td className="text-ink">{plainText(r.subject)}</Td>
-              <Td num>{credits(r.factory_credits)}</Td>
-              <Td num className="text-secondary">{duration(r.duration_ms)}</Td>
+              <Td num className="max-sm:hidden">{credits(r.factory_credits)}</Td>
+              <Td num className="text-secondary max-md:hidden">{duration(r.duration_ms)}</Td>
               <Td className="pr-3"><OutcomeBadge run={r} /></Td>
             </tr>
           );

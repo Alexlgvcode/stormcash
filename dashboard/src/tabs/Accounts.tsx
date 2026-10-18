@@ -27,7 +27,8 @@ const VIEWS = [
   { id: "reconciliation", label: "Reconciliation" },
   { id: "log", label: "Nessie log" },
 ] as const;
-type View = (typeof VIEWS)[number]["id"];
+export type AccountsView = (typeof VIEWS)[number]["id"];
+type View = AccountsView;
 
 // A difference is red, like an outage; ledger-only accounts are neutral.
 const TONE: Record<Tone, UiTone> = { ok: "success", diff: "danger", error: "danger", off: "neutral" };
@@ -142,7 +143,7 @@ function BalanceRow({ card, rec }: { card: AccountCard; rec: ReconcileAccount | 
       <div className="flex items-center gap-3">
         {delta !== null && <Pill tone={delta > 0 ? "success" : "danger"}>{signedDollars(delta)}</Pill>}
         {value !== null ? (
-          <span className="text-[28px] leading-9 font-light tabular-nums text-ink">{dollars(value)}</span>
+          <span className="text-[22px] leading-8 font-semibold tabular-nums text-heading sm:text-[26px] sm:leading-9">{dollars(value)}</span>
         ) : (
           <span className="text-secondary" title={card.nessie_error ?? undefined}>
             {card.nessie_account_id ? "Nessie unavailable" : "No Nessie account"}
@@ -180,7 +181,7 @@ function ActivityList({ calls }: { calls: NessieCall[] }) {
                 <Pill tone={status.ok ? "success" : "danger"}>{status.text}</Pill>
               </div>
             </div>
-            {cents !== null && <span className="text-[22px] font-light tabular-nums text-ink">{dollars(cents)}</span>}
+            {cents !== null && <span className="whitespace-nowrap text-[18px] font-semibold tabular-nums text-heading">{dollars(cents)}</span>}
           </li>
         );
       })}
@@ -335,7 +336,7 @@ function ReconciliationView({ snap, rec }: { snap: AccountsSnapshot; rec: Reconc
             <thead>
               <tr>
                 <Th>Account</Th>
-                <Th>Owner</Th>
+                <Th className="max-sm:hidden">Owner</Th>
                 <Th num>Ledger expects</Th>
                 <Th num>Nessie has</Th>
                 <Th>Bank</Th>
@@ -351,8 +352,9 @@ function ReconciliationView({ snap, rec }: { snap: AccountsSnapshot; rec: Reconc
                   <tr>
                     <Td rule={!details} className="font-medium text-heading">
                       {account}
+                      <span className="block font-normal text-secondary sm:hidden">{owner}</span>
                     </Td>
-                    <Td rule={!details}>{owner}</Td>
+                    <Td rule={!details} className="max-sm:hidden">{owner}</Td>
                     <Td rule={!details} num>
                       {read ? dollars(a.expected_cents!) : <span className="text-secondary">—</span>}
                     </Td>
@@ -452,8 +454,10 @@ function NessieLog({ snap, calls, setup, setSetup }: {
   );
 }
 
-export function AccountsTab() {
-  const [view, setView] = useState<View>("balances");
+/** Inside the Ledger workspace, `view` picks the view and the workspace draws the header. */
+export function AccountsTab({ view: forced }: { view?: View } = {}) {
+  const [own, setView] = useState<View>("balances");
+  const view = forced ?? own;
   const [setup, setSetup] = useState(false); // account setup calls (open account, create customer) hidden by default
   const [snap, setSnap] = useState<AccountsSnapshot | null>(null);
   const [calls, setCalls] = useState<NessieCall[]>([]);
@@ -488,11 +492,15 @@ export function AccountsTab() {
   useEvents(["accounts", "payment", "upload"], refresh);
 
   return (
-    <div className="pb-12">
-      <PageHeader title="Accounts" subtitle="Balances from Capital One Nessie transactions"
-        takeaway={rec.result ? accountsTakeaway(rec.result) : undefined}>
-        <Tabs tabs={VIEWS} value={view} onChange={setView} />
-      </PageHeader>
+    <div>
+      {forced ? (
+        rec.result && <p className="mb-6 max-w-[90ch] text-ink">{accountsTakeaway(rec.result)}</p>
+      ) : (
+        <PageHeader title="Accounts" subtitle="Balances from Capital One Nessie transactions"
+          takeaway={rec.result ? accountsTakeaway(rec.result) : undefined}>
+          <Tabs tabs={VIEWS} value={view} onChange={setView} />
+        </PageHeader>
+      )}
       {!snap ? (
         <p className={error ? "text-danger" : "text-secondary"}>{error ? `Can't reach the server: ${error}` : "Loading…"}</p>
       ) : view === "balances" ? (

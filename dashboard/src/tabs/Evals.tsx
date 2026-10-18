@@ -154,7 +154,7 @@ function Scenarios({ rules, desk }: { rules: EvalRun | null; desk: EvalRun | nul
       <thead>
         <tr>
           <Th>Scenario</Th>
-          <Th num>Cases</Th>
+          <Th num className="max-sm:hidden">Cases</Th>
           <Th>Right answer</Th>
           <Th num>Rules-only</Th>
           <Th num className="pl-6">StormDesk</Th>
@@ -168,7 +168,7 @@ function Scenarios({ rules, desk }: { rules: EvalRun | null; desk: EvalRun | nul
           return (
             <tr key={name}>
               <Td className="text-heading">{SCENARIO_LABEL[name] ?? name}</Td>
-              <Td num>{info.rows}</Td>
+              <Td num className="max-sm:hidden">{info.rows}</Td>
               <Td className="text-secondary">{info.honest ? "Leave alone" : (ACTION_PLAIN[info.label_action] ?? info.label_action)}</Td>
               <Td num className={info.honest && r?.dismissed === 0 ? "text-danger" : undefined}>
                 {scenarioCell(r) ?? "No run yet"}
