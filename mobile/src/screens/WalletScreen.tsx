@@ -74,7 +74,7 @@ export function WalletScreen() {
       </View>
       <Button title="Pay a shop" big onPress={() => nav.go({ name: 'pay' })} disabled={frozen || expired || left === 0} />
       <Group>
-        <View style={{ paddingHorizontal: 18, paddingVertical: 4 }}>
+        <View>
           <MoneyRow label="Held by Capital One" note={storm ? 'Storm Mode escrow' : 'Escrow for offline payments'} value={wholeDollars(cert.cap_cents)} />
           <MoneyRow label="Signed offline" note={`${state.counter} ${state.counter === 1 ? 'payment' : 'payments'} from this phone`} value={`−${wholeDollars(state.cumCents)}`} />
           <MoneyRow label="Left to spend" value={wholeDollars(left)} strong />

@@ -35,7 +35,7 @@ export function MerchantHomeScreen() {
       </View>)}
       {wide ? null : <Button title="Charge a customer" subtitle="Amount, then show code" big onPress={() => nav.go({ name: 'charge' })} />}
       <Group>
-        <View style={{ paddingHorizontal: 18, paddingVertical: 4 }}>
+        <View>
           <MoneyRow
             label="Accepted offline"
             note={`${acceptedCount} ${acceptedCount === 1 ? 'payment' : 'payments'}`}

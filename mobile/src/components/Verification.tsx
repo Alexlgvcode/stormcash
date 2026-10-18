@@ -127,7 +127,7 @@ function Conflict({ held, scanned }: { held: Tag; scanned: Tag }) {
 }
 
 const styles = StyleSheet.create({
-  rail: { backgroundColor: colors.card, borderRadius: radius.lg, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 6 },
+  rail: { paddingTop: 8 },
   step: { flexDirection: 'row', gap: 12 },
   markCol: { alignItems: 'center', width: 24 },
   mark: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
@@ -136,8 +136,8 @@ const styles = StyleSheet.create({
   id: { fontFamily: font.bold, color: colors.muted },
   title: { fontFamily: font.bold, fontSize: 16, lineHeight: 22, color: colors.ink },
   what: { fontFamily: font.regular, fontSize: 14, lineHeight: 20, color: colors.muted },
-  table: { backgroundColor: colors.card, borderRadius: radius.lg, paddingHorizontal: 16, paddingVertical: 6 },
-  tr: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', columnGap: 12, paddingVertical: 7 },
+  table: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
+  tr: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', columnGap: 12, paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
   k: { fontFamily: font.regular, fontSize: 14, color: colors.muted },
   v: { fontFamily: 'Menlo', fontSize: 13, color: colors.ink, marginLeft: 'auto', textAlign: 'right' },
   mono: { fontFamily: 'Menlo', fontSize: 13, color: colors.ink },
