@@ -121,7 +121,7 @@ export function ChargeScreen() {
     <Screen>
       <TopBar onBack={cancel} />
       <Title>Scan customer's code</Title>
-      <Muted>Every check runs on this phone. No internet needed.</Muted>
+      <Muted>Checked on this phone. No internet.</Muted>
       {error ? <ErrorNote text={error} /> : null}
       <Scanner key={scanKey} onScan={onScan} />
     </Screen>

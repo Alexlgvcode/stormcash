@@ -50,7 +50,7 @@ export function PayScreen() {
       <Screen>
         <TopBar onBack={nav.home} />
         <Title>Scan the shop's code</Title>
-        <Muted>Point the camera at the code on the shop's phone. No internet needed.</Muted>
+        <Muted>No internet needed.</Muted>
         {error ? <ErrorNote text={error} /> : null}
         <Scanner key={scanKey} onScan={onScan} />
       </Screen>

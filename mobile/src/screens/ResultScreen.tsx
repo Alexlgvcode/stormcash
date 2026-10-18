@@ -22,8 +22,8 @@ function refusalCopy(reason: ReasonToken, rule: string | null): string {
     case 'OVER_LIMIT': return "Over this shop's limit";
     default:
       return rule
-        ? `These funds were already spent nearby (Rule: ${RULE_COPY[rule]}). Certificate flagged.`
-        : 'These funds were already spent nearby. Certificate flagged.';
+        ? `Already spent. Rule: ${RULE_COPY[rule]}.`
+        : 'Already spent.';
   }
 }
 
@@ -68,7 +68,7 @@ export function ResultScreen({ result, pay, capCents }: { result: CheckResult; p
         <Text style={styles.meta}>
           {ok
             ? `Backed by Capital One. ${wholeDollars(pay?.t.cum_cents ?? 0)} of ${wholeDollars(capCents)} used.`
-            : 'Not accepted. Do not hand over the goods.'}
+            : 'Do not hand over the goods.'}
         </Text>
         <View style={styles.stampArea}>
           <Animated.View
@@ -85,11 +85,11 @@ export function ResultScreen({ result, pay, capCents }: { result: CheckResult; p
       </View>
 
       <Text style={[styles.why, { color: ok ? colors.ink : colors.red }]}>
-        {ok ? 'All six checks passed on this phone, with no internet.' : refusalCopy(result.reason, result.rule)}
+        {ok ? 'All 6 checks passed. No internet.' : refusalCopy(result.reason, result.rule)}
       </Text>
       {!ok ? (
         <Text style={styles.detail}>
-          Check {result.check} failed ({result.reason}).{result.conflict ? ' The signed evidence is saved and will reach the bank with the next phone online.' : ''}
+          Check {result.check} · {result.reason}{result.conflict ? ' · evidence saved' : ''}
         </Text>
       ) : null}
       <Button title="Done" big onPress={nav.home} />

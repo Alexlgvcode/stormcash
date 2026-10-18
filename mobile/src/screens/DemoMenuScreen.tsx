@@ -12,7 +12,7 @@ import {
 } from '../settings';
 import { isTopologyOn } from '../demo/topology';
 import { resetDb, setSetting } from '../store/db';
-import { syncManager } from '../sync/manager';
+import { isMultipeerEnabled, setMultipeerEnabled, syncManager } from '../sync/manager';
 
 const LABELS: DemoLabel[] = ['MAYA', 'PHARMACY', 'GAS_STATION'];
 const LABEL_NAMES: Record<DemoLabel, string> = { MAYA: 'Maya', PHARMACY: 'Pharmacy', GAS_STATION: 'Gas Station' };
@@ -22,6 +22,7 @@ export function DemoMenuScreen() {
   const nav = useNav();
   const [label, setLabel] = useState(getDemoLabel());
   const [topology, setTopology] = useState(isTopologyOn());
+  const [multipeer, setMultipeer] = useState(isMultipeerEnabled());
   const [serverPub, setServerPubState] = useState(getServerPub());
   const [enclave, setEnclave] = useState(wantsEnclave());
 
@@ -29,7 +30,15 @@ export function DemoMenuScreen() {
     setDemoLabel(l);
     setLabel(l);
     await syncManager.stop(); // peers see the new name after a restart
-    await syncManager.start();
+    if (isMultipeerEnabled()) await syncManager.start();
+  };
+
+  // Off: this phone stops advertising and browsing; Sync by QR still works (§21.5 backup 1).
+  const toggleMultipeer = async (on: boolean) => {
+    setMultipeerEnabled(on);
+    setMultipeer(on);
+    await syncManager.stop();
+    if (on) await syncManager.start();
   };
 
   const toggleTopology = (on: boolean) => {
@@ -76,6 +85,15 @@ export function DemoMenuScreen() {
               <Muted>Maya links to the Pharmacy and the Gas Station. Those two never link to each other.</Muted>
             </View>
             <Switch value={topology} onValueChange={toggleTopology} trackColor={{ true: colors.primary }} />
+          </Row>
+        </Card>
+        <Card>
+          <Row style={{ justifyContent: 'space-between', flexWrap: 'nowrap' }}>
+            <View style={{ flex: 1, gap: 2 }}>
+              <Body>Phone-to-phone link</Body>
+              <Muted>Bluetooth and Wi-Fi sync with nearby phones. Turn off to use Sync by QR only.</Muted>
+            </View>
+            <Switch value={multipeer} onValueChange={toggleMultipeer} trackColor={{ true: colors.primary }} />
           </Row>
         </Card>
       </Section>

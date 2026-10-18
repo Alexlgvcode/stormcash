@@ -21,8 +21,8 @@ export function JudgeModeScreen() {
       !ok
         ? { ok, text: 'Nothing to roll back yet. Make a payment first.' }
         : mode === 'reuse'
-          ? { ok, text: 'Wallet restored to before the last payment: same money, same counter. Now try spending it next door.' }
-          : { ok, text: 'Wallet restored and the counter skipped ahead. Now try spending it next door.' },
+          ? { ok, text: 'Rolled back. Now pay again.' }
+          : { ok, text: 'Rolled back, counter skipped. Now pay again.' },
     );
     nav.refresh();
   };
@@ -33,7 +33,7 @@ export function JudgeModeScreen() {
       <View style={styles.banner}>
         <Text style={styles.bannerText}>Demo: attacker tool</Text>
       </View>
-      <Text maxFontSizeMultiplier={1.15} style={styles.lead}>You're Maya, and you're cheating. Try to spend the same money twice.</Text>
+      <Text maxFontSizeMultiplier={1.15} style={styles.lead}>Spend the same money twice.</Text>
 
       <Card style={{ backgroundColor: colors.navyRaised }}>
         <Label color={colors.onNavyMuted}>Wallet now</Label>
@@ -42,8 +42,8 @@ export function JudgeModeScreen() {
         <Field light label="Spent" value={wholeDollars(state?.cumCents ?? 0)} last />
       </Card>
 
-      <Button title="Reuse the money" subtitle="Restore the wallet to before the last payment" kind="danger" big onPress={() => run('reuse')} />
-      <Button title="Be clever" subtitle="Restore, then skip the counter ahead" kind="danger" big onPress={() => run('clever')} />
+      <Button title="Reuse the money" subtitle="Undo the last payment" kind="danger" big onPress={() => run('reuse')} />
+      <Button title="Be clever" subtitle="Undo it, skip a number" kind="danger" big onPress={() => run('clever')} />
 
       {message ? (
         <View style={[styles.note, { backgroundColor: message.ok ? '#7A4A0A' : '#7A1712' }]}>
@@ -51,7 +51,7 @@ export function JudgeModeScreen() {
         </View>
       ) : null}
 
-      <Muted color="#98A2B3">This is what a modified app or a restored backup could do. Every offline system has to handle it.</Muted>
+      <Muted color="#98A2B3">What a hacked app or restored backup could do.</Muted>
 
       <Button title="Pay a shop" kind="light" big onPress={() => nav.go({ name: 'pay' })} />
     </Screen>

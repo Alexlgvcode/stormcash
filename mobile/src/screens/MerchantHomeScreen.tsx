@@ -34,7 +34,7 @@ export function MerchantHomeScreen() {
         <Stat value={contacts} label="phones met" />
       </View>
 
-      <Button title="Charge a customer" subtitle="Enter an amount, show your code" big onPress={() => nav.go({ name: 'charge' })} />
+      <Button title="Charge a customer" subtitle="Amount, then show code" big onPress={() => nav.go({ name: 'charge' })} />
 
       <Group>
         <Cell title="Records to deliver" detail="Phones pass them on until one is online" value={String(carrying)} onPress={() => nav.go({ name: 'records' })} />
