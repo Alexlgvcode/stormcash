@@ -40,7 +40,6 @@ class Settings:
     # Fallback switch (§22.4): CHALK_DISABLED=1 makes query_features read Postgres only.
     # Off unless loaded from the environment, so bare Settings (tests) never call Chalk.
     chalk_enabled: bool = False
-    photon_api_key: str = ""
     # Background loops (Nessie replay, escrow release). Off in tests.
     background_tasks: bool = True
     # StormDesk (§14): droid | fake | auto (Droid only when the SDK, the CLI and FACTORY_API_KEY exist).
@@ -50,10 +49,6 @@ class Settings:
     # The reviewer Droid after every triage (§14.7b). Off unless loaded from the environment
     # (STORMDESK_REVIEW, default on), so bare Settings (tests) keep one run per triage.
     stormdesk_review: bool = False
-    # Appeals as one conversation (§17.2): each shop's appeal thread keeps one Droid session, resumed for
-    # every new text. Off unless loaded from the environment (STORMDESK_APPEAL_SESSIONS, default on);
-    # off = one fresh run per message.
-    stormdesk_appeal_sessions: bool = False
     # Droid writes a proposed detector in a sandbox and our code opens a PR for a person (§14.7d).
     # Off unless STORMDESK_AUTHOR=1. The sandbox is a worktree of STORMDESK_AUTHOR_BASE; a run stops
     # at STORMDESK_AUTHOR_MAX_CREDITS Factory credits.
@@ -109,13 +104,11 @@ def load_settings(env_file: Path | None = SERVER_DIR / ".env") -> Settings:
         chalk_client_secret=env.get("CHALK_CLIENT_SECRET", ""),
         chalk_environment=env.get("CHALK_ENVIRONMENT", ""),
         chalk_enabled=not _flag(env.get("CHALK_DISABLED"), False),
-        photon_api_key=env.get("PHOTON_API_KEY", ""),
         background_tasks=_flag(env.get("BACKGROUND_TASKS"), True),
         stormdesk_runner=(env.get("STORMDESK_RUNNER") or "auto").lower(),
         stormdesk_model=env.get("STORMDESK_MODEL", ""),
         stormdesk_auto=_flag(env.get("STORMDESK_AUTO"), True),
         stormdesk_review=_flag(env.get("STORMDESK_REVIEW"), True),
-        stormdesk_appeal_sessions=_flag(env.get("STORMDESK_APPEAL_SESSIONS"), True),
         stormdesk_author=_flag(env.get("STORMDESK_AUTHOR"), False),
         stormdesk_author_base=env.get("STORMDESK_AUTHOR_BASE") or "origin/main",
         stormdesk_author_max_credits=int(env.get("STORMDESK_AUTHOR_MAX_CREDITS") or 250_000),

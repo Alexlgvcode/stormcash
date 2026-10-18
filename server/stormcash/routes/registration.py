@@ -13,16 +13,10 @@ from ..protocol.crypto import ID_LEN, PUB_LEN
 router = APIRouter()
 
 
-class ContactIn(BaseModel):
-    channel: str
-    handle: str
-
-
 class ResidentIn(BaseModel):
     display_name: str
     holder_pub: str
     region_id: str | None = None
-    contact: ContactIn | None = None  # [v4.13] the Photon handle that may text FREEZE (§17.2)
 
 
 class MerchantIn(BaseModel):
@@ -31,7 +25,6 @@ class MerchantIn(BaseModel):
     region_id: str | None = None
     x: int | None = None
     y: int | None = None
-    contact: ContactIn | None = None
 
 
 class StormModeIn(BaseModel):
@@ -54,7 +47,6 @@ def register_resident(body: ResidentIn, request: Request, signer: bytes | None =
     _same_key(signer, holder_pub)
     resident_id, cert, _ = registry.register_resident(
         request.app.state.deps, body.display_name, holder_pub, body.region_id,
-        contact=body.contact.model_dump() if body.contact else None,
     )
     return {"resident_id": str(resident_id), "cert": cert.to_json()}
 
@@ -65,7 +57,6 @@ def register_merchant(body: MerchantIn, request: Request, signer: bytes | None =
     _same_key(signer, merchant_pub)
     merchant_id, mcert, _ = registry.register_merchant(
         request.app.state.deps, body.display_name, merchant_pub, body.region_id, body.x, body.y,
-        body.contact.model_dump() if body.contact else None,
     )
     return {"merchant_id": mcert.to_json()["mi"], "mcert": mcert.to_json()}
 

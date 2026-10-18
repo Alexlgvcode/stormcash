@@ -223,8 +223,6 @@ def cap_drain_for_payment(conn: psycopg.Connection, cert_id: bytes, t: int) -> d
         "region_mismatch": bool(home) and any(r != home for r in regions),
         "hour_of_day": ((t + LOCAL_UTC_OFFSET_S) // HOUR) % 24,
         "gap_since_last_activity_min": None if previous is None else round((first - previous) / 60, 1),
-        # The owner texted FREEZE for this cert (Photon, §17.2) before this candidate was created.
-        "owner_freeze_request": bool(status and status["owner_freeze_at"] is not None),
     }
     return _insert(conn, "cap_drain", cert_id.hex(), first, t, features)
 

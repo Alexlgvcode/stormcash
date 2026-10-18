@@ -229,10 +229,10 @@ def test_replay_finds_a_half_that_succeeded_without_a_response(app_client, deps,
     assert out["resident_id"]
 
 
-def test_register_merchant_with_contact(app_client, deps, fake_nessie):
+def test_register_merchant_issues_an_mcert(app_client, deps, fake_nessie):
     payload = {
         "display_name": "Pharmacy", "merchant_pub": b64u_encode(crypto.public_key_bytes(PHARMACY)),
-        "region_id": "asheville-downtown", "x": 12, "y": 5, "contact": {"channel": "telegram", "handle": "@pharm"},
+        "region_id": "asheville-downtown", "x": 12, "y": 5,
     }
     resp = post(app_client, "/v1/merchants/register", payload, key=PHARMACY)
     assert resp.status_code == 200, resp.text
@@ -243,10 +243,8 @@ def test_register_merchant_with_contact(app_client, deps, fake_nessie):
     assert mcert.expires_at - time.time() > 29 * 86400
     with deps.pool.connection() as conn:
         m = one(conn, "SELECT * FROM merchants")
-        contact = one(conn, "SELECT * FROM merchant_contacts")
     assert fake_nessie.accounts[m["nessie_account_id"]]["balance"] == 0
     assert (m["x"], m["y"], m["simulated"]) == (12, 5, False)
-    assert bytes(contact["merchant_id"]) == mcert.merchant_id and contact["handle"] == "@pharm"
 
     again = post(app_client, "/v1/merchants/register", payload, key=PHARMACY).json()
     assert again["merchant_id"] == resp.json()["merchant_id"]

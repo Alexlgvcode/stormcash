@@ -92,7 +92,6 @@ def reset_demo(deps: Deps, storm_cap_cents: int | None = None, now: int | None =
             ([c.hex() for c in old_certs] + [m.hex() for m in merchant_ids],))]
         doomed_flags = [r["flag_id"] for r in all_rows(
             conn, "SELECT flag_id FROM flags WHERE candidate_id = ANY(%s)", (doomed_candidates,))]
-        conn.execute("UPDATE messages SET flag_id = NULL WHERE flag_id = ANY(%s)", (doomed_flags,))
         conn.execute("DELETE FROM approvals WHERE flag_id = ANY(%s)", (doomed_flags,))
         conn.execute("DELETE FROM flags WHERE flag_id = ANY(%s)", (doomed_flags,))
         conn.execute("DELETE FROM stormdesk_runs WHERE case_id = ANY(%s) OR candidate_id = ANY(%s)",
@@ -246,8 +245,6 @@ def clear_dry_run(deps: Deps, now: int | None = None) -> dict:
         conn.execute("DELETE FROM payments WHERE tag_hash = ANY(%s)", (tags,))
         conn.execute("DELETE FROM stormdesk_runs WHERE case_id = ANY(%s) OR candidate_id = ANY(%s) OR merchant_id = ANY(%s)",
                      (cases_, candidates, merchant_ids))
-        conn.execute("DELETE FROM messages WHERE merchant_id = ANY(%s) OR resident_id = ANY(%s) OR flag_id = ANY(%s)",
-                     (merchant_ids, resident_ids, flags))
         conn.execute("DELETE FROM approvals WHERE flag_id = ANY(%s)", (flags,))
         conn.execute("DELETE FROM flags WHERE flag_id = ANY(%s)", (flags,))
         conn.execute("DELETE FROM cases WHERE case_id = ANY(%s)", (cases_,))
@@ -262,8 +259,6 @@ def clear_dry_run(deps: Deps, now: int | None = None) -> dict:
         conn.execute("""DELETE FROM nessie_calls WHERE strpos(COALESCE(summary, ''), %s) > 0
                         OR EXISTS (SELECT 1 FROM unnest(%s::text[]) AS n(id) WHERE strpos(COALESCE(path, ''), n.id) > 0)""",
                      (DRY_RUN_PREFIX, nessie_ids))
-        conn.execute("DELETE FROM merchant_contacts WHERE merchant_id = ANY(%s)", (merchant_ids,))
-        conn.execute("DELETE FROM resident_contacts WHERE resident_id = ANY(%s)", (resident_ids,))
         conn.execute("DELETE FROM cert_status WHERE cert_id = ANY(%s)", (certs,))
         conn.execute("DELETE FROM certificates WHERE cert_id = ANY(%s)", (certs,))
         conn.execute("DELETE FROM residents WHERE resident_id = ANY(%s)", (resident_ids,))
@@ -281,10 +276,8 @@ def clear_town(deps: Deps, now: int | None = None) -> dict:
     Deletes every simulated resident and shop and everything that touches them:
     certificates, tags, payments, payouts, cases, candidates (and every
     region_dark candidate, which only the town raises), flags, StormDesk runs,
-    logs, contacts, uploads, ledger transactions (whole ones, so the ledger stays
-    balanced) and the shops' Photon threads. Real-device data stays. The shops'
-    Photon contacts are returned so the caller can restore them on the new town
-    (seeds derive shop ids, so the same seed gives the same shop ids).
+    logs, contacts, uploads and ledger transactions (whole ones, so the ledger stays
+    balanced). Real-device data stays.
     """
     now = int(time.time()) if now is None else now
     ctx = _Ctx(deps, b"", now, False)
@@ -296,8 +289,6 @@ def clear_town(deps: Deps, now: int | None = None) -> dict:
             conn, "SELECT DISTINCT cert_id FROM certificates WHERE resident_id = ANY(%s)", (residents,))]
         devices = [bytes(r["holder_pub"]) for r in all_rows(
             conn, "SELECT holder_pub FROM residents WHERE simulated")] + [bytes(m["merchant_pub"]) for m in shops]
-        contacts = all_rows(conn, "SELECT merchant_id, channel, handle FROM merchant_contacts WHERE merchant_id = ANY(%s)",
-                            (merchant_ids,))
         accounts = ([ledger.checking(r) for r in residents] + [ledger.escrow(c) for c in certs]
                     + [ledger.fraud_receivable(c) for c in certs] + [ledger.merchant(m) for m in merchant_ids])
 
@@ -319,7 +310,6 @@ def clear_town(deps: Deps, now: int | None = None) -> dict:
         conn.execute("DELETE FROM payments WHERE tag_hash = ANY(%s)", (tags,))
         conn.execute("DELETE FROM stormdesk_runs WHERE case_id = ANY(%s) OR candidate_id = ANY(%s) OR merchant_id = ANY(%s)",
                      (cases_, candidates, merchant_ids))
-        conn.execute("DELETE FROM messages WHERE merchant_id = ANY(%s) OR flag_id = ANY(%s)", (merchant_ids, flags))
         conn.execute("DELETE FROM approvals WHERE flag_id = ANY(%s)", (flags,))
         conn.execute("DELETE FROM flags WHERE flag_id = ANY(%s)", (flags,))
         conn.execute("DELETE FROM cases WHERE case_id = ANY(%s)", (cases_,))
@@ -330,9 +320,6 @@ def clear_town(deps: Deps, now: int | None = None) -> dict:
         conn.execute("DELETE FROM uploads WHERE simulated OR device_pub = ANY(%s)", (devices,))
         conn.execute("DELETE FROM ledger_entries WHERE txn_id IN (SELECT txn_id FROM ledger_entries WHERE account = ANY(%s))",
                      (accounts,))
-        conn.execute("DELETE FROM merchant_contacts WHERE merchant_id = ANY(%s)", (merchant_ids,))
-        conn.execute("DELETE FROM resident_contacts WHERE resident_id = ANY(%s)", (residents,))
-        conn.execute("DELETE FROM messages WHERE resident_id = ANY(%s)", (residents,))
         conn.execute("DELETE FROM cert_status WHERE cert_id = ANY(%s)", (certs,))
         conn.execute("DELETE FROM certificates WHERE cert_id = ANY(%s)", (certs,))
         conn.execute("DELETE FROM residents WHERE resident_id = ANY(%s)", (residents,))
@@ -341,4 +328,4 @@ def clear_town(deps: Deps, now: int | None = None) -> dict:
     for event, data in ctx.events:
         deps.events.publish(event, data)
     return {"residents": len(residents), "shops": len(shops), "payments": len(tags), "cases": len(cases_),
-            "candidates": len(candidates), "contacts": contacts}
+            "candidates": len(candidates)}

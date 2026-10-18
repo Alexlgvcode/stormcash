@@ -25,6 +25,7 @@
 > **v4.21 (Oct 17):** a shop's appeal by text is one conversation (§17.2): each appeal thread (shop + flag) keeps one Droid session, resumed with `Session.resume` for every new text, with the same read-only tools, permission handler and citation check on every turn; a session that can't be resumed is replaced by a new one seeded with the thread from `messages`. `STORMDESK_APPEAL_SESSIONS` (§6.3, §12.1, §14.7c, §18.7, §22.4). No migration: each turn's run stores its session, turn and thread. Marked **[v4.21]**.
 > **v4.22 (Oct 17):** Droid proposes a new deterministic detector as a pull request (§14.7d): it writes a pure detector and its test in a throwaway worktree, under a permission handler and two macOS sandbox profiles; our server re-runs the tests and an evaluation on the simulator's labelled candidates and rejects any mismatch; then deterministic code opens a PR labelled for a person and never merges it. `STORMDESK_AUTHOR`, `POST /v1/stormdesk/author-detector`, `stormdesk_runs.job = 'author'`, `server/stormcash/detectors_proposed/` (§6.3, §11.1, §12.1, §14.1, §18.5, §18.7, §22.4). Migration `007_stormdesk_author.sql`. Marked **[v4.22]**.
 > **v4.23 (Oct 17):** dashboard redesign (#93, §18): one bank style for every tab and the proof page, after Alex's "Capital One" mockup (a top navigation bar, light deep-navy headlines, bank blue for links and the primary action, pill buttons, chips and segmented tabs, account rows with big balances, Nunito Sans bundled with the build; no logo or brand red), and no intro screen (the dashboard opens on Accounts). Each tab splits into views: Accounts (Balances, Reconciliation, Nessie log), Cases (Proven fraud, Review queue, Owner freezes), Town (Map, Relay paths, What-if), Evals (Held-out towns, Main dataset, Runs), Droid (Runs, Guardrails, Detector proposals). Every feature is kept. A readability pass: plain words instead of internal names (signals, jobs, rules, tools, the rules-only "stand-in"), times as "4:34 PM", secondary text no lighter than #545969 and never under 13 px, a one-line takeaway from real data atop each tab, account-setup Nessie calls behind "Show setup calls", proven cases from your phones before the simulated town's, and raw hashes under "Technical details". Marked **[v4.23]**.
+> **v4.24 (Oct 18):** Photon removed (§17): StormCash no longer sends or receives text messages, so there are no hold or paid notices, no appeals and no FREEZE by text. Gone with it: the `photon/` package and its Node bridge, StormDesk's `respond` job, `AppealReply` and the `get_messages` tool (ten read-only tools now, §14.3), `contact` on registration, `corner_store_contact` on seed-town, the `owner_freeze_request` feature (§13.2), the `message` and `owner_freeze` SSE events, the `PHOTON_*` and `STORMDESK_APPEAL_SESSIONS` settings, and the dashboard's Photon thread and Owner freezes view. `merchant_contacts`, `resident_contacts`, `messages` and `cert_status.owner_freeze_at` leave the schema (§11.1); existing databases keep them, empty and unused, until every server runs this version. Runs stored before stay readable on the Droid tab. Marked **[v4.24]**.
 > **Builds on:** "StormCash: The 10/10 Build" v3 (Oct 16, Alexandre Lugovoi, on Brian Maina's Oct 11 draft). Everything new since v3 is marked **[v4]**.
 
 ---
@@ -48,7 +49,7 @@
 14. StormDesk agent (Factory Droid SDK) **[v4]**
 15. Chalk: features, query tool, evaluations **[v4]**
 16. Town simulator (40 shops) **[v4]**
-17. Photon messaging agent **[v4]**
+17. Photon messaging agent: removed **[v4.24]**
 18. Dashboard
 19. Mobile app
 20. Test vectors
@@ -91,7 +92,7 @@
 - Every payment produces a signed **spend tag**. Phones gossip tags over Bluetooth/peer Wi-Fi (Apple Multipeer). Customers carry tags from shop to shop. A rolled-back wallet trying to spend the same money is **refused offline** by the next shop that has seen the tag, and the two conflicting signatures are **self-proving evidence**.
 - Payments, tags and logs travel **phone to phone** (store-and-forward) until any phone gets a signal and uploads them. The server pays merchants in Nessie, freezes cheaters, and sends signed receipts, freeze lists and renewed certificates back the same way.
 - **[v4]** Every phone keeps a signed, hash-chained **device log** of payments and contacts. A shop that accepted a payment while holding the conflicting tag is caught by its own signature ("merchant knew"). A shop that goes quiet while taking guarantee-pool money is flagged.
-- **[v4]** **StormDesk**, a back-office agent built on the Factory Droid SDK with data and evals on Chalk, investigates fraud cases and triages suspicious patterns. It proposes; a human approves. Merchants get notices and can appeal by text through a **Photon** agent.
+- **[v4]** **StormDesk**, a back-office agent built on the Factory Droid SDK with data and evals on Chalk, investigates fraud cases and triages suspicious patterns. It proposes; a human approves.
 
 **The line judges should repeat:** "I tried to cheat it with no internet, and it refused me."
 
@@ -115,7 +116,6 @@ Confirmed by organizers: a team may enter **one track plus any number of sponsor
 | **Best Use of Nessie** (Capital One) | $300 gift card per member | Nessie moves the money live: escrow, settlement, guarantee pool, refund | Accounts tab with live balances + Nessie call log |
 | **Factory Droid SDK** | $2,000 team + $200 credits each | Droid does real work in the running product: investigates cases and triages flags | StormDesk worker, live tool-call stream, README section "Where Droid runs" |
 | **Chalk** data-driven agent | $1,500+ Apple credits, interviews | Agent runs on real-world data (Nessie, NWS alerts, logs) and is evaluated rigorously | Chalk features used by the agent at runtime + Evals tab from a real Chalk Evaluation run |
-| **Photon** messaging agent | $400 + $300 credits + interview fast-track (runner-up $200) | An agent on a real number that argues with evidence | Merchant hold notice + appeal conversation on Telegram/iMessage |
 
 Not targeting: Regeneron, ASUS, Hardware for Good, Daytona, SpaceXAI. Use Claude as the model where we choose a model, in case an Anthropic prize appears.
 
@@ -138,7 +138,7 @@ Not targeting: Regeneron, ASUS, Hardware for Good, Daytona, SpaceXAI. Use Claude
 
 ### 4.1 People
 
-- **Person A — Mobile.** Owns `mobile/`. Only person who installs on iPhones. Mac 1. **[v4.1]** Also reviews the TypeScript half of WS0 (`mobile/src/protocol/`), owns WS7 Photon (the demo Telegram already runs on Mac 1), and records the backup video.
+- **Person A — Mobile.** Owns `mobile/`. Only person who installs on iPhones. Mac 1. **[v4.1]** Also reviews the TypeScript half of WS0 (`mobile/src/protocol/`) and records the backup video.
 - **Person B — Server, dashboard, integration.** Owns `server/`, `dashboard/`, merges Claude workstreams except WS7 and the TypeScript half of WS0. Mac 2.
 
 (Brian and Alexandre: write your names next to A and B in the repo README.)
@@ -149,7 +149,6 @@ Not targeting: Regeneron, ASUS, Hardware for Good, Daytona, SpaceXAI. Use Claude
 |---|---|
 | **Mac 1** | Xcode, Expo dev builds to all 3 iPhones, Claude session for mobile help |
 | **Mac 2** | Postgres client, FastAPI server, dashboard dev server, `droid` CLI, cloudflared tunnel, Claude sessions for server-side workstreams; during demo: dashboard on screen |
-| **Laptop for Photon** | During demo, Mac 1 (or whichever is free) shows the Corner Store owner's Telegram/Messages. |
 
 ### 4.3 Workstreams (one Claude session each, one folder each)
 
@@ -162,7 +161,6 @@ Not targeting: Regeneron, ASUS, Hardware for Good, Daytona, SpaceXAI. Use Claude
 | WS4 | Town simulator | `sim/` | B | WS0, WS2 ingest function |
 | WS5 | StormDesk agent | `server/stormcash/stormdesk/` | B | WS2, WS6 |
 | WS6 | Chalk features + evals | `chalk/` | B | WS2 DB, WS4 |
-| WS7 | Photon agent | `server/stormcash/photon/` | A **[v4.1]** | WS2, WS5 |
 
 **Integration rule:** WS2 owns `server/stormcash/db.py`, `schema.sql`, and `app.py`. Other server workstreams add routers in their own module and B wires them in.
 
@@ -199,7 +197,6 @@ stormcash/
       sse.py
       routes/                # one module per API area
       stormdesk/             # WS5
-      photon/                # WS7
     tests/
   mobile/
     app.json
@@ -242,11 +239,10 @@ stormcash/
 | Mobile network detect | `expo-network` | uplink = internet reachable |
 | Server | Python 3.11, FastAPI, uvicorn, psycopg 3 (pool), `cryptography`, `httpx`, `sse-starlette`, `pydantic` v2 | |
 | Database | **Hosted Postgres (Neon or Supabase free tier)** | Chalk resolvers run in Chalk's cloud and must reach the DB. Local Postgres only as fallback (§22.4) |
-| Public URL | `cloudflared tunnel --url http://localhost:8000` (quick tunnel, no account) | Needed for Photon webhooks and Chalk eval tasks |
+| Public URL | `cloudflared tunnel --url http://localhost:8000` (quick tunnel, no account) | Needed for the public proof page (HTTPS) and Chalk eval tasks |
 | Dashboard | React + Vite + TypeScript, Tailwind, Recharts, SSE (`EventSource`) | |
 | Agent | Factory Droid SDK for Python (`pip install "droid-sdk[mcp]"`), `droid` CLI on PATH, `FACTORY_API_KEY` | |
 | Data/evals | Chalk (`chalk` client, `chalkcompute` for evaluations) | Sign up at chalk.ai/hackharvard |
-| Messaging | Photon 2.0 (Telegram channel primary; iMessage optional) | Follow Photon docs linked from hhuh.io |
 | Bank | Capital One Nessie REST API | |
 | Weather | NWS API `https://api.weather.gov/alerts/active?area=NC` (needs `User-Agent` header) + replayed fixture | |
 
@@ -284,11 +280,6 @@ SERVER_SIGNING_KEY_PEM=...                        # P-256 private key, generated
 FACTORY_API_KEY=...
 CHALK_CLIENT_ID=... / CHALK_CLIENT_SECRET=... / CHALK_ENVIRONMENT=...   # [v4.6] empty = the machine's `chalk login`
 CHALK_DISABLED=0                                  # [v4.6] fallback: 1 = query_features reads Postgres only (§15.2)
-PHOTON_API_KEY=... (unused; see the Photon lines below)
-SPECTRUM_WEBHOOK_SECRET=...                       # [v4.5] Photon webhook signing secret (inbound HMAC)
-PHOTON_BRIDGE_TOKEN=...                           # [v4.5] shared secret between the server and photon/bridge
-PHOTON_BRIDGE_URL=http://127.0.0.1:8787           # [v4.5]
-PHOTON_DISABLED=0                                 # [v4.5] fallback: 1 = record messages, send nothing
 PUBLIC_BASE_URL=https://<cloudflared>.trycloudflare.com
 NWS_USER_AGENT=StormCash HackHarvard demo (team email)
 DEMO_MODE=1
@@ -301,7 +292,6 @@ STORMDESK_RUNNER=auto                             # [v4.3] droid | fake | auto (
 STORMDESK_MODEL=                                  # [v4.3] empty = Droid picks
 STORMDESK_AUTO=1                                  # [v4.3] worker runs StormDesk on new cases and candidates
 STORMDESK_REVIEW=1                                # [v4.15] a reviewer Droid checks every triage (§14.7b); 0 = off
-STORMDESK_APPEAL_SESSIONS=1                       # [v4.21] a shop's appeal is one Droid session, resumed per text (§14.7c); 0 = one run per message
 STORMDESK_AUTHOR=0                                # [v4.22] 1 = Droid may propose detectors as PRs (§14.7d); off by default
 STORMDESK_AUTHOR_BASE=origin/main                 # [v4.22] the ref the author sandbox is a worktree of
 STORMDESK_AUTHOR_MAX_CREDITS=250000               # [v4.22] an author run stops at this many Factory credits
@@ -700,20 +690,6 @@ CREATE TABLE merchants (
   simulated BOOLEAN NOT NULL DEFAULT FALSE
 );
 
-CREATE TABLE merchant_contacts (        -- Photon mapping
-  merchant_id BYTEA REFERENCES merchants,
-  channel TEXT NOT NULL,                -- 'telegram' | 'imessage' | 'sms'
-  handle TEXT NOT NULL,
-  PRIMARY KEY (channel, handle)
-);
-
-CREATE TABLE resident_contacts (        -- [v4.13] Photon mapping for residents (FREEZE by text, §17.2)
-  resident_id UUID NOT NULL REFERENCES residents,
-  channel TEXT NOT NULL,                -- 'telegram' | 'imessage' | 'sms'
-  handle TEXT NOT NULL,
-  PRIMARY KEY (channel, handle)
-);
-
 CREATE TABLE certificates (
   cert_id BYTEA NOT NULL,
   cert_ver INT NOT NULL,
@@ -732,8 +708,7 @@ CREATE TABLE cert_status (
   max_cap_cents INT NOT NULL,
   frozen_at BIGINT,
   storm_mode BOOLEAN NOT NULL DEFAULT FALSE,
-  storm_mode_at BIGINT,
-  owner_freeze_at BIGINT                -- [v4.13] the owner texted FREEZE (§17.2); cap_drain's owner_freeze_request
+  storm_mode_at BIGINT
 );
 
 -- Protocol data
@@ -841,13 +816,13 @@ CREATE TABLE flags (                    -- StormDesk output (one per candidate)
 
 CREATE TABLE stormdesk_runs (           -- [v4.3] every StormDesk run, for replay and audit (§14.7, §14.8)
   run_id BIGSERIAL PRIMARY KEY,
-  job TEXT NOT NULL CHECK (job IN ('investigate','triage','respond','review','author')), -- [v4.15] review (§14.7b), [v4.22] author (§14.7d)
+  job TEXT NOT NULL CHECK (job IN ('investigate','triage','review','author')), -- [v4.15] review (§14.7b), [v4.22] author (§14.7d); [v4.24] respond removed with Photon
   case_id BIGINT REFERENCES cases,
   candidate_id BIGINT REFERENCES candidates,
   merchant_id BYTEA,
   runner TEXT NOT NULL,                 -- 'droid' | 'fake' (a fake run is never shown as an agent result)
   status TEXT NOT NULL CHECK (status IN ('running','succeeded','invalid','failed')),
-  output JSONB,                         -- the structured output (Flag / CaseFile / AppealReply / Review)
+  output JSONB,                         -- the structured output (Flag / CaseFile / Review / DetectorProposal)
   citations_valid BOOLEAN,
   transcript JSONB NOT NULL DEFAULT '{}', -- {runner, steps: [{tool, input, ok}], missing_citations, error}
   session_id TEXT,
@@ -863,17 +838,6 @@ CREATE TABLE approvals (
   operator TEXT NOT NULL,
   note TEXT,
   executed_actions JSONB,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE TABLE messages (                 -- Photon conversations
-  message_id BIGSERIAL PRIMARY KEY,
-  merchant_id BYTEA REFERENCES merchants,
-  resident_id UUID REFERENCES residents, -- [v4.13] a resident's thread (FREEZE by text); merchant_id is then NULL
-  flag_id BIGINT REFERENCES flags,
-  direction TEXT NOT NULL CHECK (direction IN ('out','in')),
-  channel TEXT NOT NULL,
-  body TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -1086,8 +1050,8 @@ All JSON. Byte fields base64url. Prefix `/v1`. Auth for demo: none on reads; res
 
 | Method + path | Body / query | Returns | Owner |
 |---|---|---|---|
-| `POST /v1/residents/register` | `{display_name, holder_pub, region_id, contact?: {channel, handle}}` (**[v4.13]** `contact` is the Photon handle that may text FREEZE; also saved when the resident already exists) | `{resident_id, cert}` — creates Nessie customer, checking (seeded $500), escrow (opened at $0); locks $20 as a withdrawal + deposit pair (§11.4); issues cert v1 cap 2000 | WS2 |
-| `POST /v1/merchants/register` | `{display_name, merchant_pub, region_id, x, y, contact?: {channel, handle}}` | `{merchant_id, mcert}` | WS2 |
+| `POST /v1/residents/register` | `{display_name, holder_pub, region_id}` | `{resident_id, cert}` — creates Nessie customer, checking (seeded $500), escrow (opened at $0); locks $20 as a withdrawal + deposit pair (§11.4); issues cert v1 cap 2000 | WS2 |
+| `POST /v1/merchants/register` | `{display_name, merchant_pub, region_id, x, y}` | `{merchant_id, mcert}` | WS2 |
 | `POST /v1/storm-mode` | `{cert_id, cap_cents}` | `{cert}` — tops escrow up in Nessie, issues new version | WS2 |
 | `POST /v1/storm-mode/close` | `{cert_id}` | `{cert}` (cap back to 2000; refund scheduled per §7.4) | WS2 |
 | `POST /v1/sync` | `{device_pub, items: [...]}` | `{rcpt, policy, certs: [...]}` | WS2 |
@@ -1110,10 +1074,6 @@ All JSON. Byte fields base64url. Prefix `/v1`. Auth for demo: none on reads; res
 | `GET /v1/town` | | regions, merchants (x, y, simulated), live dots, recent payments, uploads, alerts | WS4/WS2 |
 | `GET /v1/relay/paths` | `?limit=20` | recent payments with `path`, hops, latency. **[v4.3]** Each hop names the device (resident or merchant, from `device_short_id`) | WS2 |
 | `GET /v1/town/quick` **[v4.3]** | `?adoption&p_link&p_uplink` | the §16.6 quick re-sim: `{baseline, current, seconds}` | WS4 |
-| `POST /v1/photon/inbound` | Photon webhook payload | 200 | WS7 |
-| `POST /v1/photon/resident-contact` **[v4.13]** | `{resident_id \| display_name, channel, handle}` | the resident and the saved handle. Operator header; `display_name` must match exactly one real (not simulated) resident, e.g. Maya | WS7 |
-| `GET /v1/photon/messages` **[v4.13]** | `?merchant_id=` or `?resident_id=` | `{messages}`: one shop's or resident's Photon thread, oldest first. **[v4.21]** A shop's thread also has `turns`: the respond runs that answered it, each with its Droid session, turn, and whether the agent's reply was sent (§14.7c) | WS7 |
-| `GET /v1/photon/freezes` **[v4.13]** | `?cert_id&limit` | certs whose owner texted FREEZE: `[{cert_id, status, frozen_at, owner_freeze_at, resident_id, display_name, policy_ver}]`, `policy_ver` = the first POLICY listing the cert | WS7 |
 | `POST /v1/demo/reset` | | clears real-device demo data, reissues Maya's cert, keeps the simulated town. **[v4.18]** Removes the dry run's identities first (§21.6) and returns `dry_run_removed`. **[v4.19]** Opens a fresh guarantee pool account (§11.4) and returns it as `pool: {account_id, customer_id, opening_cents, replaced}` (null without a pool) | WS2 |
 |  |  | **[v4.3]** Operator header. Deletes what touches a real resident or shop (payments, tags, cases, candidates, logs, contacts, uploads, payouts, whole ledger transactions, queued moves), opens fresh Nessie accounts under the same customers (checking $500, escrow $0, shops $0; Nessie balances can't be edited), reissues each real resident a new cert (new `cert_id`, $20 locked), restores the shops' pool eligibility and publishes a POLICY without the old certs. The phone gets its new cert by registering again. Optional `{storm_cap_cents: 5000}` pre-stages Storm Mode. Measured live: under 1 s. |  |
 | `POST /v1/demo/seed-town` | `{seed}` | runs the simulator into the DB (§16) | WS4 |
@@ -1145,8 +1105,6 @@ All JSON. Byte fields base64url. Prefix `/v1`. Auth for demo: none on reads; res
 | `stormdesk_step` | `{flag_or_case, tool, input_summary, ok}` (live tool calls) |
 | `flag` | flag row |
 | `approval` | approval + executed actions |
-| `message` | Photon message in/out. **[v4.13]** `merchant_id` or `resident_id` says whose thread |
-| `owner_freeze` **[v4.13]** | `{resident_id, cert_ids, newly_frozen, policy_ver, owner_freeze_at}` after a resident's FREEZE text |
 | `upload` | device, items, hops |
 | `town` **[v4.3]** | `{seed, status, summary}` when seed-town finishes |
 
@@ -1180,11 +1138,9 @@ Default action: `hold_pool_payout`.
 
 Per cert, any 15-minute window.
 
-Features: `distinct_merchants_15m`, `spent_15m_cents`, `cap_cents`, `drain_share`, `minutes_since_storm_mode`, `home_region`, `regions_in_window`, `region_mismatch`, `hour_of_day`, `gap_since_last_activity_min`, `owner_freeze_request` (from Photon `FREEZE`).
+Features: `distinct_merchants_15m`, `spent_15m_cents`, `cap_cents`, `drain_share`, `minutes_since_storm_mode`, `home_region`, `regions_in_window`, `region_mismatch`, `hour_of_day`, `gap_since_last_activity_min`.
 
 **Fires when:** `distinct_merchants_15m ≥ 3` **and** `drain_share ≥ 0.8`.
-
-**[v4.13]** `owner_freeze_request` is true when `cert_status.owner_freeze_at` is set when the candidate is created (the owner texted FREEZE, §17.2, before or during the drain's uploads). Like every feature it is frozen at creation; the dashboard shows a later request next to the flag from `GET /v1/photon/freezes`.
 
 Default action: `freeze_cert`. (Even an approved soft freeze is a human decision; contrast with hard rules.)
 
@@ -1202,7 +1158,7 @@ Default action: `dispatch_relay`.
 
 - `detectors.run_incremental(deps, now)` runs after every ingest, in protocol time (`payments.received_at` and `uploads.received_at` are the ingest's `now`, so the simulator's virtual clock works). `cap_drain` looks at the 15 minutes ending at each newly received payment; `merchant_silence` (6 h window) and `region_dark` run once per hour boundary passed, catching up on missed hours. A detector error never fails a sync.
 - One candidate per stretch: a new candidate is skipped if one for the same kind and subject overlaps its window. `region_dark`'s window is the dark stretch itself (from the last upload, or the region's first cert if there was none). A candidate with no flag is a queued StormDesk job.
-- `contacts_per_hour` counts distinct `contact_id`s the merchant is in, from either side's log. Neighbors are merchants within 3 grid cells (Euclidean). `pool_funded_share` = pool-funded payments ÷ accepted payments. `near_cap_share` compares `cum` with the cert's highest cap. `owner_freeze_request` is `false` until Photon FREEZE (WS7) exists.
+- `contacts_per_hour` counts distinct `contact_id`s the merchant is in, from either side's log. Neighbors are merchants within 3 grid cells (Euclidean). `pool_funded_share` = pool-funded payments ÷ accepted payments. `near_cap_share` compares `cum` with the cert's highest cap.
 - Accepted payments are those `settled`, `held` or `denied_knowing`.
 - Store-and-forward data can arrive hours late, so a newly received pool-funded payment also re-checks its merchant's silence windows that contain it. `cap_drain` remembers which payments it has looked at (several uploads can land in the same second).
 - R5 loads only the log entries that can fire it (the merchant's ACCEPT for the payment, and the contacts whose id lists carry a conflicting tag), and per-entry re-checks are batched once per upload.
@@ -1221,7 +1177,6 @@ The detectors are designed to fire on **traps** too (§16.4). A rules-only syste
 |---|---|---|
 | A hard case opens | **Investigate:** gather evidence, independently re-verify both signatures and the rule with the deterministic verifier tool, compute exposure and who is owed what, write a case file and recovery plan | `CaseFile` → `cases.case_file_md` |
 | A candidate is created | **Triage:** decide whether it's real, cite evidence, choose severity and action, or dismiss with a reason | `Flag` → `flags` |
-| A merchant appeals by message (§17) | **Respond:** compare the claim with the logs, reply with evidence, escalate or resolve | `AppealReply` → `messages` |
 | A triage stores an open or dismissed flag **[v4.15]** | **Review:** a second session tries to refute the Flag; it never acts (§14.7b) | `Review` → `flags.review` |
 | An operator asks for a detector for a gap **[v4.22]** | **Author:** write a pure detector and its test in a sandbox, prove it on labelled data; our code re-checks it and opens a PR for a person (§14.7d) | `DetectorProposal` → a pull request |
 
@@ -1268,7 +1223,6 @@ config = SessionConfig(
 | `query_features` | `entity: merchant\|cert\|region, id, features[]` | Chalk online query (§15.2) |
 | `get_region_status` | `region_id` | active certs, expiries, last upload, alerts (live + replayed, labeled) |
 | `get_nessie_balances` | `entity_id` | balances for demo entities (cached ≤ 10 s) |
-| `get_messages` | `merchant_id` | Photon conversation so far |
 
 There is **no** write tool. The agent's only output is its structured result.
 
@@ -1325,7 +1279,7 @@ class Flag(BaseModel):
     proposed_action: Literal["none", "lower_merchant_limit", "hold_pool_payout",
                              "freeze_cert", "dispatch_relay"]
     action_params: dict[str, int | str]   # e.g. {"limit_cents": 1000}
-    merchant_notice: str | None           # draft text for Photon, if action affects a merchant
+    merchant_notice: str | None           # draft text for the shop, if action affects a merchant (stored, not sent)
 
 class CaseFile(BaseModel):
     rule: str
@@ -1335,20 +1289,14 @@ class CaseFile(BaseModel):
     recovery_plan: list[str]
     evidence_ids: list[str]
     summary_md: str
-
-class AppealReply(BaseModel):
-    reply: str                            # sent to the merchant
-    claim_consistent_with_logs: bool
-    evidence_ids: list[str]
-    escalate: bool
 ```
 
 ### 14.6 Approval actions (deterministic, run by the server on Approve)
 
 | Action | Effect |
 |---|---|
-| `hold_pool_payout` | Merchant's not-yet-executed pool-funded payouts → `held`; future pool payouts held until released. Photon notice sent. |
-| `lower_merchant_limit` | Sets `merchants.per_payment_limit_cents`; publishes a new POLICY (spreads to phones by gossip). Photon notice sent. |
+| `hold_pool_payout` | Merchant's not-yet-executed pool-funded payouts → `held`; future pool payouts held until released. |
+| `lower_merchant_limit` | Sets `merchants.per_payment_limit_cents`; publishes a new POLICY (spreads to phones by gossip). |
 | `freeze_cert` | `cert_status='frozen'`, new POLICY. |
 | `dispatch_relay` | Adds a task "Send a relay to <region>" to the operator's list (no money, no messages). |
 | `none` | Nothing. |
@@ -1360,7 +1308,7 @@ Reject = flag `rejected`, nothing executes. Every approval writes an `approvals`
 - their queued Nessie moves are cancelled;
 - the payout and its fraud receivable are reversed in the ledger, so it stays balanced;
 - `pool_eligible = false`, so future pool money is held at settlement.
-`lower_merchant_limit` needs `action_params.limit_cents`. Approving `hold_pool_payout` or `lower_merchant_limit` sends Photon's hold notice (`photon/notices.hold_notice`), recorded on the thread even when it can't be delivered. The `approval` SSE event carries the executed actions. A real shop with a registered handle also gets Photon's settled notice when its payout executes.
+`lower_merchant_limit` needs `action_params.limit_cents`. The `approval` SSE event carries the executed actions. **[v4.24]** Nothing is sent to the shop any more (Photon removed); StormDesk's draft `merchant_notice` stays in the run's stored output.
 
 ### 14.7 Guardrails
 
@@ -1371,7 +1319,7 @@ Reject = flag `rejected`, nothing executes. Every approval writes an `approvals`
 
 ### 14.7a As built [v4.3]
 
-- `server/stormcash/stormdesk/`: `tools.py` (the 11 tools, plain SQL reads in a `READ ONLY` transaction, ids returned as hex so they can be cited), `runner.py`, `service.py`, `worker.py`, `schemas.py`, `prompt.py`, `citations.py`.
+- `server/stormcash/stormdesk/`: `tools.py` (the 10 tools, plain SQL reads in a `READ ONLY` transaction, ids returned as hex so they can be cited), `runner.py`, `service.py`, `worker.py`, `schemas.py`, `prompt.py`, `citations.py`.
 - **Runners.** `STORMDESK_RUNNER=droid|fake|auto` (auto = Droid only when the SDK, the `droid` CLI and `FACTORY_API_KEY` are present). `DroidRunner` uses `droid-sdk` 0.5.0: our tools are an in-process MCP server named `stormdesk`, `SessionConfig(system_prompt, mcp_servers, disabled_tools, disable_builtin_skills=True)`, `Session.stream(prompt, output=Model)`, `ToolCall`/`ToolResult` events become steps, and a failed structured output is retried once. The permission handler allows only `McpToolAction`s from the `stormdesk` server naming one of our 11 tools and cancels everything else. The `disabled_tools` list is every built-in tool id (verified with `list_tools()`, §14.2). If Droid can't run at all, the fake runner answers the job and the run records `fallback_from_droid` (§14.2). `FakeRunner` calls the same tools and applies the rules-only baseline (every candidate gets its default action; case files from `verify_tags` + `get_cert_chain`). Its triage also calls `query_features` with `as_of` = the candidate's `window_end` and says in the reasoning whether Chalk or the Postgres fallback answered; it reports those values but doesn't weigh them. Its summaries start with "Fake runner", its session ids with `fake-`, and every run records its runner, so a fake result is never shown as an agent's judgement (§0 rule 3).
 - **Storage.** Every run is a `stormdesk_runs` row (§11.1) with its transcript. Triage writes one `flags` row per candidate (`dismissed` for kind `none`, `invalid` on a citation miss or no output). A re-run updates it unless an operator already approved or rejected it. An investigation writes `cases.case_file_md` only when its citations hold.
 - **Citations** (§14.7) accept tag/payment hashes, device-log entry hashes, contact ids, cert ids, merchant ids (hex, optional `kind:` prefix) and weather alert ids. A flag of a real kind must cite at least one; a dismissal may cite none.
@@ -1398,28 +1346,17 @@ Reject = flag `rejected`, nothing executes. Every approval writes an `approvals`
   - The keys are absent on fake-runner runs and on older runs: not recorded, never zero.
 - **Switch.** `STORMDESK_REVIEW=1`, the default when the server loads its environment (bare `Settings` in tests: off), reviews every triage that stores an open or dismissed flag, with the runner the desk would pick (Droid, or the labelled fake runner on fallback). The `POST /v1/stormdesk/run` response then has `review`. `STORMDESK_REVIEW=0` turns it off. `POST /v1/stormdesk/review` reviews a stored flag on request, or a Flag passed in with its candidate (§12.1).
 - **Dashboard** (the StormDesk flag panel): a "Second opinion" section with "Reviewer agrees / disagrees / not enough evidence", the reviewer's badge (model and credits, or "Fake runner · rules only"), its reasons, the records it cited (checked), what it would do instead, and its own steps, live or replayed. A flag where the agents disagree says "Agents disagree · a person decides" in its header and in the list. "Ask the reviewer" / "Review again" calls the endpoint.
-- **Not built:** reviewing investigations (hard cases are proofs) and appeal replies.
+- **Not built:** reviewing investigations (hard cases are proofs).
 - **Honesty.** The reviewer prompt was written before any review ran and without reading any held-out row; its author knew run B's aggregate scores (§15.3).
 - **First live reviews, Oct 17** (`claude-sonnet-5-5`, demo DB, seed 42), both answered on the first attempt with valid citations:
   - Corner Store (flag 16, StormDesk run 88, prompt v2, hold pool payouts): review run 89 **agreed**. 14 steps (`ToolSearch` and 13 tool calls), 10 cited ids, 56,198 credits, 43.6 s.
   - Stolen phone, Resident 174 (flag 17, the fake runner's freeze_cert baseline): review run 90 **agreed**. 9 steps, 5 cited ids, 16,828 credits, 30.0 s. It also noted that the baseline's text missed the region mismatch and the idle gap.
   - Neither shows a disagreement. How often the reviewer disagrees, and whether that helps, is for an eval on stored proposals (§15.3).
 
-### 14.7c Appeals as one Droid session [v4.21]
+### 14.7c Appeals as one Droid session [v4.21], removed [v4.24]
 
-- **One conversation per appeal thread.** A thread is a shop and the flag its texts are about (`messages.merchant_id`, `flag_id`). Its first text opens a Droid session with StormDesk's system prompt (v2), the 11 read-only tools, the built-ins off and the permission handler. Each later text resumes that session with `Session.resume(session_id, mcp_servers=…, disabled_tools=BUILTIN_TOOLS, disable_builtin_skills=True, interactions=…)` and streams one new turn with `output=AppealReply`. Verified on droid-sdk 0.5.0 with droid 0.244.0: a resumed session keeps its model and system prompt, and an unknown id raises `SessionNotFoundError`.
-- **Prompts** (`prompt.py`, `APPEAL_PROMPT_VERSION = 1`). The opening turn says who is appealing which flag and gives the thread so far, the hold notice included, then the new text. Later turns give only the new text, plus anything the session didn't see: that its previous reply was held back and why ("Your previous reply was not sent: …"), and messages answered while Droid couldn't run.
-- **Guardrails on every turn.** The tools and permission handler are passed again on each resume. The reply is sent only if it cites at least one id and every cited id exists (§14.7, `photon/appeal.pick_reply`). Otherwise the shop gets the neutral acknowledgement, and the next turn is told. A failed structured output is asked again once, in the same session.
-- **A session that can't be resumed** (expired, or saved on another machine) is replaced by a new session seeded with the last 30 messages of the thread from `messages`. That turn records `session: restarted`, `resumed_from` and `resume_error`. If Droid can't run at all, the labelled fake runner answers as before (§14.2).
-- **Where the session id lives.** There's no new table. Every turn is a `stormdesk_runs` row (job `respond`) with the session id in `session_id` and `transcript.appeal` = `{mode, flag_id, in_message_id, out_message_id, reply_sent, session: started | resumed | restarted, turn, prompt_version}`. Like every run it also has model, credits, duration, attempts and permission denials. The thread's session is the one its latest Droid turn ran in, as long as that turn's message is still on the thread: a thread cleared from `messages` starts a new conversation. A thread's turns run one at a time (a lock per thread in `photon/appeal.py`), so each turn knows what the shop was actually sent.
-- **Switch.** `STORMDESK_APPEAL_SESSIONS=1` is the default when the server loads its environment (bare `Settings` in tests: off). `0` gives one fresh run per message, as before (`transcript.appeal.mode = per_message`). The fake runner keeps its labelled deterministic reply in both modes.
-- **Dashboard.** Under each StormDesk reply, the Photon thread says which turn of which Droid session wrote it ("Droid · turn 2 · same Droid session 8c1f2a3b"), or why the reply was held back. Its header says "One Droid session · 3 turns · N credits". The Droid tab counts appeal turns and sessions (resumed, restarted) and labels each respond run with its turn (§18.7).
-- **First live appeal, Oct 17** (`claude-sonnet-5-5`, Neon demo DB, the Corner Store's flag 16). The texts came in as simulated inbound webhooks, with Photon sending off. The shop texted three times, all answered in one Droid session (runs 91–93):
-  1. "We were closed that afternoon, the generator died around 2." Turn 1 (new session, 5 tool calls, 36,715 credits, 33 s) answered with the six payments the shop's signed log accepted after 2 PM. It also cited `16`, the flag's number, which isn't a record, so the citation check held the reply back and the shop got the neutral acknowledgement.
-  2. "The phone was off the whole time, it was in a drawer." Turn 2 (resumed, and told its last reply wasn't sent; 5 tool calls, 18,298 credits, 30 s): "A phone that is switched off can't sign payments … This also differs from your first message. A generator failure would explain a closed shop, but it wouldn't stop the phone from working."
-  3. "I already explained what happened. Why is my payout still on hold?" Turn 3 (resumed; 3 tool calls, 13,118 credits, 21 s) answered from the conversation and escalated to a person: "First you said the shop was closed after the generator died around 2. Then you said the phone was off in a drawer the whole time."
-  - Since that run, the opening prompt no longer names the flag's number and says to cite only records retrieved with the tools. The one allowed retry's first turn (run 94, new session, 4 tool calls, 61,428 credits, 38 s) cited 11 records, all of which exist, and its reply was sent. The credit guard stopped the retry there, because another turn could have passed the 200,000-credit cap. Total: 129,559 credits.
-  - Afterwards the proof's messages and its test handle were removed from `messages` and `merchant_contacts`, so the table demo starts a new conversation. Runs 91–94 are kept.
+Removed with Photon (§17): there are no texts to answer. Runs stored before v4.24 with job `respond` stay readable on the Droid tab (§18.7).
+
 ### 14.7d Droid proposes a detector as a pull request [v4.22]
 
 The one job where Droid writes code. It never runs in the money path: a proposed detector is a module and a test in a pull request, and nothing imports it until a person merges a follow-up that wires it into `detectors.run_incremental` (§0 rule 2).
@@ -1565,7 +1502,7 @@ Target ~60 rows (time budget: 60 × ~60 s / 6 parallel ≈ 10 min per run).
 **[v4.7] As built (#33, `chalk/evals/README.md`; verified against docs.chalk.ai and chalkcompute 2.13.7).**
 - **Dataset.** Seeds 42, 7, 13, 99 and 2026, 72 h from a fixed T0 (2026-10-14 00:00 UTC). Rebuilt from the #82 simulator (colluders take pool money R5 can't deny), they give **43 rows (20 honest)**, under the ~60 target. The first build, from the old simulator, gave 48 rows. Labels come from each seed's `labels.json` by subject. `honest_subject` means "flagging it is a false flag" (every trap); a `hard_case` subject's soft candidate takes the candidate's kind. `trap_clock_drift` never raises a candidate. `meta.json` lists the labelled subjects no detector raised; no runner sees them. Re-running gives the same rows byte for byte.
 - **One local database per seed** (`stormcash_eval_<seed>`, Docker Postgres, `schema.sql` + `migrations/`), never the hosted demo DB, because towns from two seeds share the grid and would skew `merchant_silence`'s neighbour median. The towns are signed with a throwaway eval key.
-- **Task path.** One server per seed (Nessie, Photon, background loops and the worker off; `CHALK_DISABLED=1`, since `neon_stormcash` points at the demo DB, so `query_features` answers `postgres_fallback` from the eval DB). A stdlib gateway (`gateway.py`) sits in front of them behind one cloudflared quick tunnel and a bearer token. The task `sd-stormdesk-triage(seed, candidate_id)` posts a job and polls until it's done, because a Droid run can outlast the tunnel's ~100 s response limit. The gateway calls the real `POST /v1/stormdesk/run {candidate_id}` and exposes no other route.
+- **Task path.** One server per seed (Nessie, background loops and the worker off; `CHALK_DISABLED=1`, since `neon_stormcash` points at the demo DB, so `query_features` answers `postgres_fallback` from the eval DB). A stdlib gateway (`gateway.py`) sits in front of them behind one cloudflared quick tunnel and a bearer token. The task `sd-stormdesk-triage(seed, candidate_id)` posts a job and polls until it's done, because a Droid run can outlast the tunnel's ~100 s response limit. The gateway calls the real `POST /v1/stormdesk/run {candidate_id}` and exposes no other route.
 - **Output** = the Flag JSON plus `_run` (the server's `runner`, `citations_valid`, `missing_citations`, `fallback_from_droid`, `run_id`). A run with no Flag returns plain text, so `valid-json` fails it.
 - **`citations-valid`** reads the server's own §14.7 check, made against the eval DB when the flag was stored, so no `GET /v1/exists` endpoint was needed. It isn't in the rules-only evaluation, because the baseline cites nothing (n/a).
 - **`no-false-flag`** passes non-honest rows (the "if honest_subject" in its pass condition), and the results file also gives its honest-only mean.
@@ -1609,7 +1546,7 @@ One simulator feeds four things: the Town tab backdrop, StormDesk's data, the Ch
 ### 16.3 Town model
 
 - Grid 40×24 cells. 4 regions (Buncombe County names for flavor): `asheville-downtown`, `west-asheville`, `black-mountain`, `swannanoa`.
-- 40 merchants placed in clusters per region. 2 of them are the **real** demo phones (Pharmacy, Gas Station), drawn at fixed positions in `asheville-downtown`. **Corner Store** is a simulated merchant (ledger-only money) with one real thing: its Photon contact is the laptop at the table.
+- 40 merchants placed in clusters per region. 2 of them are the **real** demo phones (Pharmacy, Gas Station), drawn at fixed positions in `asheville-downtown`. **Corner Store** is a simulated merchant (ledger-only money).
 - ~400 residents with home regions; 60% adoption by default; each has a cert (cap 20 always-on, 50 after Storm Mode at T+2 h for 70%).
 - Residents walk: pick a destination merchant weighted by distance; travel time by distance; pay at merchants (amounts $3–$45, log-normal).
 - Phones meet when within 2 cells at the same tick (probability `p_link`, default 0.6) → run the sync logic (simplified: exchange item sets, write CONTACT entries both sides).
@@ -1644,7 +1581,7 @@ One simulator feeds four things: the Town tab backdrop, StormDesk's data, the Ch
 - Writes everything into Postgres through `ingest_items()` (uploads happen when simulated relays get uplink).
 - `sim/out/<seed>/labels.json`: ground truth per subject.
 - `sim/out/<seed>/stats.json`: share of double spends refused offline, caught at settlement, mean loss per cheater, median time to settlement, hops histogram. These feed the Town tab charts.
-- `POST /v1/demo/seed-town {seed}` runs seed 42 into the live DB with the planted demo cases: **Corner Store** = colluder (with the real Photon handle), one stolen phone, `swannanoa` dark. **[v4.3]** Operator header required; answers 202 and runs in the background (72 h ending now; Nessie off; simulated events go to a quiet broker), `GET /v1/demo/seed-town` reports `{status, progress, summary}`, and a `town` SSE event fires when it's done. Body: `{seed, hours, residents, corner_store_contact?: {channel, handle}, replace?}`. **[v4.10]** `replace: true` first clears the simulated town (`demo.clear_town`: every simulated resident and shop and what touches them, every `region_dark` candidate, whole ledger transactions, the shops' Photon threads). Real-device data stays, and the shops' Photon handles are restored on the new town (a seed derives the same shop ids). Use it to re-seed after a scenario change; without it the same seed is refused. **[v4.4]** Seed 42 takes ~45 s against the hosted Neon DB (it was ~46 min with a transaction per item) and ~8 s locally; still seed before the judging slot.
+- `POST /v1/demo/seed-town {seed}` runs seed 42 into the live DB with the planted demo cases: **Corner Store** = colluder, one stolen phone, `swannanoa` dark. **[v4.3]** Operator header required; answers 202 and runs in the background (72 h ending now; Nessie off; simulated events go to a quiet broker), `GET /v1/demo/seed-town` reports `{status, progress, summary}`, and a `town` SSE event fires when it's done. Body: `{seed, hours, residents, replace?}`. **[v4.10]** `replace: true` first clears the simulated town (`demo.clear_town`: every simulated resident and shop and what touches them, every `region_dark` candidate, whole ledger transactions). Real-device data stays. Use it to re-seed after a scenario change; without it the same seed is refused. **[v4.4]** Seed 42 takes ~45 s against the hosted Neon DB (it was ~46 min with a transaction per item) and ~8 s locally; still seed before the judging slot.
 
 ### 16.6 Sliders (Town tab)
 
@@ -1656,57 +1593,9 @@ Adoption, foot traffic (`p_link`), relay density (`p_uplink`). Moving a slider r
 
 ---
 
-## 17. Photon messaging agent [v4]
+## 17. Photon messaging agent: removed [v4.24]
 
-**VERIFY Photon 2.0's SDK/webhook shapes from the official guidelines and docs** (linked from hhuh.io) and the Friday workshop. Do not guess field names. Wrap it in `photon/client.py` with two functions: `send(channel, handle, text)` and a FastAPI route for inbound messages.
-
-**[v4.5] Verified Oct 17 against photon.codes/docs (Stable, Spectrum).**
-- **Inbound:** Spectrum Cloud POSTs each message to `POST /v1/photon/inbound` as JSON `{event: "messages", space, message}`; `message.content` is tagged by `type` (`text` has `text`), `message.sender.id` is the platform user id, `message.id` is the dedup key (at-least-once delivery). Headers `X-Spectrum-Timestamp` and `X-Spectrum-Signature: v0=<hex>`, an HMAC-SHA256 with the webhook secret over `v0:{timestamp}:{raw body}`; reject if more than 300 s off.
-- **Outbound:** sending exists only in the TypeScript SDK (`spectrum-ts`; Telegram: `telegram(app).user(id)` → `space.create(user)` → `space.send(text)`). So `server/stormcash/photon/bridge/` is a ~90-line Node process the Python `client.send` calls over localhost with a bearer token. Env for the bridge: `PROJECT_ID`, `PROJECT_SECRET`, `TELEGRAM_BOT_TOKEN`, `PHOTON_BRIDGE_TOKEN`.
-- `merchant_contacts.handle` for Telegram is the numeric Telegram user id (stringified).
-
-### 17.1 Channels
-
-- **Primary:** Telegram (Telegram Desktop on a laptop at the table).
-- **Optional:** iMessage via Messages on a Mac signed into a teammate's Apple ID.
-- Phones are in airplane mode during the demo, so the "merchant" conversation lives on a laptop.
-
-### 17.2 Flows
-
-| Flow | Trigger | Message |
-|---|---|---|
-| Hold notice | Operator approves `hold_pool_payout` or `lower_merchant_limit` | Agent's `merchant_notice` draft, checked to contain no invented numbers (numbers must match the flag's evidence), e.g. "Corner Store: your $140 guarantee-pool payout is on hold. Your phone logged no contact with other phones from 2–8 PM while 2 nearby shops logged 41. Reply to explain." |
-| Appeal | Merchant replies | StormDesk `respond` job (§14.1) gets the message + `get_messages` + logs; replies with evidence; if `escalate`, flag status stays open with the appeal attached; dashboard shows the thread |
-| Settled notice | Payout executed | "Paid: $12.00 from StormCash for payment at 4:12 PM." (template, no agent) |
-| Resident FREEZE | Resident texts `FREEZE` from their registered handle | Freeze cert, new POLICY, confirm by text. Feeds `owner_freeze_request` in cap_drain. Mention in pitch; demo only if time allows. |
-
-**[v4.13] Resident FREEZE, as built (`photon/freeze.py`).**
-- The text must be exactly `FREEZE` after trimming, in any case. It comes from a handle in `resident_contacts` (set by `contact` on register, or by the operator with `POST /v1/photon/resident-contact`). The handle isn't verified (demo only; a real deployment would confirm it with a code).
-- Deterministic, never through StormDesk: every cert of the resident that isn't `closed` goes through `cases.freeze_cert` (`cert_status = 'frozen'`, a new signed POLICY, SSE `policy`), `cert_status.owner_freeze_at` is set once, and SSE `owner_freeze` fires. A second FREEZE changes nothing (no new POLICY) and gets the same confirmation; duplicate webhook deliveries are dropped by message id.
-- Reply (template): "Your StormCash wallet is frozen. Shops will refuse it as the freeze list spreads." The FREEZE and the reply are recorded on the resident's thread (`messages.resident_id`). With `PHOTON_DISABLED=1` the freeze still happens and the reply is recorded with `delivered: false`.
-- Texting can't unfreeze: any other text from a resident gets "Text FREEZE to freeze your StormCash wallet. Texting can't unfreeze it." A FREEZE from an unknown handle gets a neutral reply ("This account isn't linked to a StormCash wallet, so nothing was changed.") and changes nothing; other texts from unknown handles are ignored.
-- One handle can be both a shop and a resident (one Telegram account at the table): `FREEZE` is the resident's, anything else is the shop's appeal.
-- Dashboard: Cases → Owner freezes lists them with the thread; a `cap_drain` flag on a frozen-by-owner cert shows the request.
-
-**[v4.21] Appeals as one conversation, as built.** Each shop's appeal thread (shop + flag) is one Droid session, resumed for every new text, so the agent remembers what the shop said and what it checked, and argues from it (§14.7c). The citation check still applies to every reply. FREEZE is untouched: it never reaches StormDesk. `STORMDESK_APPEAL_SESSIONS=0` gives one run per message.
-
-### 17.3 Demo conversation (target)
-
-```
-StormCash: Corner Store, your $140 guarantee-pool payout is on hold. Your phone logged no contact
-           with other phones from 2–8 PM while 2 nearby shops logged 41. Reply to explain.
-Merchant:  we were closed, generator died
-StormCash: Your log shows you accepted 3 payments at 4:12, 4:30 and 5:05 PM during that window.
-           I've sent this to a reviewer with your reply attached.
-```
-
-The agent's reply must cite real log entries (citation check applies).
-
-### 17.4 Voice (stretch, last)
-
-Photon's best voice agent prize: the same appeal flow by phone call. Only after everything else.
-
-**Done when:** approving the Corner Store flag sends the notice to the laptop, a typed reply gets an evidence-based answer within 60 s, and the thread shows on the dashboard.
+Removed on Oct 18. Photon's prize asks for a project built on Photon 2.0 and live on one of its channels, with iMessage as home base for text agents. Our Telegram notices and appeals didn't fit that, and their inbound path had only ever been tested with simulated webhooks (#5). Nothing in StormCash sends or receives text messages now: no hold or paid notices, no appeals, no FREEZE by text. A stolen phone is still covered by Face ID per payment, the `cap_drain` detector and StormDesk's proposal for the operator to freeze the certificate, and certificate expiry.
 
 ---
 
@@ -1735,11 +1624,10 @@ Title, "Demo mode", connection dot, **Reset demo** button (calls `/v1/demo/reset
 - **Hard case panel:** the two conflicting tags side by side, the broken rule highlighted, the field that conflicts in red. Buttons: **Verify it yourself** (in-browser WebCrypto ECDSA P-256 check against `holder_pub`), **Proof QR** (opens `/proof/<case_id>` on a judge's phone).
 - **Case file** from StormDesk (markdown).
 - **StormDesk panel:** list of flags; selecting one shows the summary, evidence links, and the live/replayed tool-call steps (`get_merchant_payments` ✓, `query_features` ✓, …). **Approve** / **Reject** buttons with operator name.
-- Photon thread for the selected merchant flag.
-- **[v4.3] As built.** The Cases tab switches between *Hard cases* and *StormDesk flags*. A flag shows its subject, summary, exposure, reasoning, evidence ids (marked as checked), the tool calls (live from `stormdesk_step`, or a stored run replayed step by step, labelled "Replay of run at …"), Run again, Approve / Reject with the operator's name, and the Photon thread live from `message` events. Each hard case has a StormDesk section (Investigate, live steps, replay). Fake-runner output carries a "Fake runner · rules only" badge everywhere.
+- **[v4.3] As built.** The Cases tab switches between *Hard cases* and *StormDesk flags*. A flag shows its subject, summary, exposure, reasoning, evidence ids (marked as checked), the tool calls (live from `stormdesk_step`, or a stored run replayed step by step, labelled "Replay of run at …"), Run again, and Approve / Reject with the operator's name. Each hard case has a StormDesk section (Investigate, live steps, replay). Fake-runner output carries a "Fake runner · rules only" badge everywhere.
 - "Merchant knew" case view: the merchant's ACCEPT entry listing the conflicting tag, with its signature.
 
-- **[v4.23] As built (#93).** Three views. **Proven fraud**: the case list, then the selected case: "CASE #n", the amount and what happened to it, a status pill, Proof QR and Verify it yourself, a summary strip (rule, where it was detected, exposure, certificate), the two tags as one table with the conflicting row tinted, the merchant-knew log, a Timeline and Payment details (from the case, its certificate and the payments' relay paths, matched by tag id), StormDesk and the case file. **Review queue**: a table of flags (subject, signal, exposure, second opinion, status), then the selected flag's proposal with Approve / Reject and the operator's name, evidence and agent steps side by side, the second opinion and the Photon thread. **Owner freezes**: the FREEZE-by-text list and the resident's thread.
+- **[v4.23] As built (#93).** Three views (**[v4.24]** the third, Owner freezes, went with Photon). **Proven fraud**: the case list, then the selected case: "CASE #n", the amount and what happened to it, a status pill, Proof QR and Verify it yourself, a summary strip (rule, where it was detected, exposure, certificate), the two tags as one table with the conflicting row tinted, the merchant-knew log, a Timeline and Payment details (from the case, its certificate and the payments' relay paths, matched by tag id), StormDesk and the case file. **Review queue**: a table of flags (subject, signal, exposure, second opinion, status), then the selected flag's proposal with Approve / Reject and the operator's name, evidence and agent steps side by side, and the second opinion.
 
 ### 18.4 Town tab
 
@@ -1777,12 +1665,11 @@ Mobile-friendly, no login. Shows the two tags, the rule, and a **Verify** button
 
 What Droid does in the running product, at the table in seconds, from stored runs only (§0 rule 3). `GET /v1/droid/console` (`server/stormcash/routes/droid_console.py`, read-only transaction) aggregates `stormdesk_runs`:
 
-- **Per run:** job (investigate, triage, respond, review), model used and requested, prompt version, duration (`finished_at − started_at`), Factory credits, StormDesk tool calls (Droid's own `ToolSearch` counted apart), verdict, and one outcome: `valid`, `invalid_citation`, `structured_output_failed` (failed after its retry), `fallback` (Droid couldn't run, the fake runner answered), `fake` (`STORMDESK_RUNNER=fake`), `failed`, `running`, or `unfinished` (`running` for over 15 min).
+- **Per run:** job (investigate, triage, review; `respond` on runs stored before v4.24), model used and requested, prompt version, duration (`finished_at − started_at`), Factory credits, StormDesk tool calls (Droid's own `ToolSearch` counted apart), verdict, and one outcome: `valid`, `invalid_citation`, `structured_output_failed` (failed after its retry), `fallback` (Droid couldn't run, the fake runner answered), `fake` (`STORMDESK_RUNNER=fake`), `failed`, `running`, or `unfinished` (`running` for over 15 min).
 - **Totals per job** count Droid's own finished runs (valid share, mean credits and duration). Fake-runner runs, fallbacks included, are counted beside them and never in a success rate.
 - **Guardrails:** invalid citations rejected, structured output failed after the retry, fallbacks, and, once runs record them (`transcript.attempts`, `transcript.permission_denials`, or `fallback_attempts` / `fallback_permission_denials` for a fallback's Droid attempt, §14.7b), structured-output retries and permission-handler denials. A guardrail no stored run records has a null count and the tab says "not recorded yet", never 0.
 - **Reviews (§14.7b):** verdict counts of valid Droid reviews; `transcript.reviewed.run_id` links a review to the run it checked.
-- **Appeals (§14.7c) [v4.21]:** respond runs that are turns of an appeal's Droid session: turns, sessions, how many turns resumed a session and how many restarted from the stored thread. Each such run is labelled "appeal turn N".
-- **Harness:** the 11 read-only tools, the built-in tools switched off, prompt versions, the runner new jobs get now, and Droid's cool-down if one is on.
+- **Harness:** the 10 read-only tools, the built-in tools switched off, prompt versions, the runner new jobs get now, and Droid's cool-down if one is on.
 
 - **[v4.22] Author runs (§14.7d):** job `author`, subject "detector for <kind>", verdict "<name>: PR #N opened" / "re-run matched" / "rejected by the re-run", outcome `rerun_rejected` ("Re-run rejected") when our re-run didn't match, and a guardrail "Proposed detectors rejected by the re-run". Their tool calls (sandbox reads, Create/Edit, `run_tests`, `run_eval`) count "in the sandbox", not read-only, and never as built-ins "still seen". The harness says `author_on`.
 
@@ -1907,7 +1794,6 @@ Tests: `server/tests/test_vectors.py` and `mobile/src/protocol/__tests__/vectors
 
 - 3 iPhones on stands, labeled **Maya**, **Pharmacy**, **Gas Station**, all on Release builds, chargers + power bank.
 - Mac 2: dashboard full screen (Accounts tab open). Second browser tab: proof page.
-- Mac 1: Telegram Desktop logged in as the **Corner Store owner**.
 - A printed **Proof QR card**.
 - Phones in airplane mode with Wi-Fi + Bluetooth on, no network joined. Gas Station has a hotspot or venue Wi-Fi ready for the reconnect beat.
 
@@ -1935,7 +1821,6 @@ Pre-staged before each judging slot: `/v1/demo/reset`, Maya cert at Storm Mode $
 | **Capital One** | Accounts tab: escrow, pool, merchant accounts, refund on close, call log, ledger balanced | "Every dollar is recorded in Nessie: escrow on Storm Mode, settlement to merchants, the guarantee pool above the escrow, and the refund on close. Here's every call." |
 | **Factory** | Cases → StormDesk: live step stream on a hard case, the Flag schema, the permission handler denying writes, README "Where Droid runs" | "Droid runs on every case and every suspicion in production. It re-verifies the proof itself, pulls the logs, and writes a structured proposal. It has no write tools; a person approves." |
 | **Chalk** | Evals tab: rules-only vs. StormDesk; a trap case it dismissed; `query_features` calls in the step stream | "The agent reads live features from Chalk: Nessie, phone logs, weather alerts. We evaluated it on labeled simulated towns with deliberate traps: here's what rules alone flag, and what the agent gets right." |
-| **Photon** | Approve the Corner Store flag → Mac 1 Telegram buzzes → type a reply → agent answers with evidence | "The merchant can argue back by text. The agent checks their claim against their own signed log, live." |
 | **Digital Trust** | "Merchant knew" case: Corner Store's own ACCEPT entry listing the conflicting tag | "We found an attack on our own system: a shop that plays dumb to get pool money. Its own signed log proves it knew." |
 
 ### 21.4 Table version (90 s) and short-slot rule
@@ -1957,7 +1842,7 @@ If judging slots are < 3 min, drop the Town beat from the core and show StormDes
 - **Steps.** (1) server up, the database has every table, column and CHECK value of `schema.sql`, the server key equals `SERVER_PUB` (`--server-pub`, else `SERVER_PUB_HEX` in `server/.env`, else `mobile/src/config.ts`; a stale app constant is a note), and the server says StormDesk skips dry-run data; (2) register: CERT and MCERTs under `SERVER_PUB`, Nessie checking $480, escrow $20, shops $0; (3) Storm Mode: escrow $20 → $50 in Nessie (computed from its transactions), cert version up; (4) $12 at the pharmacy passes C1–C6; (5) "Reuse the money" → C6 SAME_COUNTER, "Be clever" → C6 BROKEN_LINK (and TOTAL_BACKWARDS) at the gas station, which holds the pharmacy's tag via Maya; (6) the gas station's `/v1/sync` carries the pharmacy's PAY 2 hops: it settles from escrow as a Nessie withdrawal + deposit pair (read from Nessie directly), the case opens (found offline), the cert is frozen and a new POLICY lists it, the relay path names the three phones; (7) `/v1/proof/{case_id}` verifies in Python against the pinned key, and with `cpp/build/verify/stormcash-verify proof` when it's built; (8) the seeded town has a Droid flag on the Corner Store, with the reviewer's verdict; (9) cleanup.
 - **No Factory credits.** The only automatic StormDesk trigger is the worker (triage chains the review); it skips dry-run identities. The dry run refuses a server without `GET /v1/demo/dry-run` (it can't say so) before writing anything, and fails step 9 if any StormDesk run touches dry-run data.
 - **Cleanup.** `POST /v1/demo/reset`, which first removes every dry-run identity and everything that touches it, including the Nessie call-log lines (`demo.clear_dry_run`), so the table ends exactly as a reset leaves it: register Maya's phone again afterwards. The simulated town is never written. The dry-run Nessie customers stay in the sandbox, unreferenced. `--keep` skips the cleanup for debugging; the next reset removes what it left.
-- **Not covered:** the phones, Multipeer, the dashboard's rendering and Photon. The phones are tested separately on the real hardware.
+- **Not covered:** the phones, Multipeer and the dashboard's rendering. The phones are tested separately on the real hardware.
 
 ---
 
@@ -1969,7 +1854,7 @@ If judging slots are < 3 min, drop the Town beat from the core and show StormDes
 - [ ] Developer Mode on all 3 iPhones (restart)
 - [ ] Expo app shell with dev client builds and installs as Release on all 3 phones with free signing
 - [ ] `expo-nearby-connections` discovers + sends 2 KB between two iPhones in the hall, 5/5 times
-- [ ] **[v4.1]** Photon account + number (Photon workshop Fri 4–5 PM); Telegram on Mac 1 reaches a webhook through cloudflared
+- [ ] ~~**[v4.1]** Photon account + number (Photon workshop Fri 4–5 PM); Telegram on Mac 1 reaches a webhook through cloudflared~~ **[v4.24]** dropped with Photon
 
 **Person B (Mac 2):**
 - [ ] Repo created with this layout; this spec + CLAUDE.md committed
@@ -1998,13 +1883,12 @@ If judging slots are < 3 min, drop the Town beat from the core and show StormDes
 
 ### 22.3 Cut order (apply at Sat 6 PM checkpoint if behind)
 
-1. Photon voice
-2. Photon appeal agent (keep the one-way hold notice)
-3. `region_dark` + weather resolvers
-4. LLM-judge scorer
-5. Secure Enclave keys
-6. Two-hop demo topology (fall back to the gas station uploading its own + received items, 1 hop)
-7. Multipeer (fall back to QR sync)
+1. ~~Photon~~ cut entirely **[v4.24]**
+2. `region_dark` + weather resolvers
+3. LLM-judge scorer
+4. Secure Enclave keys
+5. Two-hop demo topology (fall back to the gas station uploading its own + received items, 1 hop)
+6. Multipeer (fall back to QR sync)
 
 **Never cut:** offline pay, refusal C6, judge mode (both modes), Verify-it-yourself, Nessie settlement + Accounts tab, R5 merchant-knew, `merchant_silence` + StormDesk triage, one real Chalk eval run.
 
@@ -2020,10 +1904,8 @@ If judging slots are < 3 min, drop the Town beat from the core and show StormDes
 | Phone can't sign API writes yet **[v4.3]** | accept unsigned writes | `API_SIG_REQUIRED=0` |
 | Droid slow or failing | replay stored transcripts | dashboard toggle |
 | Reviewer slow, failing or too costly **[v4.15]** | triage alone: the flag as StormDesk proposed it | `STORMDESK_REVIEW=0` |
-| Appeal sessions misbehave **[v4.21]** | one fresh Droid run per message | `STORMDESK_APPEAL_SESSIONS=0` |
 | Author job misbehaving or too costly **[v4.22]** | no author runs; the stored run and its PR stay on the Droid tab | `STORMDESK_AUTHOR=0` (the default) |
 | Chalk eval task can't reach tunnel | run agent locally, upload outputs, score in Chalk | `chalk/evals/run_local.py` |
-| Photon webhook issues | outbound notice only; show the thread from the DB | config |
 | Venue Wi-Fi blocks server | phone hotspot for Mac 2 and the gas station | — |
 
 ### 22.5 Saturday-night checklist
@@ -2037,7 +1919,7 @@ If judging slots are < 3 min, drop the Town beat from the core and show StormDes
 - [ ] Demo reset < 30 s, tested 3 times
 - [ ] **[v4.18]** `python -m stormcash.dryrun` all ✓ before each judging slot (§21.6)
 - [ ] 2-minute backup video recorded
-- [ ] README: pitch, setup, honest limits, "Where Droid runs", "How we use Chalk", "How we use Nessie", "How we use Photon"
+- [ ] README: pitch, setup, honest limits, "Where Droid runs", "How we use Chalk", "How we use Nessie"
 - [ ] Devpost skeleton + architecture image
 
 ---
@@ -2077,7 +1959,7 @@ If judging slots are < 3 min, drop the Town beat from the core and show StormDes
 10. **"Disasters with no warning?"** Everyone has a $20 always-on cap, renewed whenever they're online.
 11. **"Is it private?"** Phones share a pseudonymous id, amounts and running totals, never names or which shop was paid. Ids rotate per storm. Production encrypts relayed bundles to the server key.
 12. **"Isn't the rollback tool fake?"** It does what a modified app or a restored backup could do. Every offline system has to handle it.
-13. **"Stolen phone?"** Face ID per payment, the owner can text FREEZE from their registered Telegram account on any device, and the cert expires in 72 h without renewal.
+13. **"Stolen phone?"** Face ID per payment, a wallet drained fast across shops is flagged for the operator to freeze, and the cert expires in 72 h without renewal.
 14. **"iPhones only sync with the app open?"** Yes, an honest limit today. The simulator shows how settlement time depends on how many people relay.
 15. **"Is this money transmission?"** Funds stay at the bank: escrow is the customer's own Capital One account, and merchants are paid by bank transfer. A real launch runs through the bank's licenses.
 

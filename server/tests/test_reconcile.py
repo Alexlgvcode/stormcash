@@ -230,9 +230,8 @@ def test_nessie_switched_off_is_ledger_only(clean_db, fake_nessie):
     from fastapi.testclient import TestClient
 
     from stormcash.app import create_app
-    from stormcash.photon.config import PhotonSettings
 
-    app = create_app(make_settings(clean_db, nessie_enabled=False), photon=PhotonSettings(disabled=True))
+    app = create_app(make_settings(clean_db, nessie_enabled=False))
     with TestClient(app) as client:
         World(client)
         result = client.get("/v1/accounts/reconcile").json()

@@ -6,7 +6,7 @@
     server/.venv/bin/python chalk/evals/stack.py down
 
 Each server runs against its seed's LOCAL eval database (build_dataset.py made
-them) with Nessie, Photon, Chalk, the background loops and the StormDesk worker
+them) with Nessie, Chalk, the background loops and the StormDesk worker
 switched off: the only StormDesk runs are the ones the eval asks for. The
 gateway (gateway.py) sits in front of them and a cloudflared quick tunnel gives
 it a public URL for the Chalk task. Everything is written to
@@ -149,11 +149,11 @@ def up(args) -> None:
     if busy:
         raise SystemExit(f"ports {busy} are in use (an old eval server or gateway?): stop them first")
     token = gateway_token()
-    base_env = {k: v for k, v in os.environ.items() if not k.startswith(("CHALK_", "NESSIE_", "PHOTON_"))}
+    base_env = {k: v for k, v in os.environ.items() if not k.startswith(("CHALK_", "NESSIE_"))}
     server_env = {
         **base_env,
         "SERVER_SIGNING_KEY_PEM": KEY_FILE.read_text(),
-        "NESSIE_DISABLED": "1", "PHOTON_DISABLED": "1", "CHALK_DISABLED": "1",
+        "NESSIE_DISABLED": "1", "CHALK_DISABLED": "1",
         "BACKGROUND_TASKS": "0", "STORMDESK_AUTO": "0", "STORMDESK_REVIEW": "0", "DEMO_MODE": "1",
         "STORMDESK_RUNNER": args.runner, "STORMDESK_MODEL": args.model or "",
         "FACTORY_API_KEY": factory_key(args.factory_env) if args.runner == "droid" else "",

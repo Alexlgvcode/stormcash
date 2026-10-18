@@ -29,7 +29,7 @@ const TOOL_PLAIN: Record<string, string> = {
   get_contacts: "Read the contact log",
   get_device_log: "Read the device log",
   get_merchant_payments: "Read the shop's payments",
-  get_messages: "Read the messages",
+  get_messages: "Read the messages", // retired with Photon (spec v4.24); stored runs still show it
   get_nessie_balances: "Read the Nessie balances",
   get_region_status: "Checked the area's status",
   query_features: "Asked Chalk for features",

@@ -212,7 +212,6 @@ class MoneyMover:
         self._pool = pool
         self._nessie = nessie
         self._events = events
-        self.on_payout_executed = None  # callback(payout_id), e.g. the Photon settled notice
 
     @staticmethod
     def queue(
@@ -249,8 +248,6 @@ class MoneyMover:
             # Hint for the Accounts tab to refetch balances (§12.3 `accounts`).
             self._events.publish("accounts", {"changed": [row["from_account_id"], row["to_account_id"]],
                                               "txn_id": str(txn_id)})
-        if done and row["payout_id"] is not None and self.on_payout_executed is not None:
-            self.on_payout_executed(row["payout_id"])
         return done
 
     def _execute_row(self, conn: psycopg.Connection, row: dict) -> bool:

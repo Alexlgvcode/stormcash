@@ -28,7 +28,6 @@ CERT_TTL_S = 72 * HOUR
 MCERT_TTL_S = 30 * DAY
 ESCROW_GRACE_S = 24 * HOUR
 CHECKING_OPENING_DOLLARS = 500
-CONTACT_CHANNELS = ("telegram", "imessage", "sms")
 
 
 class RegistryError(Exception):
@@ -175,25 +174,19 @@ def register_resident(
     simulated: bool = False,
     now: int | None = None,
     cert_id: bytes | None = None,
-    contact: dict | None = None,
 ) -> tuple[uuid.UUID, Cert, bool]:
     """Create a resident, Nessie checking ($500) + escrow ($0), lock $20 and
     issue cert v1 (cap $20). Returns (resident_id, cert, created); registering
     the same holder_pub again returns the existing resident and latest cert.
-    `contact` ({channel, handle}) is the Photon handle that may text FREEZE (§17.2);
-    it is saved for an existing resident too.
     `cert_id` is only for the seeded simulator; phones always get a random one."""
     now = _now(now)
     display_name = _string(display_name, "display_name")
     region_id = _string(region_id, "region_id") or None
     _pub(holder_pub, "holder_pub")
-    contact = _contact(contact)
 
     with deps.pool.connection() as conn:
         existing = _existing_resident(conn, holder_pub)
         if existing:
-            if contact:
-                set_resident_contact(conn, existing[0], contact)
             return existing
         _check_region(conn, region_id)
 
@@ -221,8 +214,6 @@ def register_resident(
         )
         if inserted is None:  # lost a race with a concurrent registration
             return _existing_resident(conn, holder_pub)
-        if contact:
-            set_resident_contact(conn, resident_id, contact)
         cert = issue_cert(
             conn, deps.server_key, cert_id=cert_id, cert_ver=1, holder_pub=holder_pub,
             cap_cents=BASE_CAP_CENTS, now=now, escrow_ref=escrow_ref, resident_id=resident_id,
@@ -239,29 +230,6 @@ def register_resident(
     if txn_id:
         deps.mover.execute(txn_id)
     return resident_id, cert, True
-
-
-def _contact(contact: dict | None) -> dict | None:
-    if contact is None:
-        return None
-    if contact.get("channel") not in CONTACT_CHANNELS:
-        raise Invalid(f"contact.channel must be one of {', '.join(CONTACT_CHANNELS)}")
-    handle = _string(contact.get("handle"), "contact.handle").strip()
-    if not handle:
-        raise Invalid("contact.handle is empty")
-    return {"channel": contact["channel"], "handle": handle}
-
-
-def set_resident_contact(conn: psycopg.Connection, resident_id: uuid.UUID, contact: dict) -> dict:
-    """Point a Photon handle at a resident (one resident per handle, like merchant_contacts).
-    The handle isn't verified: demo only; a real deployment would confirm it with a code."""
-    contact = _contact(contact)
-    conn.execute(
-        """INSERT INTO resident_contacts (resident_id, channel, handle) VALUES (%s, %s, %s)
-           ON CONFLICT (channel, handle) DO UPDATE SET resident_id = EXCLUDED.resident_id""",
-        (resident_id, contact["channel"], contact["handle"]),
-    )
-    return contact
 
 
 def _existing_resident(conn: psycopg.Connection, holder_pub: bytes) -> tuple[uuid.UUID, Cert, bool] | None:
@@ -287,7 +255,6 @@ def register_merchant(
     region_id: str | None,
     x: int | None = None,
     y: int | None = None,
-    contact: dict | None = None,
     *,
     simulated: bool = False,
     now: int | None = None,
@@ -299,8 +266,6 @@ def register_merchant(
     display_name = _string(display_name, "display_name")
     region_id = _string(region_id, "region_id") or None
     _pub(merchant_pub, "merchant_pub")
-    if contact is not None and contact.get("channel") not in CONTACT_CHANNELS:
-        raise Invalid(f"contact.channel must be one of {', '.join(CONTACT_CHANNELS)}")
 
     with deps.pool.connection() as conn:
         row = one(conn, "SELECT * FROM merchants WHERE merchant_pub = %s", (merchant_pub,))
@@ -329,12 +294,6 @@ def register_merchant(
         if row is None:
             row = one(conn, "SELECT * FROM merchants WHERE merchant_pub = %s", (merchant_pub,))
             return bytes(row["merchant_id"]), issue_mcert(deps.server_key, row, now), False
-        if contact is not None:
-            conn.execute(
-                """INSERT INTO merchant_contacts (merchant_id, channel, handle) VALUES (%s, %s, %s)
-                   ON CONFLICT (channel, handle) DO UPDATE SET merchant_id = EXCLUDED.merchant_id""",
-                (merchant_id, contact["channel"], _string(contact.get("handle"), "contact.handle")),
-            )
     return merchant_id, issue_mcert(deps.server_key, row, now), True
 
 

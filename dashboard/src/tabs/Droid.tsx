@@ -10,8 +10,6 @@ import { AuthorPanel } from "../components/AuthorDetector";
 import { replayTitle, RunnerBadge, StepList } from "../components/StormDesk";
 import { Facts, Note, PageHeader, Pill, Section, Strip, Table, Tabs, Td, Th } from "../components/ui";
 import {
-  appealSessionsText,
-  appealTurnText,
   builtinCalls,
   credits,
   duration,
@@ -198,7 +196,6 @@ function RunView({ run, live, version, onSelect }: {
     facts.push(["Output retries", String(run.structured_output_retries ?? "not recorded yet")]);
     facts.push(["Permission denials", String(run.permission_denials ?? "not recorded yet")]);
   }
-  if (run.appeal) facts.push(["Appeal", appealTurnText(run.appeal)]);
   if (run.fallback_reason) facts.push(["Why the stand-in answered", <span className="text-warning">Droid couldn't run: {run.fallback_reason}</span>]);
   if (run.reviewed_run_id != null) {
     facts.push(["Reviews", (
@@ -245,15 +242,9 @@ function RunView({ run, live, version, onSelect }: {
   );
 }
 
-function JobTable({ rows, verdicts, appeals }: { rows: (Totals & { job: string })[]; verdicts: string | null; appeals: string | null }) {
+function JobTable({ rows, verdicts }: { rows: (Totals & { job: string })[]; verdicts: string | null }) {
   return (
     <Section title="Per job">
-      {appeals && (
-        <p className="py-2 text-ink">
-          Shop appeals by text: <span className="font-medium text-heading">{appeals}</span>
-          <span className="text-secondary"> · one Droid session per appeal, resumed for each new message</span>
-        </p>
-      )}
       {verdicts && (
         <p className="py-2 text-ink">
           Reviewer Droid on StormDesk's proposals: <span className="font-medium text-heading">{verdicts}</span>
@@ -510,8 +501,7 @@ export function DroidTab() {
         ) : view === "guardrails" ? (
           <div className="space-y-10">
             <Guardrails items={data.guardrails} droidRuns={t.droid_runs} onSelect={select} />
-            <JobTable rows={data.by_job} verdicts={reviewVerdicts(data.review_verdicts)}
-              appeals={appealSessionsText(data.appeal_sessions)} />
+            <JobTable rows={data.by_job} verdicts={reviewVerdicts(data.review_verdicts)} />
           </div>
         ) : (
           <Proposals runs={data.runs} onSelect={select} />

@@ -25,16 +25,10 @@ log = logging.getLogger(__name__)
 router = APIRouter()
 
 
-class ContactIn(BaseModel):
-    channel: str
-    handle: str
-
-
 class SeedTownIn(BaseModel):
     seed: int = 42
     hours: int = 72
     residents: int = 400
-    corner_store_contact: ContactIn | None = None  # the real Photon handle at the table
     replace: bool = False  # clear the simulated town first (real-device data stays), e.g. after a scenario change
 
 
@@ -56,33 +50,14 @@ def _run(deps, body: SeedTownIn) -> None:
         deps, nessie=None, mover=MoneyMover(deps.pool, None), events=Broker(), detector_state=DetectorState()
     )
     try:
-        cleared = None
         if body.replace:
             from ..demo import clear_town
 
-            cleared = clear_town(deps)
-            _job["cleared"] = {k: v for k, v in cleared.items() if k != "contacts"}
+            _job["cleared"] = clear_town(deps)
         sim = Sim(sim_deps, Params(seed=body.seed, hours=body.hours, residents=body.residents))
         _job["sim"] = sim
         summary = sim.run()
         folder = outputs.write(sim, summary)
-        if cleared and cleared["contacts"]:  # same seed, same shop ids: the shops keep their Photon handles
-            with deps.pool.connection() as conn:
-                for c in cleared["contacts"]:
-                    conn.execute(
-                        """INSERT INTO merchant_contacts (merchant_id, channel, handle)
-                           SELECT %s, %s, %s WHERE EXISTS (SELECT 1 FROM merchants WHERE merchant_id = %s)
-                           ON CONFLICT (channel, handle) DO UPDATE SET merchant_id = EXCLUDED.merchant_id""",
-                        (c["merchant_id"], c["channel"], c["handle"], c["merchant_id"]),
-                    )
-        if body.corner_store_contact:
-            corner = next(s for s in sim.shops if s.name == "Corner Store")
-            with deps.pool.connection() as conn:
-                conn.execute(
-                    """INSERT INTO merchant_contacts (merchant_id, channel, handle) VALUES (%s, %s, %s)
-                       ON CONFLICT (channel, handle) DO UPDATE SET merchant_id = EXCLUDED.merchant_id""",
-                    (corner.mcert.merchant_id, body.corner_store_contact.channel, body.corner_store_contact.handle),
-                )
         _job.update(status="done", summary=summary, outputs=str(folder), finished_at=int(time.time()))
         deps.events.publish("town", {"seed": body.seed, "status": "done", "summary": summary})
     except Exception as exc:  # report it on the status endpoint

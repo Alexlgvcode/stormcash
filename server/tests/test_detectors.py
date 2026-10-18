@@ -126,29 +126,7 @@ def test_cap_drain_fires_on_three_shops_in_fifteen_minutes(deps):
     assert f["region_mismatch"] is True
     assert f["hour_of_day"] == 13
     assert f["gap_since_last_activity_min"] is None
-    assert f["owner_freeze_request"] is False
-
-
-def test_cap_drain_reads_the_owners_freeze_request(deps):
-    """The owner texted FREEZE (Photon, §17.2) before the drain's uploads arrived: the candidate says so."""
-    from stormcash.photon import freeze
-
-    town = Town(deps)
-    for i, name in enumerate(("A Shop", "B Shop", "C Shop")):
-        town.shop(name, 30 + i, 5)
-    for who in ("Stolen", "Other"):
-        town.resident(who, cap=5000)
-    with deps.pool.connection() as conn:
-        resident_id = scalar(conn, "SELECT resident_id FROM residents WHERE display_name = 'Stolen'")
-    out = freeze.freeze_resident(deps, resident_id, now=T0 + 5 * HOUR)
-    assert out["cert_ids"] == [town.wallets["Stolen"]["cert"].cert_id.hex()] and out["newly_frozen"]
-    t = T0 + 5 * HOUR
-    for who, offset in (("Stolen", 0), ("Other", 3600)):
-        for i, shop in enumerate(("A Shop", "B Shop", "C Shop")):
-            town.pay(who, shop, 1400, t + offset + i * 300)
-    by_subject = {r["subject_id"]: r["features"] for r in candidates(deps, "cap_drain")}
-    assert by_subject[town.wallets["Stolen"]["cert"].cert_id.hex()]["owner_freeze_request"] is True
-    assert by_subject[town.wallets["Other"]["cert"].cert_id.hex()]["owner_freeze_request"] is False
+    assert "owner_freeze_request" not in f  # FREEZE by text went with Photon (spec v4.24)
 
 
 def test_cap_drain_needs_three_shops_and_80_percent(deps):

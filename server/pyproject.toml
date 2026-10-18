@@ -1,7 +1,7 @@
 [project]
 name = "stormcash"
 version = "0.1.0"
-description = "StormCash server: settlement, ledger, Nessie, StormDesk, Photon"
+description = "StormCash server: settlement, ledger, Nessie, StormDesk"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi",
