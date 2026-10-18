@@ -2,7 +2,7 @@
 // or, with `continuous`, once for every distinct code (multi-frame QR sync).
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRef } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Linking, StyleSheet, View } from 'react-native';
 import { QR_PREFIX } from '../protocol';
 import { Body, Button } from './ui';
 
@@ -13,10 +13,12 @@ export function Scanner({ onScan, continuous }: { onScan: (data: string) => void
 
   if (!permission) return null;
   if (!permission.granted) {
+    // Once access was refused, iOS never shows the prompt again: send the user to Settings.
+    const blocked = !permission.canAskAgain;
     return (
       <View style={{ gap: 12 }}>
-        <Body>Camera access is needed to scan payment codes.</Body>
-        <Button title="Allow camera" onPress={requestPermission} />
+        <Body>{blocked ? 'Camera is off for StormCash. Turn it on in Settings.' : 'Camera access is needed to scan payment codes.'}</Body>
+        <Button title={blocked ? 'Open Settings' : 'Allow camera'} onPress={blocked ? () => Linking.openSettings() : requestPermission} />
       </View>
     );
   }
