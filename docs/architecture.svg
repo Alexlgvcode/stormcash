@@ -92,20 +92,12 @@
   <text x="984" y="466" font-size="14" fill="#142029">candidates</text>
 
   <!-- Chalk -->
-  <rect x="1100" y="565" width="200" height="110" rx="14" fill="#ffffff" stroke="#c8102e" stroke-width="2.5"/>
-  <text x="1200" y="603" font-size="22" font-weight="700" fill="#142029" text-anchor="middle">Chalk</text>
-  <text x="1200" y="630" font-size="15" fill="#56636e" text-anchor="middle">live features</text>
-  <text x="1200" y="654" font-size="15" fill="#56636e" text-anchor="middle">Evaluations</text>
-  <line x1="1200" y1="512" x2="1200" y2="562" stroke="#142029" stroke-width="2.5" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
-  <text x="1212" y="543" font-size="14" fill="#142029">query_features</text>
-
-  <!-- Photon -->
-  <rect x="1330" y="565" width="200" height="110" rx="14" fill="#ffffff" stroke="#c8102e" stroke-width="2.5"/>
-  <text x="1430" y="603" font-size="22" font-weight="700" fill="#142029" text-anchor="middle">Photon</text>
-  <text x="1430" y="630" font-size="15" fill="#56636e" text-anchor="middle">Telegram notices</text>
-  <text x="1430" y="654" font-size="15" fill="#56636e" text-anchor="middle">appeals · FREEZE by text</text>
-  <line x1="1430" y1="512" x2="1430" y2="562" stroke="#142029" stroke-width="2.5" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
-  <text x="1442" y="543" font-size="14" fill="#142029">appeal replies</text>
+  <rect x="1100" y="565" width="430" height="110" rx="14" fill="#ffffff" stroke="#c8102e" stroke-width="2.5"/>
+  <text x="1315" y="603" font-size="22" font-weight="700" fill="#142029" text-anchor="middle">Chalk</text>
+  <text x="1315" y="630" font-size="15" fill="#56636e" text-anchor="middle">live features: contact rates · pool share · weather alerts</text>
+  <text x="1315" y="654" font-size="15" fill="#56636e" text-anchor="middle">Evaluations against a rules-only baseline</text>
+  <line x1="1315" y1="512" x2="1315" y2="562" stroke="#142029" stroke-width="2.5" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+  <text x="1327" y="543" font-size="14" fill="#142029">query_features</text>
 
   <!-- Dashboard -->
   <rect x="1100" y="720" width="430" height="110" rx="14" fill="#ffffff" stroke="#142029" stroke-width="2"/>
