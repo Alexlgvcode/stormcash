@@ -102,7 +102,7 @@ const styles = StyleSheet.create({
   kicker: { fontFamily: font.regular, fontSize: 16, color: colors.muted },
   row: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'flex-end', columnGap: 12 },
   what: { fontFamily: font.bold, fontSize: 20, color: colors.ink, paddingBottom: 10 },
-  amount: { fontFamily: font.display, fontSize: 72, lineHeight: 78, color: colors.carbon, fontVariant: ['tabular-nums'] },
+  amount: { fontFamily: font.display, fontSize: 72, lineHeight: 80, color: colors.carbon, fontVariant: ['tabular-nums'] },
   meta: { fontFamily: font.regular, fontSize: 17, lineHeight: 24, color: colors.ink },
   stampArea: { height: 190, alignItems: 'center', justifyContent: 'center' },
   stamp: { borderWidth: 5, borderRadius: 10, padding: 5, maxWidth: '92%' },
