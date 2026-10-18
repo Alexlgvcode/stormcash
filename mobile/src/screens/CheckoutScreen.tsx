@@ -49,7 +49,7 @@ export function CheckoutScreen() {
 
   const busy = stage.s !== 'entry' && stage.s !== 'result';
   const checkW = Math.min(440, Math.round(width * 0.4));
-  const qrSize = Math.min(checkW - 2 * 24 - 32, height * 0.42);
+  const qrSize = Math.round(Math.min(checkW - 2 * 24 - 32, height * 0.34)); // fits a landscape check with room to spare
   const totals = takingsTotals(takings(100));
 
   const press = (k: string) => {
@@ -200,10 +200,10 @@ export function CheckoutScreen() {
                 <Text style={styles.sub}>{stage.s === 'result' ? 'Last sale' : 'Current sale'}</Text>
               </View>
             </View>
-            <Text maxFontSizeMultiplier={1.15} adjustsFontSizeToFit numberOfLines={1} style={[styles.total, total === 0 && { color: colors.faint }]}>
+            <Text maxFontSizeMultiplier={1.15} adjustsFontSizeToFit numberOfLines={1} style={[styles.total, stage.s !== 'entry' && styles.totalSmall, total === 0 && { color: colors.faint }]}>
               {wholeDollars(total)}
             </Text>
-            <View style={styles.checkBody}>{check}</View>
+            <ScrollView style={styles.checkBody} contentContainerStyle={styles.checkBodyInner} showsVerticalScrollIndicator={false}>{check}</ScrollView>
             <Pressable onPress={() => nav.go({ name: 'register' })} style={({ pressed }) => [styles.today, pressed && { opacity: 0.7 }]} accessibilityRole="button" accessibilityLabel="Today's sales">
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={styles.todayHead}>Today · {wholeDollars(totals.acceptedCents)} accepted offline</Text>
@@ -222,7 +222,7 @@ export function CheckoutScreen() {
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
-  body: { flex: 1, flexDirection: 'row', gap: 24, padding: 24 },
+  body: { flex: 1, flexDirection: 'row', gap: 24, paddingHorizontal: 28, paddingVertical: 20 },
   left: { flex: 1, minWidth: 0, gap: 20 },
   tiles: { flexDirection: 'row', gap: 12 },
   tile: { flex: 1, height: 72, borderRadius: 12, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' },
@@ -236,7 +236,9 @@ const styles = StyleSheet.create({
   shop: { fontFamily: font.bold, fontSize: 20, color: colors.ink },
   sub: { fontFamily: font.regular, fontSize: 15, color: colors.muted },
   total: { fontFamily: font.display, fontSize: 96, lineHeight: 108, color: colors.carbon, fontVariant: ['tabular-nums'] },
-  checkBody: { flex: 1, gap: 12 },
+  checkBody: { flex: 1 },
+  checkBodyInner: { flexGrow: 1, gap: 12, paddingBottom: 4 },
+  totalSmall: { fontSize: 64, lineHeight: 74 },
   stamp: { alignSelf: 'center', borderWidth: 5, borderRadius: 10, paddingHorizontal: 18, paddingTop: 4, transform: [{ rotate: '-6deg' }], marginVertical: 8 },
   stampText: { fontFamily: font.display, fontSize: 64, lineHeight: 74, letterSpacing: 2 },
   why: { fontFamily: font.bold, fontSize: 22, lineHeight: 29 },
