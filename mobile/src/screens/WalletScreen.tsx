@@ -78,7 +78,7 @@ export function WalletScreen() {
       <View style={{ gap: 4 }}>
         <Label>Recent copies</Label>
         {stubs.length === 0 ? (
-          <Muted>No payments yet. Each one you make leaves a copy here.</Muted>
+          <Muted>No payments yet.</Muted>
         ) : (
           stubs.map((r) => (
             <View key={r.tagHash} style={styles.stub}>
@@ -97,7 +97,7 @@ export function WalletScreen() {
       <Group>
         <Cell
           title="Storm Mode"
-          detail={storm ? `On. Capital One holds ${wholeDollars(cert.cap_cents)} for you.` : `Raise your limit to ${wholeDollars(STORM_CAP)} before the storm.`}
+          detail={storm ? `On · Capital One holds ${wholeDollars(cert.cap_cents)}` : `Raise limit to ${wholeDollars(STORM_CAP)}`}
           accessory={storm ? <Text style={styles.on}>On</Text> : undefined}
         />
         <Cell title="Records to deliver" detail="Phones pass them on until one is online" value={String(carrying)} onPress={() => nav.go({ name: 'records' })} />
@@ -125,7 +125,7 @@ const styles = StyleSheet.create({
   sheetTop: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'baseline', columnGap: 12 },
   book: { fontFamily: font.bold, fontSize: 17, color: colors.ink },
   copyNo: { fontFamily: font.regular, fontSize: 15, color: '#6B5A12', fontVariant: ['tabular-nums'] },
-  figure: { fontFamily: font.display, fontSize: 132, lineHeight: 128, color: colors.carbon, marginTop: 4, fontVariant: ['tabular-nums'] },
+  figure: { fontFamily: font.display, fontSize: 132, lineHeight: 146, color: colors.carbon, fontVariant: ['tabular-nums'] },
   sheetSub: { fontFamily: font.regular, fontSize: 17, lineHeight: 24, color: colors.ink, marginBottom: 6 },
   stub: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, gap: 12 },
   stubShop: { fontFamily: font.bold, fontSize: 18, color: colors.ink },

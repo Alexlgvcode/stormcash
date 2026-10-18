@@ -42,7 +42,7 @@ const styles = StyleSheet.create({
   kicker: { fontFamily: font.regular, fontSize: 16, color: colors.muted },
   stubRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 },
   title: { flex: 1, fontFamily: font.bold, fontSize: 22, color: INK },
-  amount: { fontFamily: font.display, fontSize: 48, lineHeight: 48, color: colors.carbon, fontVariant: ['tabular-nums'] },
+  amount: { fontFamily: font.display, fontSize: 48, lineHeight: 54, color: colors.carbon, fontVariant: ['tabular-nums'] },
   perf: { height: 28, justifyContent: 'center' },
   notch: { position: 'absolute', width: 28, height: 28, borderRadius: 14, backgroundColor: colors.bg, top: 0 },
   dots: { flexDirection: 'row', justifyContent: 'space-between', marginHorizontal: 22 },

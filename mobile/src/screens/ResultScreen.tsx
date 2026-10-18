@@ -22,8 +22,8 @@ function refusalCopy(reason: ReasonToken, rule: string | null): string {
     case 'OVER_LIMIT': return "Over this shop's limit";
     default:
       return rule
-        ? `These funds were already spent nearby (Rule: ${RULE_COPY[rule]}). Certificate flagged.`
-        : 'These funds were already spent nearby. Certificate flagged.';
+        ? `Already spent. Rule: ${RULE_COPY[rule]}.`
+        : 'Already spent.';
   }
 }
 
@@ -68,7 +68,7 @@ export function ResultScreen({ result, pay, capCents }: { result: CheckResult; p
         <Text style={styles.meta}>
           {ok
             ? `Backed by Capital One. ${wholeDollars(pay?.t.cum_cents ?? 0)} of ${wholeDollars(capCents)} used.`
-            : 'Not accepted. Do not hand over the goods.'}
+            : 'Do not hand over the goods.'}
         </Text>
         <View style={styles.stampArea}>
           <Animated.View
@@ -85,11 +85,11 @@ export function ResultScreen({ result, pay, capCents }: { result: CheckResult; p
       </View>
 
       <Text style={[styles.why, { color: ok ? colors.ink : colors.red }]}>
-        {ok ? 'All six checks passed on this phone, with no internet.' : refusalCopy(result.reason, result.rule)}
+        {ok ? 'All 6 checks passed. No internet.' : refusalCopy(result.reason, result.rule)}
       </Text>
       {!ok ? (
         <Text style={styles.detail}>
-          Check {result.check} failed ({result.reason}).{result.conflict ? ' The signed evidence is saved and will reach the bank with the next phone online.' : ''}
+          Check {result.check} · {result.reason}{result.conflict ? ' · evidence saved' : ''}
         </Text>
       ) : null}
       <Button title="Done" big onPress={nav.home} />
@@ -102,7 +102,7 @@ const styles = StyleSheet.create({
   kicker: { fontFamily: font.regular, fontSize: 16, color: colors.muted },
   row: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'flex-end', columnGap: 12 },
   what: { fontFamily: font.bold, fontSize: 20, color: colors.ink, paddingBottom: 10 },
-  amount: { fontFamily: font.display, fontSize: 72, lineHeight: 78, color: colors.carbon, fontVariant: ['tabular-nums'] },
+  amount: { fontFamily: font.display, fontSize: 72, lineHeight: 80, color: colors.carbon, fontVariant: ['tabular-nums'] },
   meta: { fontFamily: font.regular, fontSize: 17, lineHeight: 24, color: colors.ink },
   stampArea: { height: 190, alignItems: 'center', justifyContent: 'center' },
   stamp: { borderWidth: 5, borderRadius: 10, padding: 5, maxWidth: '92%' },

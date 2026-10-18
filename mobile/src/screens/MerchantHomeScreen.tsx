@@ -34,7 +34,7 @@ export function MerchantHomeScreen() {
         <Stat value={contacts} label="phones met" />
       </View>
 
-      <Button title="Charge a customer" subtitle="Enter an amount, show your code" big onPress={() => nav.go({ name: 'charge' })} />
+      <Button title="Charge a customer" subtitle="Amount, then show code" big onPress={() => nav.go({ name: 'charge' })} />
 
       <Group>
         <Cell title="Records to deliver" detail="Phones pass them on until one is online" value={String(carrying)} onPress={() => nav.go({ name: 'records' })} />
@@ -58,8 +58,8 @@ const styles = StyleSheet.create({
     borderBottomWidth: 4, borderBottomColor: colors.sheetEdge,
   },
   heroLabel: { fontFamily: font.regular, fontSize: 17, lineHeight: 23, color: colors.ink },
-  heroName: { fontFamily: font.display, fontSize: 88, lineHeight: 84, color: colors.carbon },
+  heroName: { fontFamily: font.display, fontSize: 88, lineHeight: 98, color: colors.carbon },
   strip: { flexDirection: 'row', paddingVertical: 4 },
-  statValue: { fontFamily: font.display, fontSize: 48, lineHeight: 48, color: colors.carbon, fontVariant: ['tabular-nums'] },
+  statValue: { fontFamily: font.display, fontSize: 48, lineHeight: 54, color: colors.carbon, fontVariant: ['tabular-nums'] },
   statLabel: { fontFamily: font.medium, fontSize: 15, color: colors.muted },
 });

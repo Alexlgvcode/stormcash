@@ -9,7 +9,7 @@ import { NavContext, type Nav, type Route } from './src/nav';
 import { getRole } from './src/settings';
 import { PREVIEW_OK, PREVIEW_REFUSED } from './src/demo/previews';
 import { getDb, getSetting } from './src/store/db';
-import { syncManager } from './src/sync/manager';
+import { isMultipeerEnabled, syncManager } from './src/sync/manager';
 import { ChargeScreen } from './src/screens/ChargeScreen';
 import { DemoMenuScreen } from './src/screens/DemoMenuScreen';
 import { JudgeModeScreen } from './src/screens/JudgeModeScreen';
@@ -51,7 +51,7 @@ export default function App() {
   // Advertise + browse while the app is open, once this phone is registered (§19.5).
   const role = ready ? getRole() : null;
   useEffect(() => {
-    if (role) syncManager.start();
+    if (role && isMultipeerEnabled()) syncManager.start();
   }, [role]);
 
   const render = useCallback(() => {
