@@ -58,7 +58,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 4, borderBottomColor: colors.sheetEdge,
   },
   heroLabel: { fontFamily: font.regular, fontSize: 17, lineHeight: 23, color: colors.ink },
-  heroName: { fontFamily: font.display, fontSize: 88, lineHeight: 84, color: colors.carbon },
+  heroName: { fontFamily: font.display, fontSize: 88, lineHeight: 98, color: colors.carbon },
   strip: { flexDirection: 'row', paddingVertical: 4 },
   statValue: { fontFamily: font.display, fontSize: 48, lineHeight: 54, color: colors.carbon, fontVariant: ['tabular-nums'] },
   statLabel: { fontFamily: font.medium, fontSize: 15, color: colors.muted },

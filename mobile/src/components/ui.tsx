@@ -311,7 +311,7 @@ const s = StyleSheet.create({
   card: { backgroundColor: colors.card, borderRadius: radius.lg, padding: 20, gap: space.md },
   cardNavy: { backgroundColor: colors.sheet },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, alignItems: 'center' },
-  title: { fontFamily: font.display, fontSize: 40, lineHeight: 40, color: colors.ink, letterSpacing: -0.2 },
+  title: { fontFamily: font.display, fontSize: 40, lineHeight: 46, color: colors.ink, letterSpacing: -0.2 },
   big: { fontFamily: font.display, fontSize: 72, lineHeight: 80, color: colors.carbon, fontVariant: ['tabular-nums'] },
   body: { fontFamily: font.regular, fontSize: 18, lineHeight: 26, color: colors.ink },
   muted: { fontFamily: font.regular, fontSize: 16, lineHeight: 23, color: colors.muted },

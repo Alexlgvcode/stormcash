@@ -112,7 +112,7 @@ export function SetupScreen() {
 
 const styles = StyleSheet.create({
   heroWrap: { paddingTop: 16, paddingBottom: 8, gap: 12 },
-  hero: { fontFamily: font.display, fontSize: 56, lineHeight: 54, color: colors.ink },
+  hero: { fontFamily: font.display, fontSize: 56, lineHeight: 62, color: colors.ink },
   option: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 18, borderRadius: 8, backgroundColor: colors.card },
   optionActive: { backgroundColor: colors.sheet },
   radio: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: colors.faint },
