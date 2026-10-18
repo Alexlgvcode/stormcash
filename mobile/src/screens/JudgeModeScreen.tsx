@@ -28,14 +28,14 @@ export function JudgeModeScreen() {
   };
 
   return (
-    <Screen tone="dark">
+    <Screen tone="dark" width="narrow">
       <TopBar onBack={nav.home} />
       <View style={styles.banner}>
         <Text style={styles.bannerText}>Demo: attacker tool</Text>
       </View>
       <Text maxFontSizeMultiplier={1.15} style={styles.lead}>Spend the same money twice.</Text>
 
-      <Card style={{ backgroundColor: colors.navyRaised }}>
+      <Card style={{ backgroundColor: colors.navyRaised, borderRadius: 8, paddingHorizontal: 20, borderWidth: 0 }}>
         <Label color={colors.onNavyMuted}>Wallet now</Label>
         <Big color="#fff">{wholeDollars(left)}</Big>
         <Field light label="Counter" value={String(state?.counter ?? 0)} />

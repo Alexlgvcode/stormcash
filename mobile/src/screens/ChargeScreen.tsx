@@ -6,7 +6,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Icon } from '../components/Icon';
 import { Ticket } from '../components/Ticket';
 import { Scanner } from '../components/Scanner';
-import { Button, Chip, colors, ErrorNote, font, Label, Meter, Muted, Row, Screen, Title, radius, TopBar } from '../components/ui';
+import { Button, Chip, colors, Columns, ErrorNote, font, Label, Meter, Muted, Row, Screen, Title, radius, TopBar, useWide } from '../components/ui';
 import { useTick } from '../hooks';
 import { deviceKey } from '../keys';
 import { useNav } from '../nav';
@@ -29,6 +29,7 @@ export function ChargeScreen() {
   const [error, setError] = useState<string | null>(null);
   const [scanKey, setScanKey] = useState(0);
   const now = Math.floor(useTick(1000) / 1000);
+  const wide = useWide(); // iPad: counter-terminal sized keys and amount
   const mc = merchantCert();
   if (!mc) return null;
 
@@ -56,29 +57,31 @@ export function ChargeScreen() {
   };
 
   if (step.s === 'amount') {
-    return (
-      <Screen>
-        <TopBar onBack={cancel} />
-        <Title>Charge</Title>
+    const display = (
+      <View style={{ gap: 16 }}>
         <View style={{ alignItems: 'center', paddingVertical: 12 }}>
           <Label>{mc.display_name} charges</Label>
-          <Text maxFontSizeMultiplier={1.15} style={[styles.amount, amount === 0 && { color: colors.faint }]} adjustsFontSizeToFit numberOfLines={1}>${amount}</Text>
+          <Text maxFontSizeMultiplier={1.15} style={[styles.amount, wide && { fontSize: 150, lineHeight: 160 }, amount === 0 && { color: colors.faint }]} adjustsFontSizeToFit numberOfLines={1}>${amount}</Text>
           <Muted>Whole dollars</Muted>
         </View>
         <Row style={{ justifyContent: 'center' }}>
           {QUICK.map((d) => <Chip key={d} text={`$${d}`} active={amount === d} onPress={() => setAmount(d)} />)}
         </Row>
+      </View>
+    );
+    const keypad = (
+      <View style={{ gap: 16 }}>
         <View style={styles.pad}>
           {KEYS.map((k) => (
             <Pressable
               key={k}
               onPress={() => press(k)}
-              style={({ pressed }) => [styles.key, pressed && { backgroundColor: colors.primarySoft }]}
+              style={({ pressed }) => [styles.key, wide && { height: 88 }, pressed && { backgroundColor: colors.primarySoft }]}
               accessibilityLabel={k === '⌫' ? 'Delete' : k === 'C' ? 'Clear' : k}
             >
               {k === '⌫'
                 ? <Icon name="delete" size={28} color={colors.ink} />
-                : <Text style={[styles.keyText, k === 'C' && { color: colors.muted }]}>{k}</Text>}
+                : <Text style={[styles.keyText, wide && { fontSize: 36 }, k === 'C' && { color: colors.muted }]}>{k}</Text>}
             </Pressable>
           ))}
         </View>
@@ -91,6 +94,13 @@ export function ChargeScreen() {
             setStep({ s: 'request', request, qr: requestQr(request) });
           }}
         />
+      </View>
+    );
+    return (
+      <Screen>
+        <TopBar onBack={cancel} />
+        <Title>Charge</Title>
+        <Columns left={display} right={keypad} />
       </Screen>
     );
   }
@@ -99,7 +109,7 @@ export function ChargeScreen() {
     const left = Math.max(0, step.request.rq.req_expires_at - now);
     const expired = left === 0;
     return (
-      <Screen>
+      <Screen width="narrow">
         <TopBar onBack={cancel} />
         <Title>Customer scans this</Title>
         <Ticket
@@ -118,7 +128,7 @@ export function ChargeScreen() {
   }
 
   return (
-    <Screen>
+    <Screen width="narrow">
       <TopBar onBack={cancel} />
       <Title>Scan customer's code</Title>
       <Muted>Checked on this phone. No internet.</Muted>
@@ -131,6 +141,6 @@ export function ChargeScreen() {
 const styles = StyleSheet.create({
   amount: { fontFamily: font.display, fontSize: 104, lineHeight: 110, color: colors.ink, letterSpacing: -3, fontVariant: ['tabular-nums'] },
   pad: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 10 },
-  key: { width: '31.5%', height: 64, borderRadius: radius.pill, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' },
+  key: { width: '31.5%', height: 64, borderRadius: 12, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' },
   keyText: { fontFamily: font.semibold, fontSize: 28, color: colors.ink, fontVariant: ['tabular-nums'] },
 });

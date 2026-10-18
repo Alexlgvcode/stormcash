@@ -51,7 +51,7 @@ export function SetupScreen() {
   };
 
   return (
-    <Screen>
+    <Screen width="narrow">
       <View style={styles.heroWrap}>
         <Logo />
         <Text maxFontSizeMultiplier={1.15} style={styles.hero}>Pay shops with no signal.</Text>

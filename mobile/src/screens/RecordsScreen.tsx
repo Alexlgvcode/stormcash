@@ -32,7 +32,7 @@ export function RecordsScreen() {
   const kindName = (k: string, n: number) => (KIND_NAMES[k] ? KIND_NAMES[k][n === 1 ? 0 : 1] : k);
 
   return (
-    <Screen>
+    <Screen width="narrow">
       <TopBar onBack={nav.home} />
       <Title>Records</Title>
       <Muted>This phone carries records shop to shop until any phone finds a signal and uploads them.</Muted>

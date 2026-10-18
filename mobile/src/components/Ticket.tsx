@@ -4,14 +4,16 @@ import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 import { colors, font } from './ui';
 
+// Real paper in both themes: the QR is dark ink on light paper or it won't scan.
 const INK = '#1F2328';
+const PAPER = { white: '#FFFFFF', canary: '#FFE873', muted: '#646B75', figure: '#2B3A9E', dots: '#D9DCE1' };
 
 export function Ticket({
   value, kicker, title, amount, footnote, dim, copy,
 }: { value: string; kicker: string; title: string; amount: string; footnote?: string; dim?: boolean; copy?: boolean }) {
-  const paper = copy ? colors.sheet : colors.card; // the payer's copy is canary; the shop's request is white
+  const paper = copy ? PAPER.canary : PAPER.white; // the payer's copy is canary; the shop's request is white
   const { width } = useWindowDimensions();
-  const qr = Math.min(width - 40 - 48, 340);
+  const qr = Math.min(width - 40 - 48, width >= 700 ? 460 : 340); // bigger on iPad: easier to scan across a counter
   return (
     <View style={[styles.ticket, { backgroundColor: paper }, dim && { opacity: 0.35 }]} accessible accessibilityLabel={`${kicker} ${title}, ${amount}. Payment code.`}>
       <View style={styles.stub}>
@@ -39,14 +41,14 @@ export function Ticket({
 const styles = StyleSheet.create({
   ticket: { borderRadius: 8, overflow: 'visible' },
   stub: { paddingHorizontal: 24, paddingTop: 20, paddingBottom: 16, gap: 4 },
-  kicker: { fontFamily: font.regular, fontSize: 16, color: colors.muted },
+  kicker: { fontFamily: font.regular, fontSize: 16, color: PAPER.muted },
   stubRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 },
   title: { flex: 1, fontFamily: font.bold, fontSize: 22, color: INK },
-  amount: { fontFamily: font.display, fontSize: 48, lineHeight: 54, color: colors.carbon, fontVariant: ['tabular-nums'] },
+  amount: { fontFamily: font.display, fontSize: 48, lineHeight: 54, color: PAPER.figure, fontVariant: ['tabular-nums'] },
   perf: { height: 28, justifyContent: 'center' },
   notch: { position: 'absolute', width: 28, height: 28, borderRadius: 14, backgroundColor: colors.bg, top: 0 },
   dots: { flexDirection: 'row', justifyContent: 'space-between', marginHorizontal: 22 },
-  dot: { width: 5, height: 5, borderRadius: 3, backgroundColor: colors.line },
+  dot: { width: 5, height: 5, borderRadius: 3, backgroundColor: PAPER.dots },
   code: { alignItems: 'center', paddingHorizontal: 24, paddingBottom: 22, paddingTop: 8, gap: 12 },
-  foot: { fontFamily: font.regular, fontSize: 15, color: colors.muted },
+  foot: { fontFamily: font.regular, fontSize: 15, color: PAPER.muted },
 });

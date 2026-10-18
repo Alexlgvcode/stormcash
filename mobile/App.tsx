@@ -11,6 +11,7 @@ import { PREVIEW_OK, PREVIEW_REFUSED } from './src/demo/previews';
 import { getDb, getSetting } from './src/store/db';
 import { isMultipeerEnabled, syncManager } from './src/sync/manager';
 import { ChargeScreen } from './src/screens/ChargeScreen';
+import { CheckoutScreen } from './src/screens/CheckoutScreen';
 import { DemoMenuScreen } from './src/screens/DemoMenuScreen';
 import { JudgeModeScreen } from './src/screens/JudgeModeScreen';
 import { MerchantHomeScreen } from './src/screens/MerchantHomeScreen';
@@ -20,6 +21,7 @@ import { RecordsScreen } from './src/screens/RecordsScreen';
 import { ResultScreen } from './src/screens/ResultScreen';
 import { SetupScreen } from './src/screens/SetupScreen';
 import { WalletScreen } from './src/screens/WalletScreen';
+import { isDark, useWide } from './src/components/ui';
 
 export default function App() {
   const [keyReady, setKeyReady] = useState(false);
@@ -54,6 +56,7 @@ export default function App() {
     if (role && isMultipeerEnabled()) syncManager.start();
   }, [role]);
 
+  const wide = useWide(); // iPad: the store's counter checkout
   const render = useCallback(() => {
     const role = getRole();
     if (!role || route.name === 'setup') return <SetupScreen />;
@@ -61,7 +64,9 @@ export default function App() {
       case 'pay':
         return <PayScreen />;
       case 'charge':
-        return <ChargeScreen />;
+        return wide ? <CheckoutScreen /> : <ChargeScreen />; // iPads charge only from Checkout
+      case 'register':
+        return <MerchantHomeScreen />;
       case 'records':
         return <RecordsScreen />;
       case 'qrsync':
@@ -73,9 +78,10 @@ export default function App() {
       case 'result':
         return <ResultScreen result={route.result} pay={route.pay} capCents={route.capCents} />;
       default:
-        return role === 'resident' ? <WalletScreen /> : <MerchantHomeScreen />;
+        // Stores on an iPad get the counter checkout; on a phone, the register.
+        return role === 'resident' ? <WalletScreen /> : wide ? <CheckoutScreen /> : <MerchantHomeScreen />;
     }
-  }, [route]);
+  }, [route, wide]);
 
   if (!ready) {
     return (
@@ -88,7 +94,7 @@ export default function App() {
     <SafeAreaProvider>
       <NavContext.Provider value={nav}>
         {render()}
-        <StatusBar style={route.name === 'judge' ? 'light' : 'dark'} />
+        <StatusBar style={route.name === 'judge' || isDark ? 'light' : 'dark'} />
       </NavContext.Provider>
     </SafeAreaProvider>
   );

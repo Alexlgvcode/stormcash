@@ -5,11 +5,13 @@
 import * as Haptics from 'expo-haptics';
 import type { ReactNode } from 'react';
 import {
-  ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View,
+  ActivityIndicator, Appearance, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View,
   type ViewStyle,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { getSetting } from '../store/db';
 import { Icon } from './Icon';
+import { Radar } from './Radar';
 
 export const font = {
   // Atkinson Hyperlegible (Braille Institute) for everything you read; Big Shoulders (civic
@@ -23,12 +25,26 @@ export const font = {
   displayBold: 'BigShouldersDisplay_700Bold',
 };
 
-export const colors = {
+// Light: the receipt book by day. Dark: the same book at night on a storm-radar screen.
+// The palette is fixed when the app starts (every StyleSheet reads it once), from the phone's
+// appearance or the demo menu's override; a change applies the next time the app opens.
+export type ThemePref = 'system' | 'dark' | 'light';
+export function themePref(): ThemePref {
+  try {
+    const v = getSetting('theme');
+    return v === 'dark' || v === 'system' ? v : 'light'; // light unless the demo menu says otherwise
+  } catch {
+    return 'light';
+  }
+}
+export const isDark = themePref() === 'dark' || (themePref() === 'system' && Appearance.getColorScheme() === 'dark');
+
+const light = {
   // The receipt book: cool paper, the canary duplicate sheet, carbon ink, graphite, rubber stamps.
   bg: '#F7F8F6', // paper
   card: '#FFFFFF', // a clean sheet
-  sheet: '#FFE873', // the canary duplicate copy
-  sheetEdge: '#E9CF4E',
+  sheet: '#FFF2B3', // the canary duplicate copy
+  sheetEdge: '#EBD983',
   well: '#ECEEEB', // pressed paper: secondary buttons, keys, chips
   ink: '#1F2328', // graphite: text
   text: '#1F2328',
@@ -36,9 +52,9 @@ export const colors = {
   muted: '#646B75', // pencil: secondary notes
   faint: '#9AA0A8',
   line: '#D9DCE1', // ruled form lines (form fields only)
-  primary: '#2B3A9E',
+  primary: '#2E3A52',
   onPrimary: '#FFFFFF',
-  primarySoft: '#E4E7F6',
+  primarySoft: '#E8EBF2',
   green: '#1F7A47', // the VERIFIED stamp
   greenSoft: '#E3F1E8',
   red: '#C3321F', // the REFUSED stamp
@@ -52,20 +68,77 @@ export const colors = {
   navyRaised: '#2C3138',
   onNavy: '#FFFFFF',
   onNavyMuted: '#B9BEC6',
+  sheetInk: '#1F2328', // text on the canary sheet
+  sheetMuted: '#6B5A12',
+  sheetFigure: '#2B3A9E', // the big figure on the sheet
+  radar: '#1F7A47',
 };
+
+const dark: typeof light = {
+  // The night copy: deep navy desk, the duplicate sheet in dim amber with glowing figures.
+  bg: '#0A0F1A',
+  card: '#131B2A',
+  sheet: '#211C0D',
+  sheetEdge: '#4A3F18',
+  well: '#1D2738',
+  ink: '#E9EDF3',
+  text: '#E9EDF3',
+  carbon: '#9AA8FF',
+  muted: '#9AA4B4',
+  faint: '#5F6A7C',
+  line: '#2A3446',
+  primary: '#E9EDF3',
+  onPrimary: '#0A0F1A',
+  primarySoft: '#232D3F',
+  green: '#3CCB7F',
+  greenSoft: '#12301F',
+  red: '#FF6B57',
+  redSoft: '#3A1612',
+  amber: '#F2B34A',
+  amberSoft: '#33240C',
+  okBg: '#1F7A47',
+  refuseBg: '#C3321F',
+  tool: '#05080F',
+  navy: '#05080F',
+  navyRaised: '#141B28',
+  onNavy: '#FFFFFF',
+  onNavyMuted: '#9AA4B4',
+  sheetInk: '#F3E9C6',
+  sheetMuted: '#C9B56A',
+  sheetFigure: '#FFD54A',
+  radar: '#3CCB7F',
+};
+
+export const colors = isDark ? dark : light;
 
 export const space = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 };
 export const radius = { sm: 4, md: 14, lg: 8, pill: 999 };
 
 // ---- Layout ----
 
+/** iPad and other wide screens get two-column layouts; phones stay one column. */
+export const WIDE_MIN = 700;
+export function useWide(): boolean {
+  return useWindowDimensions().width >= WIDE_MIN;
+}
+
+/**
+ * One screen. `width` caps the content on wide screens: "wide" for two-column homes,
+ * "narrow" for single-task flows (paying, scanning) so a phone layout isn't stretched across an iPad.
+ */
 export function Screen({
-  children, scroll = true, style, tone = 'default',
-}: { children: ReactNode; scroll?: boolean; style?: ViewStyle; tone?: 'default' | 'dark' }) {
+  children, scroll = true, style, tone = 'default', width = 'wide',
+}: { children: ReactNode; scroll?: boolean; style?: ViewStyle; tone?: 'default' | 'dark'; width?: 'wide' | 'narrow' }) {
   const bg = tone === 'dark' ? colors.tool : colors.bg;
-  const body = <View style={[s.screen, style]}>{children}</View>;
+  const wide = useWide();
+  const body = (
+    <View style={[s.screen, wide && { paddingHorizontal: 32, maxWidth: width === 'wide' ? 1080 : 600, width: '100%', alignSelf: 'center' }, style]}>
+      {children}
+    </View>
+  );
   return (
     <View style={[s.fill, { backgroundColor: bg }]}>
+      {isDark && tone === 'default' ? <Radar /> : null}
       <SafeAreaView style={s.fill} edges={['top', 'bottom']}>
         {scroll ? (
           <ScrollView style={s.fill} contentContainerStyle={s.grow} keyboardShouldPersistTaps="handled">
@@ -75,6 +148,34 @@ export function Screen({
           body
         )}
       </SafeAreaView>
+    </View>
+  );
+}
+
+/** Two columns side by side on wide screens, stacked on phones. */
+export function Columns({ left, right, ratio = 1 }: { left: ReactNode; right: ReactNode; ratio?: number }) {
+  const wide = useWide();
+  if (!wide) return <>{left}{right}</>;
+  return (
+    <View style={s.columns}>
+      <View style={[s.column, { flex: ratio }]}>{left}</View>
+      <View style={[s.column, { flex: 1 }]}>{right}</View>
+    </View>
+  );
+}
+
+/** A labelled money row: label and note on the left, a tabular amount on the right. */
+export function MoneyRow({ label, note, value, tone, strong }: {
+  label: string; note?: string; value: string; tone?: 'green' | 'amber' | 'red'; strong?: boolean;
+}) {
+  const fg = tone ? TONES[tone][1] : colors.ink;
+  return (
+    <View style={s.moneyRow}>
+      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+        <Text style={[s.moneyLabel, strong && { fontFamily: font.bold }]}>{label}</Text>
+        {note ? <Text style={s.moneyNote}>{note}</Text> : null}
+      </View>
+      <Text maxFontSizeMultiplier={1.3} style={[s.moneyValue, { color: fg }, strong && { fontSize: 22 }]}>{value}</Text>
     </View>
   );
 }
@@ -305,10 +406,17 @@ const s = StyleSheet.create({
   fill: { flex: 1 },
   grow: { flexGrow: 1 },
   screen: { flexGrow: 1, paddingHorizontal: 20, paddingTop: space.md, paddingBottom: space.xl, gap: space.lg },
+  columns: { flexDirection: 'row', gap: space.xl, alignItems: 'flex-start' },
+  column: { minWidth: 0, gap: space.lg },
+  moneyRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
+  moneyLabel: { fontFamily: font.semibold, fontSize: 17, color: colors.ink },
+  moneyNote: { fontFamily: font.regular, fontSize: 14, lineHeight: 19, color: colors.muted },
+  moneyValue: { fontFamily: font.bold, fontSize: 19, fontVariant: ['tabular-nums'] },
   topBar: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: -8, minHeight: 48 },
   back: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
   topTitle: { flex: 1, fontFamily: font.semibold, fontSize: 17, color: colors.ink, textAlign: 'center' },
-  card: { backgroundColor: colors.card, borderRadius: radius.lg, padding: 20, gap: space.md },
+  // Open sections, not boxes: rules above and below on the page background.
+  card: { paddingVertical: 14, gap: space.md, borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.line },
   cardNavy: { backgroundColor: colors.sheet },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, alignItems: 'center' },
   title: { fontFamily: font.display, fontSize: 40, lineHeight: 46, color: colors.ink, letterSpacing: -0.2 },
@@ -320,8 +428,8 @@ const s = StyleSheet.create({
   field: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', columnGap: space.md, rowGap: 2, paddingVertical: 6 },
   fieldLabel: { fontFamily: font.regular, fontSize: 16, color: colors.muted },
   fieldValue: { fontFamily: font.semibold, fontSize: 16, color: colors.ink, flexShrink: 1, marginLeft: 'auto', textAlign: 'right', fontVariant: ['tabular-nums'] },
-  group: { backgroundColor: colors.card, borderRadius: radius.lg, overflow: 'hidden', paddingVertical: 4 },
-  cell: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 64, paddingHorizontal: 18, paddingVertical: 12 },
+  group: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
+  cell: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 60, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
   cellTitle: { fontFamily: font.semibold, fontSize: 17, color: colors.ink },
   cellDetail: { fontFamily: font.regular, fontSize: 14, lineHeight: 19, color: colors.muted },
   cellValue: { fontFamily: font.semibold, fontSize: 17, color: colors.ink, fontVariant: ['tabular-nums'] },
@@ -334,12 +442,12 @@ const s = StyleSheet.create({
   meterFill: { height: '100%', borderRadius: radius.pill },
   error: { flexDirection: 'row', gap: 10, alignItems: 'flex-start', backgroundColor: colors.redSoft, borderRadius: radius.md, padding: 14 },
   errorText: { flex: 1, fontFamily: font.medium, fontSize: 15, lineHeight: 21, color: colors.red },
-  button: { minHeight: 56, paddingVertical: 14, paddingHorizontal: 22, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
+  button: { minHeight: 56, paddingVertical: 14, paddingHorizontal: 22, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   buttonBig: { minHeight: 72 },
   buttonText: { fontFamily: font.semibold, fontSize: 17 },
   buttonTextBig: { fontFamily: font.bold, fontSize: 21 },
   buttonSub: { fontFamily: font.regular, fontSize: 14, opacity: 0.85, marginTop: 2 },
-  chip: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 18, borderRadius: radius.pill, backgroundColor: colors.well },
+  chip: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 18, borderRadius: 10, backgroundColor: colors.well },
   chipActive: { backgroundColor: colors.primary },
   chipTextActive: { color: colors.onPrimary },
   chipText: { fontFamily: font.semibold, fontSize: 15, color: colors.ink },

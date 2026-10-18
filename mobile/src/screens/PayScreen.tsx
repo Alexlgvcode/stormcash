@@ -47,7 +47,7 @@ export function PayScreen() {
 
   if (step.s === 'scan') {
     return (
-      <Screen>
+      <Screen width="narrow">
         <TopBar onBack={nav.home} />
         <Title>Scan the shop's code</Title>
         <Muted>No internet needed.</Muted>
@@ -60,7 +60,7 @@ export function PayScreen() {
   if (step.s === 'confirm') {
     const { mc, rq } = step.request;
     return (
-      <Screen>
+      <Screen width="narrow">
         <TopBar onBack={nav.home} />
         <Title>Confirm payment</Title>
         <View style={{ paddingVertical: 24, gap: 8 }}>
@@ -78,19 +78,19 @@ export function PayScreen() {
   }
 
   return (
-    <Screen>
+    <Screen width="narrow">
       <Title>Show this to {step.shop}</Title>
       <Ticket
           value={step.qr}
           copy
-          kicker={`${getDisplayName() ?? 'Your'}'s copy`}
+          kicker={getDisplayName() ? `${getDisplayName()}'s copy` : 'Your copy'}
           title={step.shop}
           amount={wholeDollars(step.amount)}
           footnote={`Signed on this phone at ${new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`}
         />
       <View style={{ alignItems: 'center', gap: 6 }}>
-        <Status text="Your wallet is already updated" tone="green" />
-        <Muted>{wholeDollars(step.leftAfter)} left to spend</Muted>
+        <Status text="Waiting for the shop to scan" tone="amber" />
+        <Muted>Already counted: {wholeDollars(step.leftAfter)} left to spend. If no shop scans it, you're never charged.</Muted>
       </View>
       <Button title="Done" onPress={nav.home} />
     </Screen>

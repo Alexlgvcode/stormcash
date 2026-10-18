@@ -24,9 +24,9 @@ export function Header() {
   const nearby = syncManager.status.connected.length;
   return (
     <View style={styles.row}>
-      <Pressable onLongPress={() => nav.go({ name: 'demo' })} delayLongPress={600} accessibilityHint="Long-press for the demo menu">
+      <Pressable style={styles.left} onLongPress={() => nav.go({ name: 'demo' })} delayLongPress={600} accessibilityHint="Long-press for the demo menu">
         <Logo />
-        {label ? <Text style={styles.label}>Demo phone: {LABEL_NAMES[label] ?? label}</Text> : null}
+        {label ? <Text style={styles.label} numberOfLines={1}>Demo phone: {LABEL_NAMES[label] ?? label}</Text> : null}
       </Pressable>
       <View style={styles.right}>
         <Status text={online ? 'Online' : 'Offline'} tone={online ? 'green' : 'amber'} />
@@ -37,8 +37,9 @@ export function Header() {
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 },
+  left: { flexShrink: 1, minWidth: 0 },
   word: { fontFamily: font.display, fontSize: 32, lineHeight: 34, color: colors.carbon },
   label: { fontFamily: font.regular, fontSize: 15, color: colors.muted, marginTop: 2 },
-  right: { alignItems: 'flex-end', gap: 6 },
+  right: { alignItems: 'flex-end', gap: 6, flexShrink: 0, paddingTop: 4 },
 });
