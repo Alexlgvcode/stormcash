@@ -29,7 +29,6 @@ Person A is Brian (@brianmmaina, mobile). Person B is Alex (@Alexlgvcode, server
 | WS4 | Town simulator | `sim/` | B |
 | WS5 | StormDesk agent | `server/stormcash/stormdesk/` | B |
 | WS6 | Chalk features + evals | `chalk/` | B |
-| WS7 | Photon agent | `server/stormcash/photon/` | A |
 
 WS2 owns `server/stormcash/db.py`, `schema.sql` and `app.py`. Other server workstreams add routers in their own module, and B wires them in.
 

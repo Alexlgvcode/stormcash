@@ -14,7 +14,6 @@ body:
         - WS4 Simulator
         - WS5 StormDesk
         - WS6 Chalk
-        - WS7 Photon
         - Setup / demo / submission
     validations:
       required: true

@@ -20,7 +20,6 @@ class Deps:
     nessie: NessieClient | None  # None when Nessie is switched off (ledger-only)
     mover: MoneyMover
     detector_state: DetectorState = field(default_factory=DetectorState)
-    photon: object | None = None  # photon.config.PhotonSettings once the app starts
 
     @property
     def server_key(self):

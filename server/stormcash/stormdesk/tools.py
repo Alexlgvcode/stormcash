@@ -281,13 +281,6 @@ def get_nessie_balances(conn, entity_id: str, deps=None) -> dict:
             "nessie_cents": nessie_cents, "note": "simulated: ledger only" if simulated else "from Nessie transactions"}
 
 
-def get_messages(conn, merchant_id: str) -> dict:
-    """The Photon conversation with this shop so far."""
-    rows = all_rows(conn, "SELECT message_id, direction, channel, body, created_at FROM messages "
-                          "WHERE merchant_id = %s ORDER BY created_at LIMIT %s", (_hex(merchant_id, "merchant_id"), LIMIT))
-    return hexify({"merchant_id": merchant_id, "messages": rows})
-
-
 @dataclass(frozen=True)
 class ToolSpec:
     name: str
@@ -311,7 +304,6 @@ TOOLS: tuple[ToolSpec, ...] = (
              get_region_status),
     ToolSpec("get_nessie_balances", "Balances for a demo entity (Nessie for real ones, ledger for simulated).",
              get_nessie_balances),
-    ToolSpec("get_messages", "The Photon conversation with a shop so far.", get_messages),
 )
 TOOL_NAMES = tuple(t.name for t in TOOLS)
 

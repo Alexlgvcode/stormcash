@@ -91,10 +91,10 @@ def test_totals_count_only_droid_and_keep_fake_runs_apart():
     assert t["mean_duration_ms"] == (45_000 * 5 + 90_000) / 6
     assert t["outcomes"] == {"valid": 3, "invalid_citation": 1, "structured_output_failed": 1, "failed": 1}
     by_job = {j["job"]: j for j in out["by_job"]}
-    assert list(by_job) == ["investigate", "triage", "respond"]
+    assert list(by_job) == ["investigate", "triage", "review"]
     assert (by_job["investigate"]["droid_runs"], by_job["investigate"]["success_rate"]) == (1, 1.0)
     assert (by_job["triage"]["droid_runs"], by_job["triage"]["valid"]) == (5, 2)
-    assert by_job["respond"]["droid_runs"] == 0 and by_job["respond"]["success_rate"] is None
+    assert by_job["review"]["droid_runs"] == 0 and by_job["review"]["success_rate"] is None
     assert out["builtin_calls_seen"] == {"ToolSearch": 8}
 
 
@@ -146,7 +146,7 @@ def test_reviews_get_their_own_totals_and_verdicts():
     reviews = [review(11, "disagree"), review(12, "agree"), review(13, "agree", runner="fake"),
                review(14, "agree", status="invalid")]
     out = console([*FIXTURE, *reviews])
-    assert [j["job"] for j in out["by_job"]] == ["investigate", "triage", "respond", "review"]
+    assert [j["job"] for j in out["by_job"]] == ["investigate", "triage", "review"]
     by_job = {j["job"]: j for j in out["by_job"]}
     assert (by_job["review"]["droid_runs"], by_job["review"]["valid"], by_job["review"]["fake_runs"]) == (3, 2, 1)
     runs = {r["run_id"]: r for r in out["runs"]}
@@ -165,7 +165,7 @@ def test_limit_trims_the_list_not_the_totals():
 def test_no_runs_yet(app_client):
     out = app_client.get("/v1/droid/console").json()
     assert out["run_count"] == 0 and out["runs"] == [] and out["totals"]["success_rate"] is None
-    assert out["harness"]["read_only_tools"][0] == "get_case" and len(out["harness"]["read_only_tools"]) == 11
+    assert out["harness"]["read_only_tools"][0] == "get_case" and len(out["harness"]["read_only_tools"]) == 10
     assert out["harness"]["builtin_tools_disabled"] == 34 and out["harness"]["mcp_server"] == "stormdesk"
 
 

@@ -16,7 +16,6 @@ from stormcash import registry
 from stormcash.app import create_app
 from stormcash.db import all_rows, scalar
 from stormcash.dryrun import VERIFY_BIN, DryRun, NessieReader, Phone, Wallet, schema_problems
-from stormcash.photon.config import PhotonSettings
 from stormcash.protocol import crypto, rules
 from stormcash.protocol.objects import Cert, Mcert, Req, b64u_encode, genesis
 from stormcash.stormdesk.worker import Worker, pending_jobs
@@ -165,7 +164,7 @@ def test_the_dry_runs_hard_case_never_enqueues_a_droid_job(table, app_client, de
 
 def test_ledger_only_fallback_passes_too(clean_db):
     """NESSIE_DISABLED=1 (§22.4): money is checked in the ledger instead, and said so."""
-    app = create_app(make_settings(clean_db, nessie_enabled=False), photon=PhotonSettings(disabled=True))
+    app = create_app(make_settings(clean_db, nessie_enabled=False))
     with TestClient(app) as client:
         deps = client.app.state.deps
         seed_corner_store(deps)
@@ -214,9 +213,9 @@ def test_schema_check_names_what_a_migration_would_add(clean_db, deps):
     with deps.pool.connection() as conn:
         assert schema_problems(conn, schema) == []
         newer = schema.replace("agents_disagree BOOLEAN", "second_look TEXT,\n  agents_disagree BOOLEAN").replace(
-            "('investigate','triage','respond','review','author')",
-            "('investigate','triage','respond','review','author','appeal')")
-        assert schema_problems(conn, newer) == ["flags.second_look", "stormdesk_runs.job CHECK without appeal"]
+            "('investigate','triage','review','author')",
+            "('investigate','triage','review','author','audit')")
+        assert schema_problems(conn, newer) == ["flags.second_look", "stormdesk_runs.job CHECK without audit"]
 
 
 def test_judge_mode_rollbacks_match_the_phone():

@@ -19,11 +19,9 @@ class DecisionIn(BaseModel):
 
 def _decide(flag_id: int, request: Request, operator: str | None, approve: bool, note: str | None) -> dict:
     from ..approvals import decide
-    from ..photon.routes import settings as photon_settings
 
     operator = require_operator(operator)
-    return jsonable(decide(request.app.state.deps, flag_id, operator, approve, note,
-                           photon=photon_settings(request)))
+    return jsonable(decide(request.app.state.deps, flag_id, operator, approve, note))
 
 
 @router.post("/v1/flags/{flag_id}/approve")

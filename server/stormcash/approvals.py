@@ -3,8 +3,8 @@ only proposed; a person approves, and this code does exactly what the table says
 
 | Action | Effect |
 |---|---|
-| hold_pool_payout | the shop's pool-funded payouts that haven't reached Nessie are held (ledger reversed, queued Nessie move cancelled); future pool money held (pool_eligible = false); Photon notice |
-| lower_merchant_limit | merchants.per_payment_limit_cents = action_params.limit_cents; new POLICY; Photon notice |
+| hold_pool_payout | the shop's pool-funded payouts that haven't reached Nessie are held (ledger reversed, queued Nessie move cancelled); future pool money held (pool_eligible = false) |
+| lower_merchant_limit | merchants.per_payment_limit_cents = action_params.limit_cents; new POLICY |
 | freeze_cert | cert_status = frozen; new POLICY |
 | dispatch_relay | a task "Send a relay to <region>" for the operator (no money, no messages) |
 | none | nothing |
@@ -34,9 +34,6 @@ class FlagNotFound(ApprovalError):
 
 class AlreadyDecided(ApprovalError):
     status = 409
-
-
-NOTICE_ACTIONS = ("hold_pool_payout", "lower_merchant_limit")
 
 
 def _load_flag(conn, flag_id: int) -> dict:
@@ -84,7 +81,7 @@ def hold_pool_payouts(conn, merchant: dict) -> dict:
 
 
 def decide(deps: Deps, flag_id: int, operator: str, approve: bool, note: str | None = None,
-           now: int | None = None, photon=None) -> dict:
+           now: int | None = None) -> dict:
     """Approve (run the action) or reject (nothing runs) an open flag."""
     now = int(time.time()) if now is None else now
     ctx = _Ctx(deps, b"", now, False)
@@ -124,16 +121,10 @@ def decide(deps: Deps, flag_id: int, operator: str, approve: bool, note: str | N
                VALUES (%s, %s, %s, %s, %s) RETURNING *""",
             (flag_id, "approve" if approve else "reject", operator, note, Jsonb(executed)),
         )
-    notice = None
-    photon = photon or deps.photon
-    if approve and action in NOTICE_ACTIONS and photon is not None:
-        from .photon import notices
-
-        notice = notices.hold_notice(deps, photon, flag_id)
     for event, data in ctx.events:
         deps.events.publish(event, data)
     result = {"approval": approval, "flag_id": flag_id, "status": "approved" if approve else "rejected",
-              "executed_actions": executed, "notice": notice}
+              "executed_actions": executed}
     deps.events.publish("approval", result)
     deps.events.publish("accounts", {"approval": flag_id})
     return result

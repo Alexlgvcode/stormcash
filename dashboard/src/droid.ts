@@ -49,27 +49,10 @@ export interface ConsoleRun {
   permission_denials: number | null;
   fallback_reason: string | null;
   reviewed_run_id: number | null;
-  appeal: AppealTurnInfo | null; // a respond run that is a turn of its appeal's Droid session (§17.2)
   session_id: string | null;
   error: string | null;
   started_at: number;
   finished_at: number | null;
-}
-
-export interface AppealTurnInfo {
-  session: "started" | "resumed" | "restarted" | null;
-  turn: number;
-  session_id: string | null;
-  resume_error: string | null;
-}
-
-/** Droid's appeal conversations (§17.2): one Droid session per appeal thread, resumed for each text. */
-export interface AppealSessions {
-  sessions: number;
-  turns: number;
-  resumed: number;
-  restarted: number;
-  longest: number;
 }
 
 export interface Totals {
@@ -123,7 +106,6 @@ export interface DroidConsole {
   as_of: number;
   run_count: number;
   review_verdicts: Partial<Record<"agree" | "disagree" | "insufficient_evidence", number>>;
-  appeal_sessions?: AppealSessions; // absent on a server from before appeal sessions
   totals: Totals;
   by_job: (Totals & { job: string })[];
   guardrails: Guardrail[];
@@ -155,7 +137,7 @@ export interface RunDetail {
 export const JOB_LABEL: Record<string, string> = {
   investigate: "Investigated a case",
   triage: "Checked a suspicion",
-  respond: "Appeal reply",
+  respond: "Appeal reply", // stored runs from before Photon was removed (spec v4.24)
   review: "Second opinion",
   author: "Wrote a detector",
 };
@@ -275,23 +257,6 @@ export function reviewVerdicts(v: DroidConsole["review_verdicts"]): string | nul
     v.insufficient_evidence ? `insufficient evidence ${v.insufficient_evidence}` : null,
   ].filter(Boolean);
   return parts.length ? parts.join(" · ") : null;
-}
-
-/** "3 turns in 1 Droid session (2 resumed)", or null when no appeal has been answered in a Droid session. */
-export function appealSessionsText(a: AppealSessions | undefined): string | null {
-  if (!a || a.turns === 0) return null;
-  const extra = [`${a.resumed} resumed`, a.restarted ? `${a.restarted} restarted from the stored thread` : null]
-    .filter(Boolean).join(", ");
-  return `${a.turns} turn${a.turns === 1 ? "" : "s"} in ${a.sessions} Droid session${a.sessions === 1 ? "" : "s"} (${extra})`;
-}
-
-/** "turn 2 of Droid session 8c1f2a3b (resumed)" for a respond run that is a turn of its appeal's session. */
-export function appealTurnText(a: AppealTurnInfo | null | undefined): string | null {
-  if (!a) return null;
-  const id = a.session_id ? ` ${a.session_id.replace(/-/g, "").slice(0, 8)}` : "";
-  const how = a.session === "resumed" ? "resumed: same session"
-    : a.session === "restarted" ? "new session from the stored thread: the last one couldn't be resumed" : "new session";
-  return `turn ${a.turn} of Droid session${id} (${how})`;
 }
 
 /** What a run's structured output says, for the run view: a summary, a case file, a reply or a review's reasons. */

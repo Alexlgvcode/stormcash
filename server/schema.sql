@@ -32,20 +32,6 @@ CREATE TABLE merchants (
   simulated BOOLEAN NOT NULL DEFAULT FALSE
 );
 
-CREATE TABLE merchant_contacts (        -- Photon mapping
-  merchant_id BYTEA REFERENCES merchants,
-  channel TEXT NOT NULL,                -- 'telegram' | 'imessage' | 'sms'
-  handle TEXT NOT NULL,
-  PRIMARY KEY (channel, handle)
-);
-
-CREATE TABLE resident_contacts (        -- [v4.13] Photon mapping for residents (FREEZE by text, §17.2)
-  resident_id UUID NOT NULL REFERENCES residents,
-  channel TEXT NOT NULL,                -- 'telegram' | 'imessage' | 'sms'
-  handle TEXT NOT NULL,
-  PRIMARY KEY (channel, handle)
-);
-
 CREATE TABLE certificates (
   cert_id BYTEA NOT NULL,
   cert_ver INT NOT NULL,
@@ -64,8 +50,7 @@ CREATE TABLE cert_status (
   max_cap_cents INT NOT NULL,
   frozen_at BIGINT,
   storm_mode BOOLEAN NOT NULL DEFAULT FALSE,
-  storm_mode_at BIGINT,
-  owner_freeze_at BIGINT                -- [v4.13] the owner texted FREEZE (§17.2); cap_drain's owner_freeze_request
+  storm_mode_at BIGINT
 );
 
 -- Protocol data
@@ -173,13 +158,13 @@ CREATE TABLE flags (                    -- StormDesk output (one per candidate)
 
 CREATE TABLE stormdesk_runs (           -- [v4.3] every StormDesk run, for replay and audit (§14.7, §14.8)
   run_id BIGSERIAL PRIMARY KEY,
-  job TEXT NOT NULL CHECK (job IN ('investigate','triage','respond','review','author')), -- [v4.15] review (§14.7b), [v4.22] author (§14.7d)
+  job TEXT NOT NULL CHECK (job IN ('investigate','triage','review','author')), -- [v4.15] review (§14.7b), [v4.22] author (§14.7d); [v4.24] respond removed with Photon
   case_id BIGINT REFERENCES cases,
   candidate_id BIGINT REFERENCES candidates,
   merchant_id BYTEA,
   runner TEXT NOT NULL,                 -- 'droid' | 'fake' (a fake run is never shown as an agent result)
   status TEXT NOT NULL CHECK (status IN ('running','succeeded','invalid','failed')),
-  output JSONB,                         -- the structured output (Flag / CaseFile / AppealReply / Review)
+  output JSONB,                         -- the structured output (Flag / CaseFile / Review / DetectorProposal)
   citations_valid BOOLEAN,
   transcript JSONB NOT NULL DEFAULT '{}', -- {runner, steps: [{tool, input, ok}], missing_citations, error}
   session_id TEXT,
@@ -195,17 +180,6 @@ CREATE TABLE approvals (
   operator TEXT NOT NULL,
   note TEXT,
   executed_actions JSONB,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE TABLE messages (                 -- Photon conversations
-  message_id BIGSERIAL PRIMARY KEY,
-  merchant_id BYTEA REFERENCES merchants,
-  resident_id UUID REFERENCES residents, -- [v4.13] a resident's thread (FREEZE by text); merchant_id is then NULL
-  flag_id BIGINT REFERENCES flags,
-  direction TEXT NOT NULL CHECK (direction IN ('out','in')),
-  channel TEXT NOT NULL,
-  body TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

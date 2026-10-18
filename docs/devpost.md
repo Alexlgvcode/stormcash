@@ -2,7 +2,7 @@
 
 Paste each section into the matching Devpost field. One thing is still marked **FILL BEFORE SUBMIT**: the demo video link. Brian and Alex: read "How we worked as a team" and "What we learned" and adjust anything that doesn't sound like you before pasting. Don't type any number that isn't already here: every figure below comes from a real run or from the code (eval numbers from Chalk runs, listed with their ids in the README).
 
-Submission deadline: **Sunday Oct 18, 8:00 AM** (aim for 7:30). Track: **Digital Trust**. Sponsor challenges: **Best Use of Nessie (Capital One)**, **Factory Droid SDK**, **Chalk**, **Photon**.
+Submission deadline: **Sunday Oct 18, 8:00 AM** (aim for 7:30). Track: **Digital Trust**. Sponsor challenges: **Best Use of Nessie (Capital One)**, **Factory Droid SDK**, **Chalk**.
 
 ---
 
@@ -27,7 +27,7 @@ We wanted to know how much of a payment can be checked with no network at all, a
 - **Cheating is refused offline.** Every payment is a signed, chained spend tag. Phones pass tags to each other over Bluetooth and peer Wi-Fi, and customers carry them from shop to shop. If someone rolls back their wallet and spends the same money again, the next shop that has seen the tag refuses it, with no internet anywhere, and the two conflicting signatures are proof anyone can check.
 - **Records hop phone to phone.** Payments, tags and signed device logs travel phone to phone until any phone finds a signal and uploads them. The server pays shops through Nessie, freezes the cheater, and sends receipts and the freeze list back the same way.
 - **"Merchant knew."** Every phone keeps a signed, hash-chained log of what it accepted and whom it met. A shop that took a double spend while holding the conflicting tag is caught by its own signature.
-- **StormDesk.** A back-office agent built on Factory's Droid SDK investigates fraud cases and triages suspicious patterns, reading live features from Chalk. It proposes; a person approves. Shops get notices and can appeal by text through Photon.
+- **StormDesk.** A back-office agent built on Factory's Droid SDK investigates fraud cases and triages suspicious patterns, reading live features from Chalk. It proposes; a person approves.
 
 **Math flags. The agent investigates. A person decides.**
 
@@ -37,16 +37,15 @@ We wanted to know how much of a payment can be checked with no network at all, a
 - **Mobile:** React Native with Expo development builds on three iPhones, Face ID per payment, QR show and scan, local SQLite stores, and Apple Multipeer Connectivity for phone-to-phone sync, with a QR sync fallback.
 - **Server:** Python, FastAPI and plain SQL on hosted Postgres (Neon): settlement, a double-entry ledger, six deterministic fraud rules (R1–R6), signed freeze lists, and live updates to the dashboard over server-sent events.
 - **Capital One Nessie:** checking, escrow, guarantee-pool and shop accounts. Every money movement is a matched withdrawal and deposit linked to our ledger, and the dashboard reads balances live from Nessie.
-- **Factory Droid SDK:** StormDesk runs Droid sessions with structured outputs (Pydantic), eleven read-only tools served as an in-process MCP server, a permission handler that blocks everything else, and a citation check that rejects any claim citing an id that doesn't exist.
+- **Factory Droid SDK:** StormDesk runs Droid sessions with structured outputs (Pydantic), ten read-only tools served as an in-process MCP server, a permission handler that blocks everything else, and a citation check that rejects any claim citing an id that doesn't exist.
 - **Chalk:** feature classes and SQL resolvers over our Postgres data plus live National Weather Service alerts, queried by StormDesk at runtime, and Chalk Evaluations scoring StormDesk against a rules-only baseline.
-- **Photon:** hold notices and appeal conversations with shop owners over Telegram.
 - **Simulator:** a deterministic 40-shop town built on the same protocol and settlement code as the real phones, with labeled scenarios and deliberate traps, used for the dashboard's Town tab and as the eval dataset.
 - **C++ verifier:** `stormcash-verify`, a third independent implementation of the protocol's checks (OpenSSL), which reproduces every shared test vector and checks a cheating proof offline from the command line.
 - **Dashboard:** React, Vite and TypeScript, with Accounts, Cases, Town and Evals tabs and a public "Verify it yourself" proof page that checks the signatures in the judge's own browser.
 
 ### How we worked as a team
 
-- **A clean split.** Brian owned everything on the phones: the Expo app, Face ID and QR, the offline checks, Multipeer sync and relay, Secure Enclave keys, and the Photon messaging agent. Alex owned everything behind them: the server, settlement and Nessie, the fraud rules, the simulator, the dashboard, StormDesk on Droid, the Chalk evaluations and the C++ verifier.
+- **A clean split.** Brian owned everything on the phones: the Expo app, Face ID and QR, the offline checks, Multipeer sync and relay, and Secure Enclave keys. Alex owned everything behind them: the server, settlement and Nessie, the fraud rules, the simulator, the dashboard, StormDesk on Droid, the Chalk evaluations and the C++ verifier.
 - **A contract between our halves.** Before either side built on the protocol, we wrote a spec and generated shared test vectors. Brian's TypeScript and Alex's Python had to reproduce them byte for byte, so the phones and the server agreed on every signature without either of us reading the other's code.
 - **One workflow for everything.** We tracked the work as 50+ GitHub issues, one per piece, grouped by workstream and by schedule block. Every change went in through a pull request (61 merged by Saturday evening), and CI had to pass on all four parts (server, mobile, dashboard and C++) before anything merged. The spec stayed the source of truth: when code changed the design, the spec changed in the same pull request.
 - **Checking each other's assumptions.** Hour-one checks against the real APIs (Nessie, Droid, Chalk) changed our design early. Nessie's balances don't move, so we redesigned settlement around withdrawal and deposit pairs before writing it.
@@ -87,7 +86,7 @@ We wanted to know how much of a payment can be checked with no network at all, a
 
 ## Built with
 
-python, fastapi, postgresql, neon, react, typescript, vite, tailwindcss, react-native, expo, swift, c++, cmake, openssl, multipeer-connectivity, ecdsa, capital-one-nessie, factory-droid, chalk, photon, telegram, cloudflare
+python, fastapi, postgresql, neon, react, typescript, vite, tailwindcss, react-native, expo, swift, c++, cmake, openssl, multipeer-connectivity, ecdsa, capital-one-nessie, factory-droid, chalk, cloudflare
 
 ---
 
@@ -102,8 +101,6 @@ Paste these where Devpost asks how you used each sponsor.
 **Chalk.** StormDesk reads live Chalk features at runtime (shop contact rates against neighbors, pool-funded share, certificate drain speed, upload gaps, weather alerts). We evaluated it with Chalk Evaluations on labeled simulated towns with deliberate traps, against a rules-only baseline.
 
 On two held-out simulated towns, chosen before the run and never seen while we wrote the agent's prompt, StormDesk caught 6 of 9 real fraud cases, including every stolen phone, and wrongly flagged 0 of 11 honest subjects, with every cited record valid (Chalk run `51b74f56-d8d8-466b-a07c-3ddf8baa8064`). The rules-only baseline on the same rows caught all 9 but also flagged all 11 honest subjects (`dc1fd4c9-734e-408d-8c48-9c583dcb3867`). Our first prompt was far too lenient (2 of 23 real cases on our main set), so we rewrote it, said so openly, and then tested it blind. It still misses some colluding shops and every dark region on the held-out towns, which is why a person approves every action.
-
-**Photon.** When an operator approves a hold, the shop owner gets a notice on Telegram whose numbers all come from the flag's evidence. Their reply is answered by StormDesk, citing their own signed logs, and anything uncertain goes to a person.
 
 **Digital Trust track.** The judge tries to cheat with no internet and is refused. The evidence is self-proving signatures, and our "merchant knew" rule catches a colluding shop with its own signed log.
 

@@ -1,17 +1,13 @@
 // StormDesk on the dashboard (spec §18.3, §14.6, §14.7b, §14.8): the review
 // queue of flags with their evidence, the agent's tool calls live or replayed,
-// the reviewer's second opinion, Approve / Reject with the operator's name, and
-// the Photon thread for merchant flags, where each StormDesk reply says which
-// turn of the appeal's Droid session wrote it (§17.2). A fake-runner result is
-// labelled as such everywhere (§0 rule 3).
+// the reviewer's second opinion, and Approve / Reject with the operator's name.
+// A fake-runner result is labelled as such everywhere (§0 rule 3).
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getJSON, operatorPost, type FlagDetail, type FlagRow, type Message, type Run, type Step, type Usage } from "../api";
-import { heldBack, sessionSummary, turnLabel, turnsByReply, type AppealTurn } from "../appeal";
+import { getJSON, operatorPost, type FlagDetail, type FlagRow, type Run, type Step, type Usage } from "../api";
 import { useEvents } from "../events";
 import { clockTime, dollars } from "../format";
 import { ACTION_PLAIN, KIND_PLAIN, SEVERITY_PLAIN, toolPlain } from "../plain";
 import { reviewVerdict, suggestion, type FlagReview } from "../review";
-import { OwnerFreezeNote } from "./OwnerFreeze";
 import { Button, Eyebrow, Note, Pill, Section, Table, Td, TextInput, Th, type Tone } from "./ui";
 
 const KIND_TITLE = KIND_PLAIN;
@@ -170,72 +166,6 @@ function CitedIds({ ids, missing }: { ids: string[]; missing: string[] }) {
   );
 }
 
-function PhotonThread({ merchantId }: { merchantId: string }) {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [turns, setTurns] = useState<AppealTurn[]>([]);
-  const load = useCallback(() => {
-    getJSON<{ messages: Message[]; turns?: AppealTurn[] }>(`/v1/photon/messages?merchant_id=${merchantId}`)
-      .then((r) => {
-        setMessages(r.messages);
-        setTurns(r.turns ?? []);
-      })
-      .catch(() => setMessages([]));
-  }, [merchantId]);
-  useEffect(load, [load]);
-  useEvents(["message"], (data) => {
-    if ((data as Message).merchant_id === merchantId) setMessages((cur) => [...cur, data as Message]);
-  });
-  useEvents(["appeal"], (data) => {
-    if ((data as { merchant_id?: string }).merchant_id === merchantId) load(); // the turn that just answered
-  });
-  const byReply = turnsByReply(turns);
-  const summary = sessionSummary(turns);
-  return (
-    <Section
-      title="Photon thread"
-      right={
-        summary && (
-          <span title="Every reply in this appeal is a turn of the same Droid conversation, picked up again for each new text.">
-            <Pill tone="success">{summary}</Pill>
-          </span>
-        )
-      }
-    >
-      {messages.length === 0 && <p className="py-2.5 text-secondary">No messages with this shop.</p>}
-      <ol>
-        {messages.map((m) => {
-          const turn = m.direction === "out" ? byReply.get(m.message_id) : undefined;
-          const held = turn ? heldBack(turn) : null;
-          const out = m.direction === "out";
-          return (
-            <li key={m.message_id} className="grid grid-cols-[8.5rem_minmax(0,1fr)] gap-4 border-b border-rule py-3">
-              <div className="text-th text-secondary">
-                <div className={`font-medium ${out ? "text-accent" : "text-heading"}`}>{out ? "StormCash" : "Shop"}</div>
-                <div className="tabular-nums">{clockTime(m.created_at)}</div>
-                <div>{m.channel}</div>
-              </div>
-              <div className="min-w-0">
-                <p className="whitespace-pre-wrap break-words text-ink">{m.body}</p>
-                {(turn || held || m.delivered === false) && (
-                  <div className="mt-1.5 flex flex-wrap items-center gap-2 text-th">
-                    {turn && (
-                      <Pill tone={turn.runner === "fake" ? "warning" : turn.session === "resumed" ? "success" : "neutral"}>
-                        {turnLabel(turn)}
-                      </Pill>
-                    )}
-                    {held && <span className="text-danger">{held}</span>}
-                    {m.delivered === false && <span className="text-secondary">not delivered</span>}
-                  </div>
-                )}
-              </div>
-            </li>
-          );
-        })}
-      </ol>
-    </Section>
-  );
-}
-
 const VERDICT_TONE: Record<string, Tone> = { agree: "success", disagree: "agents", void: "danger" };
 
 /** The reviewer Droid's second opinion (§14.7b): verdict, reasons, the records it cited, its own steps. */
@@ -365,9 +295,6 @@ function FlagView({ flagId, onChanged }: { flagId: number; onChanged: () => void
 
   if (!detail) return <Note>Loading flag…</Note>;
   const { flag, agent } = detail;
-  const merchantFlag = flag.kind === "merchant_silence" || flag.proposed_action === "hold_pool_payout"
-    || flag.proposed_action === "lower_merchant_limit";
-  const certFlag = detail.candidate?.kind === "cap_drain" || flag.proposed_action === "freeze_cert";
   const actionable = flag.status === "open" && flag.citations_valid;
   const status = flagStatus(flag);
 
@@ -469,12 +396,6 @@ function FlagView({ flagId, onChanged }: { flagId: number; onChanged: () => void
           </p>
         )}
         {result && <p className="mt-3 break-all font-mono text-th text-ink">{result}</p>}
-        {certFlag && (
-          <div className="mt-4">
-            <OwnerFreezeNote certId={flag.subject_id}
-              seenByDetector={detail.candidate?.features?.owner_freeze_request === true} />
-          </div>
-        )}
         {agent?.reasoning && (
           <div className="mt-3">
             <button onClick={() => setShowReasoning((v) => !v)} className="text-accent hover:underline">
@@ -507,7 +428,6 @@ function FlagView({ flagId, onChanged }: { flagId: number; onChanged: () => void
         load();
         onChanged();
       }} />
-      {merchantFlag && <PhotonThread merchantId={flag.subject_id} />}
     </div>
   );
 }

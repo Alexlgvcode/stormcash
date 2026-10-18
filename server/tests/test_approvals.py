@@ -86,8 +86,6 @@ def test_approving_a_silence_flag_holds_pool_money_live(app_client, deps, silenc
     with deps.pool.connection() as conn:
         assert scalar(conn, "SELECT status FROM payouts WHERE source = 'pool'") == "held"
     assert any(e == "approval" for e, _ in seen)  # the dashboard sees it live
-    # The hold notice was attempted and recorded honestly (Photon is off in tests).
-    assert out["notice"]["delivered"] is False
 
 
 def test_future_pool_money_is_held_after_approval(app_client, world, deps, silence_flag):
