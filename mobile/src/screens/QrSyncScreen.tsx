@@ -74,7 +74,7 @@ export function QrSyncScreen() {
 
   if (mode === 'choose') {
     return (
-      <Screen>
+      <Screen width="narrow">
         <TopBar onBack={() => nav.go({ name: 'records' })} />
         <Title>Sync by QR</Title>
         <Muted>Use this when phones can't link over Bluetooth or Wi-Fi. One phone starts; the other scans first.</Muted>
@@ -85,7 +85,7 @@ export function QrSyncScreen() {
   }
   if (mode === 'show') {
     return (
-      <Screen>
+      <Screen width="narrow">
         <Title>Let the other phone scan</Title>
         <View style={{ opacity: 1 }}>
           <QrCode value={frames[frameIdx] ?? ''} />
@@ -102,7 +102,7 @@ export function QrSyncScreen() {
   }
   if (mode === 'scan') {
     return (
-      <Screen>
+      <Screen width="narrow">
         <TopBar onBack={() => nav.go({ name: 'records' })} />
         <Title>Scan the other phone</Title>
         <Scanner continuous onScan={onFrame} />
@@ -112,7 +112,7 @@ export function QrSyncScreen() {
     );
   }
   return (
-    <Screen>
+    <Screen width="narrow">
       <Title>QR sync</Title>
       <Pill text={result?.startsWith('Failed') ? 'Not synced' : 'Synced'} tone={result?.startsWith('Failed') ? 'red' : 'green'} dot />
       <Body>{result ?? 'Finished.'}</Body>

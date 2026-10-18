@@ -13,7 +13,7 @@ export function Ticket({
 }: { value: string; kicker: string; title: string; amount: string; footnote?: string; dim?: boolean; copy?: boolean }) {
   const paper = copy ? PAPER.canary : PAPER.white; // the payer's copy is canary; the shop's request is white
   const { width } = useWindowDimensions();
-  const qr = Math.min(width - 40 - 48, 340);
+  const qr = Math.min(width - 40 - 48, width >= 700 ? 460 : 340); // bigger on iPad: easier to scan across a counter
   return (
     <View style={[styles.ticket, { backgroundColor: paper }, dim && { opacity: 0.35 }]} accessible accessibilityLabel={`${kicker} ${title}, ${amount}. Payment code.`}>
       <View style={styles.stub}>

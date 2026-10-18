@@ -1,8 +1,11 @@
 // Merchant result (§8.2, §19.2): the receipt, stamped VERIFIED or REFUSED, with the reason in words.
 import * as Haptics from 'expo-haptics';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Animated, Easing, StyleSheet, Text, View } from 'react-native';
-import { Button, colors, font, Screen, wholeDollars } from '../components/ui';
+import { Evidence, VerificationRail } from '../components/Verification';
+import { Button, colors, Columns, font, Screen, wholeDollars } from '../components/ui';
+import { getServerPub } from '../settings';
+import { nowS } from '../store/items';
 import { useNav } from '../nav';
 import type { CheckResult, Pay, ReasonToken } from '../protocol';
 
@@ -30,6 +33,7 @@ function refusalCopy(reason: ReasonToken, rule: string | null): string {
 export function ResultScreen({ result, pay, capCents }: { result: CheckResult; pay: Pay | null; capCents: number }) {
   const nav = useNav();
   const ok = result.ok;
+  const [checkedAt] = useState(nowS());
   const ink = ok ? colors.green : colors.red;
   // The one orchestrated moment: the stamp comes down once, lands, and the phone thumps.
   const drop = useRef(new Animated.Value(0)).current;
@@ -57,8 +61,8 @@ export function ResultScreen({ result, pay, capCents }: { result: CheckResult; p
   const opacity = drop.interpolate({ inputRange: [0, 0.4, 1], outputRange: [0, 0.6, 1] });
 
   const amount = wholeDollars(pay?.t.amount_cents ?? 0);
-  return (
-    <Screen>
+  const receipt = (
+    <View style={{ gap: 16 }}>
       <View style={styles.receipt}>
         <Text style={styles.kicker}>Payment received offline</Text>
         <View style={styles.row}>
@@ -85,14 +89,27 @@ export function ResultScreen({ result, pay, capCents }: { result: CheckResult; p
       </View>
 
       <Text style={[styles.why, { color: ok ? colors.ink : colors.red }]}>
-        {ok ? 'All 6 checks passed. No internet.' : refusalCopy(result.reason, result.rule)}
+        {ok ? 'Accepted offline.' : refusalCopy(result.reason, result.rule)}
       </Text>
-      {!ok ? (
-        <Text style={styles.detail}>
-          Check {result.check} · {result.reason}{result.conflict ? ' · evidence saved' : ''}
-        </Text>
-      ) : null}
+      <Text style={styles.detail}>
+        {ok
+          ? 'All 6 checks passed on this phone. Capital One pays this shop when its records reach the bank.'
+          : `Check ${result.check} failed${result.conflict ? '. The signed evidence is saved and goes with the next phone online.' : '.'}`}
+      </Text>
       <Button title="Done" big onPress={nav.home} />
+    </View>
+  );
+
+  const proof = (
+    <View style={{ gap: 20 }}>
+      <VerificationRail result={result} />
+      {pay ? <Evidence pay={pay} serverPub={getServerPub()} checkedAt={checkedAt} conflict={ok ? null : result.conflict} /> : null}
+    </View>
+  );
+
+  return (
+    <Screen>
+      <Columns left={receipt} right={proof} />
     </Screen>
   );
 }

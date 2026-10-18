@@ -5,7 +5,7 @@
 import * as Haptics from 'expo-haptics';
 import type { ReactNode } from 'react';
 import {
-  ActivityIndicator, Appearance, Pressable, ScrollView, StyleSheet, Text, View,
+  ActivityIndicator, Appearance, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View,
   type ViewStyle,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -116,11 +116,26 @@ export const radius = { sm: 4, md: 14, lg: 8, pill: 999 };
 
 // ---- Layout ----
 
+/** iPad and other wide screens get two-column layouts; phones stay one column. */
+export const WIDE_MIN = 700;
+export function useWide(): boolean {
+  return useWindowDimensions().width >= WIDE_MIN;
+}
+
+/**
+ * One screen. `width` caps the content on wide screens: "wide" for two-column homes,
+ * "narrow" for single-task flows (paying, scanning) so a phone layout isn't stretched across an iPad.
+ */
 export function Screen({
-  children, scroll = true, style, tone = 'default',
-}: { children: ReactNode; scroll?: boolean; style?: ViewStyle; tone?: 'default' | 'dark' }) {
+  children, scroll = true, style, tone = 'default', width = 'wide',
+}: { children: ReactNode; scroll?: boolean; style?: ViewStyle; tone?: 'default' | 'dark'; width?: 'wide' | 'narrow' }) {
   const bg = tone === 'dark' ? colors.tool : colors.bg;
-  const body = <View style={[s.screen, style]}>{children}</View>;
+  const wide = useWide();
+  const body = (
+    <View style={[s.screen, wide && { paddingHorizontal: 32, maxWidth: width === 'wide' ? 1080 : 600, width: '100%', alignSelf: 'center' }, style]}>
+      {children}
+    </View>
+  );
   return (
     <View style={[s.fill, { backgroundColor: bg }]}>
       {isDark && tone === 'default' ? <Radar /> : null}
@@ -133,6 +148,34 @@ export function Screen({
           body
         )}
       </SafeAreaView>
+    </View>
+  );
+}
+
+/** Two columns side by side on wide screens, stacked on phones. */
+export function Columns({ left, right, ratio = 1 }: { left: ReactNode; right: ReactNode; ratio?: number }) {
+  const wide = useWide();
+  if (!wide) return <>{left}{right}</>;
+  return (
+    <View style={s.columns}>
+      <View style={[s.column, { flex: ratio }]}>{left}</View>
+      <View style={[s.column, { flex: 1 }]}>{right}</View>
+    </View>
+  );
+}
+
+/** A labelled money row: label and note on the left, a tabular amount on the right. */
+export function MoneyRow({ label, note, value, tone, strong }: {
+  label: string; note?: string; value: string; tone?: 'green' | 'amber' | 'red'; strong?: boolean;
+}) {
+  const fg = tone ? TONES[tone][1] : colors.ink;
+  return (
+    <View style={s.moneyRow}>
+      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+        <Text style={[s.moneyLabel, strong && { fontFamily: font.bold }]}>{label}</Text>
+        {note ? <Text style={s.moneyNote}>{note}</Text> : null}
+      </View>
+      <Text maxFontSizeMultiplier={1.3} style={[s.moneyValue, { color: fg }, strong && { fontSize: 22 }]}>{value}</Text>
     </View>
   );
 }
@@ -363,6 +406,12 @@ const s = StyleSheet.create({
   fill: { flex: 1 },
   grow: { flexGrow: 1 },
   screen: { flexGrow: 1, paddingHorizontal: 20, paddingTop: space.md, paddingBottom: space.xl, gap: space.lg },
+  columns: { flexDirection: 'row', gap: space.xl, alignItems: 'flex-start' },
+  column: { minWidth: 0, gap: space.lg },
+  moneyRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: 10 },
+  moneyLabel: { fontFamily: font.semibold, fontSize: 17, color: colors.ink },
+  moneyNote: { fontFamily: font.regular, fontSize: 14, lineHeight: 19, color: colors.muted },
+  moneyValue: { fontFamily: font.bold, fontSize: 19, fontVariant: ['tabular-nums'] },
   topBar: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: -8, minHeight: 48 },
   back: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
   topTitle: { flex: 1, fontFamily: font.semibold, fontSize: 17, color: colors.ink, textAlign: 'center' },

@@ -8,7 +8,7 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "supportsTablet": false,
+      "supportsTablet": true,
       "bundleIdentifier": "edu.bu.stormcash.bm",
       "infoPlist": {
         "NSLocalNetworkUsageDescription": "StormCash talks to nearby phones to share payment records when there is no internet.",
@@ -18,8 +18,15 @@
         ],
         "NSBluetoothAlwaysUsageDescription": "StormCash uses Bluetooth to reach nearby phones when there is no internet.",
         "NSCameraUsageDescription": "Scan payment QR codes.",
-        "NSFaceIDUsageDescription": "Confirm payments with Face ID."
-      }
+        "NSFaceIDUsageDescription": "Confirm payments with Face ID.",
+        "UISupportedInterfaceOrientations~ipad": [
+          "UIInterfaceOrientationPortrait",
+          "UIInterfaceOrientationPortraitUpsideDown",
+          "UIInterfaceOrientationLandscapeLeft",
+          "UIInterfaceOrientationLandscapeRight"
+        ]
+      },
+      "requireFullScreen": true
     },
     "plugins": [
       "./plugins/with-stormcash-bonjour.js",

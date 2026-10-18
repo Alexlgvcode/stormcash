@@ -1,6 +1,6 @@
 // Hidden demo menu (long-press the logo, §19.2).
 import { useState } from 'react';
-import { Alert, StyleSheet, Switch, TextInput, View } from 'react-native';
+import { Alert, Linking, StyleSheet, Switch, TextInput, View } from 'react-native';
 import {
   Body, Button, Card, Chip, colors, Field, Muted, radius, Row, Screen, Section, themePref, Title, TopBar, type ThemePref,
 } from '../components/ui';
@@ -10,7 +10,7 @@ import {
 import { PREVIEW_OK, PREVIEW_REFUSED } from '../demo/previews';
 import { useNav } from '../nav';
 import {
-  getDemoLabel, getRole, getServerPub, setDemoLabel, setServerPub, type DemoLabel,
+  getApiBase, getDemoLabel, getRole, getServerPub, setDemoLabel, setServerPub, type DemoLabel,
 } from '../settings';
 import { isTopologyOn } from '../demo/topology';
 import { resetDb, setSetting } from '../store/db';
@@ -67,7 +67,7 @@ export function DemoMenuScreen() {
   };
 
   return (
-    <Screen>
+    <Screen width="narrow">
       <TopBar onBack={nav.home} />
       <Title>Demo menu</Title>
       <Muted>Hidden from customers. Long-press the logo to get here.</Muted>
@@ -76,6 +76,8 @@ export function DemoMenuScreen() {
         <Button title="Judge mode" subtitle="Attacker tool: roll the wallet back" kind="danger" big
           onPress={() => nav.go({ name: 'judge' })} />
       ) : null}
+      <Button title="Operations dashboard" subtitle="Opens in Safari: network, cases, settlement" kind="secondary"
+        onPress={() => Linking.openURL(getApiBase()).catch(() => Alert.alert('Can’t open the dashboard', getApiBase()))} />
 
       <Section title="Demo phone">
         <Row>

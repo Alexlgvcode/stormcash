@@ -28,7 +28,7 @@ export function JudgeModeScreen() {
   };
 
   return (
-    <Screen tone="dark">
+    <Screen tone="dark" width="narrow">
       <TopBar onBack={nav.home} />
       <View style={styles.banner}>
         <Text style={styles.bannerText}>Demo: attacker tool</Text>
