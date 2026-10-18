@@ -34,7 +34,7 @@ We wanted to know how much of a payment can be checked with no network at all, a
 ## How we built it
 
 - **Protocol:** ECDSA P-256 signatures over a canonical encoding, with a Python library on the server and a TypeScript twin on the phones. Both must reproduce a shared set of test vectors byte for byte, so the two sides can never disagree about what was signed.
-- **Mobile:** React Native with Expo development builds on three iPhones, Face ID per payment, QR show and scan, local SQLite stores, and Apple Multipeer Connectivity for phone-to-phone sync, with a QR sync fallback.
+- **Mobile:** one React Native (Expo) app for every role. On a phone it's the customer's wallet; on an iPad it's the shop's counter checkout (ring up, show the code, scan, stamp). Face ID per payment, QR show and scan, local SQLite stores, a C1–C6 verification rail with the evidence behind each check, and Apple Multipeer Connectivity for device-to-device sync (we patched a session bug in the library), with a QR sync fallback.
 - **Server:** Python, FastAPI and plain SQL on hosted Postgres (Neon): settlement, a double-entry ledger, six deterministic fraud rules (R1–R6), signed freeze lists, and live updates to the dashboard over server-sent events.
 - **Capital One Nessie:** checking, escrow, guarantee-pool and shop accounts. Every money movement is a matched withdrawal and deposit linked to our ledger, and the dashboard reads balances live from Nessie.
 - **Factory Droid SDK:** StormDesk runs Droid sessions with structured outputs (Pydantic), eleven read-only tools served as an in-process MCP server, a permission handler that blocks everything else, and a citation check that rejects any claim citing an id that doesn't exist.
@@ -48,7 +48,7 @@ We wanted to know how much of a payment can be checked with no network at all, a
 
 - **A clean split.** Brian owned everything on the phones: the Expo app, Face ID and QR, the offline checks, Multipeer sync and relay, Secure Enclave keys, and the Photon messaging agent. Alex owned everything behind them: the server, settlement and Nessie, the fraud rules, the simulator, the dashboard, StormDesk on Droid, the Chalk evaluations and the C++ verifier.
 - **A contract between our halves.** Before either side built on the protocol, we wrote a spec and generated shared test vectors. Brian's TypeScript and Alex's Python had to reproduce them byte for byte, so the phones and the server agreed on every signature without either of us reading the other's code.
-- **One workflow for everything.** We tracked the work as 50+ GitHub issues, one per piece, grouped by workstream and by schedule block. Every change went in through a pull request (61 merged by Saturday evening), and CI had to pass on all four parts (server, mobile, dashboard and C++) before anything merged. The spec stayed the source of truth: when code changed the design, the spec changed in the same pull request.
+- **One workflow for everything.** We tracked the work as 50+ GitHub issues, one per piece, grouped by workstream and by schedule block. Every change went in through a pull request (71 merged by early Sunday), and CI had to pass on all four parts (server, mobile, dashboard and C++) before anything merged. The spec stayed the source of truth: when code changed the design, the spec changed in the same pull request.
 - **Checking each other's assumptions.** Hour-one checks against the real APIs (Nessie, Droid, Chalk) changed our design early. Nessie's balances don't move, so we redesigned settlement around withdrawal and deposit pairs before writing it.
 
 ## Challenges we ran into
@@ -57,11 +57,13 @@ We wanted to know how much of a payment can be checked with no network at all, a
 - **Two languages, one signature.** Python and TypeScript had to agree on every byte: string normalization, signature encoding, deterministic signing. Shared test vectors caught the differences before they reached the phones.
 - **Latency to a hosted database.** Loading the simulated town into Neon first took 46 minutes, because every statement waited on a network round trip. Pipelining the writes brought it to about 40 seconds.
 - **Our first agent was too lenient.** Its first real evaluation caught 2 of 23 real fraud cases: it dismissed stolen phones because "the escrow covered it". We rewrote the prompt with general analyst principles, labeled the new score as not blind, and tested it on towns it had never seen.
+- **Devices that found each other but never connected.** The Multipeer library gave advertising and browsing separate sessions, so phones saw each other and then silently dropped. We traced it with on-device logs, patched it, and stopped inviting the same peer twice. Links now hold while the apps stay open; reconnecting after an app restart is still unreliable, so the demo keeps the apps open and QR sync is the fallback.
 - **Offline double spending can't be fully prevented.** We had to be honest about the limit: a shop that no record has reached can be fooled once, up to the cap. We designed for bounded loss, offline refusal whenever a record has arrived, and proof at settlement every time.
 
 ## Accomplishments that we're proud of
 
 - A judge can personally try to double spend with every phone in airplane mode, and the shop refuses it.
+- We ran the whole story on real hardware: an iPhone customer and two iPad shops in airplane mode. The pharmacy accepted $12 offline, the customer's phone carried that record to the gas station, the gas station refused the rolled-back copy, and when the iPads found signal the pharmacy was paid $12 through Nessie and case #101 opened with both signatures, relayed Gas Station → Maya → Pharmacy → server.
 - The proof of cheating is two signatures anyone can verify in their own browser, not a fraud score.
 - No AI in the money path. Hard fraud rules are deterministic code; the agent can't move money or freeze anything, and every claim it makes must cite a real record.
 - The simulated town is checked by exactly the same code as the real phones.
@@ -112,6 +114,15 @@ On two held-out simulated towns, chosen before the run and never seen while we w
 ## Links and media
 
 - Repo: https://github.com/Alexlgvcode/stormcash
-- Architecture image: [`docs/architecture.png`](architecture.png) (upload to the image gallery)
+- Image gallery: upload [`docs/gallery/`](gallery/) in order (3:2, 2400×1600). Suggested captions:
+  1. `01-stormcash.png`: StormCash: the customer's wallet on a phone, the shop's checkout on an iPad.
+  2. `02-accepted-offline.png`: A $12 payment accepted with no internet: six checks on the shop's iPad, with the evidence behind them.
+  3. `03-refused-offline.png`: The same money spent twice is refused offline. Two signatures on one payment number are proof, not a score.
+  4. `04-settled-with-proof.png`: Case #101 from our rehearsal on real devices: settled through Capital One Nessie, with both signed payments side by side.
+  5. `05-command-center.png`: The operations command center: every dollar by state, reconciled live with Nessie.
+  6. `06-network.png`: Records hop device to device across a simulated 38-shop town around the real devices.
+  7. `07-stormdesk.png`: StormDesk: rules flag, a Droid agent investigates, a second agent reviews, a person decides.
+  8. `08-architecture.png`: How it fits together.
+- Architecture image: [`docs/architecture.png`](architecture.png) (also slide 8)
 - Demo video: **FILL BEFORE SUBMIT** (Brian's 2-minute backup video, #42)
 - Team: Alexandre Lugovoi, Brian Maina
