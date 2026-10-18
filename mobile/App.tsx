@@ -64,7 +64,7 @@ export default function App() {
       case 'pay':
         return <PayScreen />;
       case 'charge':
-        return <ChargeScreen />;
+        return wide ? <CheckoutScreen /> : <ChargeScreen />; // iPads charge only from Checkout
       case 'register':
         return <MerchantHomeScreen />;
       case 'records':

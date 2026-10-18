@@ -1,9 +1,10 @@
-// Merchant home: the shop's register. Who it is, Charge, and its takings by status: accepted
-// offline on this phone, then received by the StormCash server once a phone uploads them.
+// The shop's register: who it is, its takings by status (accepted offline on this device, then
+// received by the StormCash server once a device uploads them) and its payments. On a phone it's
+// the home with Charge; on an iPad it's the Sales view behind Checkout, which does all charging.
 import { useEffect, useReducer } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Header } from '../components/Header';
-import { Button, Cell, colors, Columns, font, Group, Label, MoneyRow, Muted, Screen, Status, wholeDollars } from '../components/ui';
+import { Button, Cell, colors, Columns, font, Group, Label, MoneyRow, Muted, Screen, Status, Title, TopBar, useWide, wholeDollars } from '../components/ui';
 import { useNav } from '../nav';
 import { logCounts } from '../store/devicelog';
 import { countsByKind } from '../store/items';
@@ -13,6 +14,7 @@ import { syncManager } from '../sync/manager';
 
 export function MerchantHomeScreen() {
   const nav = useNav();
+  const wide = useWide();
   const [, rerender] = useReducer((x: number) => x + 1, 0);
   useEffect(() => syncManager.subscribe(rerender), []);
   const mc = merchantCert();
@@ -26,12 +28,12 @@ export function MerchantHomeScreen() {
 
   const register = (
     <View style={{ gap: 16 }}>
-      <View style={styles.sheet}>
+      {wide ? null : (<View style={styles.sheet}>
         <Text style={styles.heroLabel}>Takes StormCash with no internet · {region}</Text>
         <Text maxFontSizeMultiplier={1.15} style={styles.heroName} adjustsFontSizeToFit numberOfLines={2}>{mc.display_name}</Text>
         <Status text="Registered with StormCash" tone="green" />
-      </View>
-      <Button title="Charge a customer" subtitle="Amount, then show code" big onPress={() => nav.go({ name: 'charge' })} />
+      </View>)}
+      {wide ? null : <Button title="Charge a customer" subtitle="Amount, then show code" big onPress={() => nav.go({ name: 'charge' })} />}
       <Group>
         <View style={{ paddingHorizontal: 18, paddingVertical: 4 }}>
           <MoneyRow
@@ -63,7 +65,12 @@ export function MerchantHomeScreen() {
 
   return (
     <Screen>
-      <Header />
+      {wide ? (
+        <>
+          <TopBar onBack={nav.home} />
+          <Title>{`${mc.display_name} · sales`}</Title>
+        </>
+      ) : <Header />}
       <Columns left={register} right={history} ratio={1.1} />
     </Screen>
   );
