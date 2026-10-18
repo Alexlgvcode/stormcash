@@ -21,17 +21,17 @@
   <!-- Phones -->
   <rect x="170" y="215" width="200" height="105" rx="14" fill="#ffffff" stroke="#142029" stroke-width="2"/>
   <text x="270" y="253" font-size="22" font-weight="700" fill="#142029" text-anchor="middle">Pharmacy</text>
-  <text x="270" y="278" font-size="15" fill="#56636e" text-anchor="middle">iPhone · merchant</text>
+  <text x="270" y="278" font-size="15" fill="#56636e" text-anchor="middle">iPad · storefront checkout</text>
   <text x="270" y="300" font-size="15" fill="#56636e" text-anchor="middle">checks C1–C6 offline</text>
 
   <rect x="170" y="410" width="200" height="105" rx="14" fill="#ffffff" stroke="#142029" stroke-width="2"/>
   <text x="270" y="448" font-size="22" font-weight="700" fill="#142029" text-anchor="middle">Maya</text>
-  <text x="270" y="473" font-size="15" fill="#56636e" text-anchor="middle">iPhone · resident</text>
+  <text x="270" y="473" font-size="15" fill="#56636e" text-anchor="middle">iPhone · customer wallet</text>
   <text x="270" y="495" font-size="15" fill="#56636e" text-anchor="middle">certificate + wallet</text>
 
   <rect x="170" y="605" width="200" height="105" rx="14" fill="#ffffff" stroke="#142029" stroke-width="2"/>
   <text x="270" y="643" font-size="22" font-weight="700" fill="#142029" text-anchor="middle">Gas Station</text>
-  <text x="270" y="668" font-size="15" fill="#56636e" text-anchor="middle">iPhone · merchant</text>
+  <text x="270" y="668" font-size="15" fill="#56636e" text-anchor="middle">iPad · storefront checkout</text>
   <text x="270" y="690" font-size="15" fill="#56636e" text-anchor="middle">refuses the double spend</text>
 
   <!-- Phone links -->
@@ -57,7 +57,7 @@
 
   <!-- Upload up / receipts down -->
   <path d="M372,660 H585 V540 H637" fill="none" stroke="#142029" stroke-width="2.5" marker-end="url(#arrow)"/>
-  <text x="392" y="628" font-size="14" fill="#142029">any phone with a signal:</text>
+  <text x="392" y="628" font-size="14" fill="#142029">any device with a signal:</text>
   <text x="392" y="648" font-size="14" font-weight="700" fill="#142029">POST /v1/sync</text>
 
   <path d="M637,420 H550 V268 H373" fill="none" stroke="#142029" stroke-width="2.5" stroke-dasharray="6 5" marker-end="url(#arrow)"/>
@@ -66,7 +66,7 @@
 
   <!-- Simulator -->
   <rect x="640" y="690" width="280" height="100" rx="14" fill="#ffffff" stroke="#142029" stroke-width="2"/>
-  <text x="780" y="728" font-size="20" font-weight="700" fill="#142029" text-anchor="middle">Simulated town · 40 shops</text>
+  <text x="780" y="728" font-size="20" font-weight="700" fill="#142029" text-anchor="middle">Simulated town · 38 shops</text>
   <text x="780" y="754" font-size="15" fill="#56636e" text-anchor="middle">same protocol + settlement code</text>
   <text x="780" y="776" font-size="15" fill="#56636e" text-anchor="middle">labeled scenarios and traps</text>
   <line x1="780" y1="688" x2="780" y2="584" stroke="#142029" stroke-width="2.5" marker-end="url(#arrow)"/>
@@ -85,25 +85,25 @@
   <rect x="1100" y="370" width="430" height="140" rx="14" fill="#ffffff" stroke="#c8102e" stroke-width="2.5"/>
   <text x="1315" y="408" font-size="22" font-weight="700" fill="#142029" text-anchor="middle">StormDesk agent</text>
   <text x="1315" y="436" font-size="15" fill="#56636e" text-anchor="middle">Factory Droid SDK</text>
-  <text x="1315" y="460" font-size="15" fill="#56636e" text-anchor="middle">10 read-only MCP tools · structured output</text>
-  <text x="1315" y="484" font-size="15" fill="#56636e" text-anchor="middle">cites real records · proposes, never acts</text>
+  <text x="1315" y="460" font-size="15" fill="#56636e" text-anchor="middle">11 read-only MCP tools · structured output</text>
+  <text x="1315" y="484" font-size="15" fill="#56636e" text-anchor="middle">+ reviewer agent · proposes, never acts</text>
   <line x1="972" y1="440" x2="1097" y2="440" stroke="#142029" stroke-width="2.5" marker-end="url(#arrow)"/>
   <text x="984" y="428" font-size="14" fill="#142029">cases &amp;</text>
   <text x="984" y="466" font-size="14" fill="#142029">candidates</text>
 
   <!-- Chalk -->
-  <rect x="1100" y="565" width="200" height="110" rx="14" fill="#ffffff" stroke="#c8102e" stroke-width="2.5"/>
-  <text x="1200" y="603" font-size="22" font-weight="700" fill="#142029" text-anchor="middle">Chalk</text>
-  <text x="1200" y="630" font-size="15" fill="#56636e" text-anchor="middle">live features</text>
-  <text x="1200" y="654" font-size="15" fill="#56636e" text-anchor="middle">Evaluations</text>
-  <line x1="1200" y1="512" x2="1200" y2="562" stroke="#142029" stroke-width="2.5" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
-  <text x="1212" y="543" font-size="14" fill="#142029">query_features</text>
+  <rect x="1100" y="565" width="430" height="110" rx="14" fill="#ffffff" stroke="#c8102e" stroke-width="2.5"/>
+  <text x="1315" y="603" font-size="22" font-weight="700" fill="#142029" text-anchor="middle">Chalk</text>
+  <text x="1315" y="630" font-size="15" fill="#56636e" text-anchor="middle">live features: contact rates · pool share · weather alerts</text>
+  <text x="1315" y="654" font-size="15" fill="#56636e" text-anchor="middle">Evaluations against a rules-only baseline</text>
+  <line x1="1315" y1="512" x2="1315" y2="562" stroke="#142029" stroke-width="2.5" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+  <text x="1327" y="543" font-size="14" fill="#142029">query_features</text>
 
   <!-- Dashboard -->
   <rect x="1100" y="720" width="430" height="110" rx="14" fill="#ffffff" stroke="#142029" stroke-width="2"/>
   <text x="1315" y="758" font-size="22" font-weight="700" fill="#142029" text-anchor="middle">Dashboard · operator</text>
-  <text x="1315" y="786" font-size="15" fill="#56636e" text-anchor="middle">Accounts · Cases · Town · Evals</text>
-  <text x="1315" y="810" font-size="15" fill="#56636e" text-anchor="middle">public proof page: Verify it yourself</text>
+  <text x="1315" y="786" font-size="15" fill="#56636e" text-anchor="middle">Overview · Network · Cases · Ledger · StormDesk</text>
+  <text x="1315" y="810" font-size="15" fill="#56636e" text-anchor="middle">proof page: Verify it yourself (JS + C++ in WASM)</text>
   <path d="M945,582 V775 H1097" fill="none" stroke="#142029" stroke-width="2.5" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
   <text x="958" y="805" font-size="14" fill="#142029">live events ·</text>
   <text x="958" y="825" font-size="14" fill="#142029">approve / reject</text>
